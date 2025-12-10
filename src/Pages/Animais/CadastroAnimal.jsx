@@ -1,5 +1,5 @@
 // src/Pages/Animais/CadastroAnimal.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Select from "react-select";
 import FichaComplementarAnimal from "./FichaComplementarAnimal";
 
@@ -25,6 +25,23 @@ function formatarDataDigitada(valor) {
     }
   }
   return out;
+}
+
+function previsaoPartoISO(ultimaIA) {
+  const dataFormatada = formatarDataDigitada(ultimaIA);
+  if (!dataFormatada || dataFormatada.length !== 10) return { br: "", iso: "" };
+
+  const [dia, mes, ano] = dataFormatada.split("/").map(Number);
+  const dt = new Date(ano, mes - 1, dia);
+  if (Number.isNaN(dt.getTime())) return { br: "", iso: "" };
+
+  const gestacaoDias = 283;
+  const prev = new Date(dt.getTime() + gestacaoDias * 24 * 60 * 60 * 1000);
+
+  const d = String(prev.getDate()).padStart(2, "0");
+  const m = String(prev.getMonth() + 1).padStart(2, "0");
+  const a = prev.getFullYear();
+  return { br: `${d}/${m}/${a}`, iso: prev.toISOString().split("T")[0] };
 }
 
 function calcularIdadeECategoria(nascimento, sexo) {
@@ -77,6 +94,14 @@ export default function CadastroAnimal() {
   const [valorCompra, setValorCompra] = useState("");
   const [dataEntrada, setDataEntrada] = useState("");
 
+  // ficha complementar
+  const [pai, setPai] = useState("");
+  const [mae, setMae] = useState("");
+  const [ultimaIA, setUltimaIA] = useState("");
+  const [ultimoParto, setUltimoParto] = useState("");
+  const [secagemAnterior, setSecagemAnterior] = useState("");
+  const [nLactacoes, setNLactacoes] = useState("");
+
   // derivados
   const [idade, setIdade] = useState("");
   const [categoria, setCategoria] = useState("");
@@ -113,6 +138,8 @@ export default function CadastroAnimal() {
     setCategoria(cat);
   }, [nascimento, sexo]);
 
+  const { br: prevPartoBR } = useMemo(() => previsaoPartoISO(ultimaIA), [ultimaIA]);
+
   /* ========= ações ========= */
 
   const adicionarNovaRaca = () => {
@@ -135,6 +162,12 @@ export default function CadastroAnimal() {
     setDataEntrada("");
     setIdade("");
     setCategoria("");
+    setPai("");
+    setMae("");
+    setUltimaIA("");
+    setUltimoParto("");
+    setSecagemAnterior("");
+    setNLactacoes("");
     setMensagemErro("");
     setMensagemSucesso("");
     setNumero(String(parseInt(numero || "0", 10) + 1));
@@ -159,6 +192,14 @@ export default function CadastroAnimal() {
       idade: idade || undefined,
       categoria: categoria || undefined,
     };
+
+    if (pai) payload.pai = pai;
+    if (mae) payload.mae = mae;
+    if (nLactacoes) payload.n_lactacoes = Number(nLactacoes || 0);
+    if (prevPartoBR) payload.previsao_parto = prevPartoBR;
+    if (ultimaIA) payload.ultima_ia = ultimaIA;
+    if (ultimoParto) payload.ultimo_parto = ultimoParto;
+    if (secagemAnterior) payload.secagem_anterior = secagemAnterior;
 
     console.log("Payload pronto para enviar ao backend:", payload);
 
@@ -397,18 +438,98 @@ export default function CadastroAnimal() {
                 📄 {" "}
                 {mostrarFichaComplementar
                   ? "Fechar ficha complementar"
-                  : "Preencher ficha complementar"}
+                  : "Abrir ficha complementar"}
               </button>
 
               {mostrarFichaComplementar && (
-                <div style={{ marginTop: 12 }}>
-                  <FichaComplementarAnimal
-                    numero={numero}
-                    brinco={brinco}
-                    nascimento={nascimento}
-                    sexo={sexo}
-                    raca={raca}
-                  />
+                <div style={{ ...card, marginTop: 12 }}>
+                  <div style={cardHeader}>
+                    <h2 style={cardTitle}>Ficha complementar</h2>
+                  </div>
+
+                  <div style={grid2}>
+                    <div>
+                      <label style={lbl}>Pai (nome)</label>
+                      <input
+                        type="text"
+                        value={pai}
+                        onChange={(e) => setPai(e.target.value)}
+                        style={inputBase}
+                      />
+                    </div>
+                    <div>
+                      <label style={lbl}>Mãe (nome)</label>
+                      <input
+                        type="text"
+                        value={mae}
+                        onChange={(e) => setMae(e.target.value)}
+                        style={inputBase}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ ...grid2, marginTop: 4 }}>
+                    <div>
+                      <label style={lbl}>Última IA</label>
+                      <input
+                        type="text"
+                        placeholder="dd/mm/aaaa"
+                        value={ultimaIA}
+                        onChange={(e) =>
+                          setUltimaIA(formatarDataDigitada(e.target.value))
+                        }
+                        style={inputBase}
+                      />
+                      {prevPartoBR && (
+                        <small style={{ color: "#6b7280", fontWeight: 600 }}>
+                          Previsão de parto: <strong>{prevPartoBR}</strong>
+                        </small>
+                      )}
+                    </div>
+                    <div>
+                      <label style={lbl}>Último parto</label>
+                      <input
+                        type="text"
+                        placeholder="dd/mm/aaaa"
+                        value={ultimoParto}
+                        onChange={(e) =>
+                          setUltimoParto(formatarDataDigitada(e.target.value))
+                        }
+                        style={inputBase}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ ...grid2, marginTop: 4 }}>
+                    <div>
+                      <label style={lbl}>Secagem anterior</label>
+                      <input
+                        type="text"
+                        placeholder="dd/mm/aaaa"
+                        value={secagemAnterior}
+                        onChange={(e) =>
+                          setSecagemAnterior(formatarDataDigitada(e.target.value))
+                        }
+                        style={inputBase}
+                      />
+                    </div>
+                    <div>
+                      <label style={lbl}>Número de lactações</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={nLactacoes}
+                        onChange={(e) => setNLactacoes(e.target.value)}
+                        style={inputBase}
+                      />
+                    </div>
+                  </div>
+
+                  <p style={{ marginTop: 12, color: "#6b7280", fontSize: 12 }}>
+                    Em breve esta ficha vai puxar automaticamente o histórico
+                    completo (pai, mãe, partos, secagens e inseminações) do
+                    animal.
+                  </p>
                 </div>
               )}
             </div>
