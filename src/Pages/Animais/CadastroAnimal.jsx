@@ -180,11 +180,6 @@ export default function CadastroAnimal() {
         overflow: "hidden",
       }}
     >
-      {/* Título */}
-      <div style={{ marginBottom: 12 }}>
-        <h1 style={tituloPagina}>Entrada de Animal</h1>
-      </div>
-
       {/* Feedback */}
       {mensagemSucesso && <div style={alertSucesso}>{mensagemSucesso}</div>}
       {mensagemErro && <div style={alertErro}>{mensagemErro}</div>}
@@ -201,6 +196,11 @@ export default function CadastroAnimal() {
         {/* ------- COLUNA ESQUERDA ------- */}
         <div>
           <div style={colunaEsquerdaScroll}>
+            {/* Título */}
+            <div style={{ marginBottom: 12 }}>
+              <h1 style={tituloPagina}>Entrada de Animal</h1>
+            </div>
+
             {/* Identificação */}
             <div style={{ ...card, marginBottom: 28 }}>
               <div style={cardHeader}>
@@ -389,7 +389,7 @@ export default function CadastroAnimal() {
                 style={btnGhost}
                 onClick={() => setAbaLateral("ficha")}
               >
-                Ficha complementar
+                📄 Ficha complementar
               </button>
             </div>
           </div>
@@ -443,7 +443,7 @@ const cardTitle = {
 const tituloPagina = { fontSize: 28, fontWeight: 900, marginBottom: 12, margin: 0 };
 
 const colunaEsquerdaScroll = {
-  maxHeight: "calc(100vh - 220px)",
+  maxHeight: "calc(100vh - 200px)",
   overflowY: "auto",
   paddingRight: 8,
   display: "flex",
