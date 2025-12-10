@@ -179,13 +179,10 @@ export default function CadastroAnimal() {
       }}
     >
       {/* Título */}
-      <div style={{ marginBottom: 24 }}>
+      <div style={{ marginBottom: 12 }}>
         <h1 style={{ margin: 0, fontSize: 28, fontWeight: 900 }}>
           Entrada de Animal
         </h1>
-        <p style={{ margin: 0, color: "#64748b", fontSize: 13 }}>
-          Cadastro rápido; histórico complementar será feito em outra tela.
-        </p>
       </div>
 
       {/* Feedback */}
@@ -247,30 +244,25 @@ export default function CadastroAnimal() {
               </div>
               <div>
                 <label style={lbl}>Sexo *</label>
-                <div style={{ display: "flex", width: "100%" }}>
-                  <Select
-                    options={sexoOptions}
-                    value={
-                      sexoOptions.find((opt) => opt.value === sexo) || null
-                    }
-                    onChange={(opt) => setSexo(opt?.value || "")}
-                    placeholder="Selecione"
-                    styles={{
-                      container: (base) => ({
-                        ...base,
-                        flex: 1,
-                        width: "100%",
-                        boxSizing: "border-box",
-                      }),
-                      control: (base) => ({
-                        ...base,
-                        borderRadius: 14,
-                        borderColor: "#d1d5db",
-                        minHeight: 52,
-                      }),
-                    }}
-                  />
-                </div>
+                <Select
+                  options={sexoOptions}
+                  value={sexoOptions.find((opt) => opt.value === sexo) || null}
+                  onChange={(opt) => setSexo(opt?.value || "")}
+                  placeholder="Selecione"
+                  styles={{
+                    container: (base) => ({
+                      ...base,
+                      width: "100%",
+                      boxSizing: "border-box",
+                    }),
+                    control: (base) => ({
+                      ...base,
+                      borderRadius: 14,
+                      borderColor: "#d1d5db",
+                      minHeight: 52,
+                    }),
+                  }}
+                />
               </div>
             </div>
 
@@ -379,60 +371,53 @@ export default function CadastroAnimal() {
               />
             </div>
           </div>
+
+          <div style={botoesRodape}>
+            <button type="button" style={btnGhost} onClick={limpar}>
+              Limpar formulário
+            </button>
+            <button type="button" style={btnPrimario} onClick={salvar}>
+              💾 Salvar
+            </button>
+          </div>
         </div>
 
         {/* ------- COLUNA DIREITA: SOMENTE FICHA ------- */}
         <div>
           <div
             style={{
-              ...card,
-              paddingTop: 28,
-              paddingBottom: 24,
-              marginTop: 10,
+              position: "sticky",
+              top: 12,
             }}
           >
-            <h2
+            <div
               style={{
-                margin: 0,
-                marginBottom: 10,
-                fontSize: 16,
-                fontWeight: 900,
+                ...card,
+                paddingTop: 28,
+                paddingBottom: 24,
               }}
             >
-              Ficha complementar
-            </h2>
+              <h2
+                style={{
+                  margin: 0,
+                  marginBottom: 10,
+                  fontSize: 16,
+                  fontWeight: 900,
+                }}
+              >
+                Ficha complementar
+              </h2>
 
-            <FichaComplementarAnimal
-              numero={numero}
-              brinco={brinco}
-              nascimento={nascimento}
-              sexo={sexo}
-              raca={raca}
-            />
+              <FichaComplementarAnimal
+                numero={numero}
+                brinco={brinco}
+                nascimento={nascimento}
+                sexo={sexo}
+                raca={raca}
+              />
+            </div>
           </div>
         </div>
-      </div>
-
-      {/* ------- RODAPÉ: BOTÕES DE AÇÃO ------- */}
-      <div style={botoesRodape}>
-        <button
-          type="button"
-          style={btnSecundario}
-          onClick={() =>
-            console.log("Abrir tela da ficha complementar detalhada")
-          }
-        >
-          📄 Ficha complementar
-        </button>
-
-        <div style={{ flex: 1 }} />
-
-        <button type="button" style={btnGhost} onClick={limpar}>
-          Limpar formulário
-        </button>
-        <button type="button" style={btnPrimario} onClick={salvar}>
-          💾 Salvar
-        </button>
       </div>
     </div>
   );
@@ -475,9 +460,9 @@ const pill = {
 const grid2 = {
   display: "grid",
   gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)",
-  columnGap: 48,  // MAIS espaço entre colunas
-  rowGap: 26,     // MAIS espaço vertical
-  marginBottom: 18,
+  columnGap: 64, // MAIS espaço entre colunas
+  rowGap: 32, // MAIS espaço vertical
+  marginBottom: 22,
 };
 
 const lbl = {
@@ -525,17 +510,6 @@ const btnGhost = {
   cursor: "pointer",
 };
 
-const btnSecundario = {
-  background: "#eef2ff",
-  color: "#1d4ed8",
-  border: "1px solid #c7d2fe",
-  padding: "10px 22px",
-  borderRadius: 999,
-  fontWeight: 700,
-  fontSize: 14,
-  cursor: "pointer",
-};
-
 const btnVerde = {
   background: "#10b981",
   color: "#ffffff",
@@ -568,8 +542,9 @@ const alertErro = {
 };
 
 const botoesRodape = {
-  marginTop: 32,
+  marginTop: 28,
   display: "flex",
+  justifyContent: "flex-end",
   alignItems: "center",
   gap: 12,
 };
