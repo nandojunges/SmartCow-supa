@@ -378,6 +378,16 @@ export default function CadastroAnimal() {
       return;
     }
 
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user?.id) {
+      setMensagemErro("Usuário não autenticado.");
+      setTimeout(() => setMensagemErro(""), 2500);
+      return;
+    }
+
     const nascimentoISO = dataBRParaISO(nascimento);
     const dataEntradaISO = dataBRParaISO(dataEntrada);
 
@@ -399,6 +409,7 @@ export default function CadastroAnimal() {
       mae_nome: mae || null,
       categoria_atual: categoria || null,
       idade_meses: mesesIdade || null,
+      user_id: user.id,
     };
 
     const { data: animalData, error: animalError } = await supabase
@@ -426,6 +437,7 @@ export default function CadastroAnimal() {
           animal_id: animalId,
           tipo_evento: tipo,
           data_evento: iso,
+          user_id: user.id,
         });
       });
     };
