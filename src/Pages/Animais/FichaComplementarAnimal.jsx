@@ -1,126 +1,223 @@
-// src/pages/Animais/FichaComplementarAnimal.jsx
+// src/Pages/Animais/FichaComplementarAnimal.jsx
 import React from "react";
 
+// Se quiser, pode importar estes estilos de um arquivo comum.
+// Aqui deixo inline para ficar claro.
+const grid2 = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: 16,
+};
+
+const inputBase = {
+  width: "100%",
+  padding: "0.75rem",
+  borderRadius: 12,
+  border: "1px solid #d1d5db",
+  fontSize: "1rem",
+  backgroundColor: "#fff",
+};
+
+const lbl = {
+  fontWeight: 700,
+  fontSize: 13,
+  color: "#334155",
+  display: "block",
+  marginBottom: 6,
+};
+
+const linhaLista = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  marginBottom: 8,
+};
+
+const botaoMais = {
+  minWidth: 32,
+  height: 36,
+  borderRadius: 999,
+  border: "1px solid #d1d5db",
+  background: "#f8fafc",
+  fontWeight: 900,
+  fontSize: 18,
+  cursor: "pointer",
+};
+
+function formatarDataDigitada(valor) {
+  const s = String(valor || "").replace(/\D/g, "").slice(0, 8);
+  const dia = s.slice(0, 2);
+  const mes = s.slice(2, 4);
+  const ano = s.slice(4, 8);
+  let out = [dia, mes, ano].filter(Boolean).join("/");
+  if (out.length === 10) {
+    const [d, m, a] = out.split("/").map(Number);
+    const dt = new Date(a, (m || 1) - 1, d || 1);
+    if (
+      dt.getDate() !== d ||
+      dt.getMonth() !== m - 1 ||
+      dt.getFullYear() !== a
+    ) {
+      out = "";
+    }
+  }
+  return out;
+}
+
 export default function FichaComplementarAnimal({
-  numero,
-  brinco,
-  nascimento,
-  sexo,
-  raca,
   pai,
+  setPai,
   mae,
-  ultimoParto,
-  ultimaIA,
-  previsaoParto,
+  setMae,
+  listaIAs,
+  setListaIAs,
+  listaPartos,
+  setListaPartos,
+  listaSecagens,
+  setListaSecagens,
 }) {
-  const safe = (v) => (v && String(v).trim() ? v : "—");
+  const handleChangeArray = (lista, setLista, index, value) => {
+    const nova = [...lista];
+    nova[index] = formatarDataDigitada(value);
+    setLista(nova);
+  };
+
+  const handleAddCampo = (lista, setLista) => {
+    const existeVazio = lista.some((v) => !v || !v.trim());
+    if (existeVazio) return; // evita mil linhas vazias
+    setLista([...lista, ""]);
+  };
 
   return (
-    <div style={card}>
-      <div style={cardHeader}>
-        <div style={cardTitle}>Ficha complementar</div>
+    <div
+      style={{
+        marginTop: 16,
+        borderTop: "1px solid #e5e7eb",
+        paddingTop: 16,
+      }}
+    >
+      <div style={grid2}>
+        <div>
+          <label style={lbl}>Pai (nome)</label>
+          <input
+            style={inputBase}
+            value={pai}
+            onChange={(e) => setPai(e.target.value)}
+            placeholder="Opcional"
+          />
+        </div>
+        <div>
+          <label style={lbl}>Mãe (nome)</label>
+          <input
+            style={inputBase}
+            value={mae}
+            onChange={(e) => setMae(e.target.value)}
+            placeholder="Opcional"
+          />
+        </div>
       </div>
 
-      <div style={grid}>
-        <LinhaKV rotulo="Número" valor={safe(numero)} />
-        <LinhaKV rotulo="Brinco" valor={safe(brinco)} />
-        <LinhaKV rotulo="Nascimento" valor={safe(nascimento)} />
-        <LinhaKV rotulo="Sexo" valor={safe(sexo)} />
-        <LinhaKV rotulo="Raça" valor={safe(raca)} />
-
-        <Separador />
-
-        <LinhaKV rotulo="Pai" valor={safe(pai)} />
-        <LinhaKV rotulo="Mãe" valor={safe(mae)} />
-
-        <Separador />
-
-        <LinhaKV rotulo="Último parto" valor={safe(ultimoParto)} />
-        <LinhaKV rotulo="Última IA" valor={safe(ultimaIA)} />
-        <LinhaKV rotulo="Previsão de parto" valor={safe(previsaoParto)} />
+      {/* Inseminações anteriores */}
+      <div style={{ marginTop: 20 }}>
+        <label style={lbl}>Inseminações anteriores</label>
+        {listaIAs.map((valor, index) => (
+          <div key={index} style={linhaLista}>
+            <input
+              style={inputBase}
+              placeholder="dd/mm/aaaa (opcional)"
+              value={valor}
+              onChange={(e) =>
+                handleChangeArray(listaIAs, setListaIAs, index, e.target.value)
+              }
+            />
+            {index === listaIAs.length - 1 && (
+              <button
+                type="button"
+                style={botaoMais}
+                onClick={() => handleAddCampo(listaIAs, setListaIAs)}
+                title="Adicionar outra inseminação"
+              >
+                +
+              </button>
+            )}
+          </div>
+        ))}
       </div>
 
-      <div style={notaRodape}>
+      {/* Partos anteriores */}
+      <div style={{ marginTop: 20 }}>
+        <label style={lbl}>Partos anteriores</label>
+        {listaPartos.map((valor, index) => (
+          <div key={index} style={linhaLista}>
+            <input
+              style={inputBase}
+              placeholder="dd/mm/aaaa (opcional)"
+              value={valor}
+              onChange={(e) =>
+                handleChangeArray(
+                  listaPartos,
+                  setListaPartos,
+                  index,
+                  e.target.value
+                )
+              }
+            />
+            {index === listaPartos.length - 1 && (
+              <button
+                type="button"
+                style={botaoMais}
+                onClick={() => handleAddCampo(listaPartos, setListaPartos)}
+                title="Adicionar outro parto"
+              >
+                +
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Secagens anteriores */}
+      <div style={{ marginTop: 20 }}>
+        <label style={lbl}>Secagens anteriores</label>
+        {listaSecagens.map((valor, index) => (
+          <div key={index} style={linhaLista}>
+            <input
+              style={inputBase}
+              placeholder="dd/mm/aaaa (opcional)"
+              value={valor}
+              onChange={(e) =>
+                handleChangeArray(
+                  listaSecagens,
+                  setListaSecagens,
+                  index,
+                  e.target.value
+                )
+              }
+            />
+            {index === listaSecagens.length - 1 && (
+              <button
+                type="button"
+                style={botaoMais}
+                onClick={() => handleAddCampo(listaSecagens, setListaSecagens)}
+                title="Adicionar outra secagem"
+              >
+                +
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <p
+        style={{
+          marginTop: 16,
+          fontSize: 12,
+          color: "#6b7280",
+        }}
+      >
         Em breve esta ficha vai puxar automaticamente o histórico completo
         (pai, mãe, partos, secagens e inseminações) do animal.
-      </div>
+      </p>
     </div>
   );
 }
-
-/* ========== componentes internos ========== */
-
-function LinhaKV({ rotulo, valor }) {
-  return (
-    <div style={rowKV}>
-      <span style={k}>{rotulo}</span>
-      <span style={v}>{valor}</span>
-    </div>
-  );
-}
-
-function Separador() {
-  return <div style={separator} />;
-}
-
-/* ========== estilos locais (baseados no projeto antigo) ========== */
-
-const card = {
-  background: "#ffffff",
-  border: "1px solid #e5e7eb",
-  borderRadius: 16,
-  padding: 20,
-  boxShadow: "0 1px 8px rgba(0,0,0,0.04)",
-  marginTop: 12,
-  fontFamily: "Poppins, system-ui, sans-serif",
-};
-
-const cardHeader = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  marginBottom: 10,
-};
-
-const cardTitle = {
-  fontWeight: 900,
-  fontSize: 16,
-  color: "#0f172a",
-};
-
-const grid = {
-  display: "grid",
-  gridTemplateColumns: "1fr",
-  gap: 6,
-};
-
-const rowKV = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 10,
-  fontSize: 14,
-};
-
-const k = {
-  color: "#64748b",
-  fontWeight: 700,
-};
-
-const v = {
-  color: "#111827",
-  fontWeight: 900,
-};
-
-const separator = {
-  height: 1,
-  background: "#e5e7eb",
-  margin: "6px 0",
-};
-
-const notaRodape = {
-  marginTop: 10,
-  fontSize: 12,
-  color: "#94a3b8",
-  lineHeight: 1.4,
-};
