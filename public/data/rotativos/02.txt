@@ -1,0 +1,5 @@
+titulo: Controle Financeiro
+mensagem: Gerencie seu fluxo de caixa direto pelo sistema.
+mostrarImagem: false
+imagem:
+tempo: 5

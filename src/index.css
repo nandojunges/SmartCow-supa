@@ -1,0 +1,53 @@
+/* src/index.css (ou main.css) */
+
+/* Ocupa 100% da tela SEM centralizar tudo */
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* Estilo base do corpo */
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  background-color: #f3f4f6; /* cinza claro */
+  color: #111827;            /* quase preto */
+  overflow-x: hidden;        /* evita barra horizontal */
+}
+
+/* Links genéricos (se quiser manter) */
+a {
+  font-weight: 500;
+  color: #1d4ed8;
+  text-decoration: none;
+}
+a:hover {
+  color: #1e40af;
+}
+
+/* Botões genéricos */
+button {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  background-color: #2563eb;
+  color: #fff;
+  cursor: pointer;
+  transition: border-color 0.25s, background-color 0.25s;
+}
+button:hover {
+  border-color: #1d4ed8;
+  background-color: #1d4ed8;
+}
+button:focus,
+button:focus-visible {
+  outline: 3px solid #93c5fd;
+  outline-offset: 2px;
+}
