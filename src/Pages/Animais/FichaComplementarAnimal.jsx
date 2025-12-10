@@ -1,24 +1,14 @@
 // src/Pages/Animais/FichaComplementarAnimal.jsx
 import React from "react";
 
-// Se quiser, pode importar estes estilos de um arquivo comum.
-// Aqui deixo inline para ficar claro.
 const grid2 = {
   display: "grid",
-  gridTemplateColumns: "1fr 1fr",
-  gap: 16,
+  gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)",
+  columnGap: 16,
+  rowGap: 18,
 };
 
-const inputBase = {
-  width: "100%",
-  padding: "0.75rem",
-  borderRadius: 12,
-  border: "1px solid #d1d5db",
-  fontSize: "1rem",
-  backgroundColor: "#fff",
-};
-
-const lbl = {
+const lblPadrao = {
   fontWeight: 700,
   fontSize: 13,
   color: "#334155",
@@ -26,95 +16,113 @@ const lbl = {
   marginBottom: 6,
 };
 
+const inputBasePadrao = {
+  width: "100%",
+  borderRadius: 14,
+  border: "1px solid #d1d5db",
+  padding: "12px 14px",
+  fontSize: 15,
+  background: "#ffffff",
+  boxSizing: "border-box",
+};
+
 const linhaLista = {
   display: "flex",
   alignItems: "center",
-  gap: 8,
-  marginBottom: 8,
+  gap: 12,
+  marginTop: 10,
 };
 
-const botaoMais = {
-  width: 40,
-  height: 40,
+const botaoAzulMais = {
+  minWidth: 44,
+  height: 44,
   borderRadius: "999px",
   border: "none",
+  backgroundColor: "#1c3586",
+  color: "#fff",
+  fontSize: 24,
+  fontWeight: 800,
   cursor: "pointer",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  fontSize: "1.2rem",
-  fontWeight: "800",
-  backgroundColor: "#2563eb",
-  color: "#ffffff",
-  boxShadow: "0 1px 4px rgba(0,0,0,0.15)",
+  boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
 };
-
-function formatarDataDigitada(valor) {
-  const s = String(valor || "").replace(/\D/g, "").slice(0, 8);
-  const dia = s.slice(0, 2);
-  const mes = s.slice(2, 4);
-  const ano = s.slice(4, 8);
-  let out = [dia, mes, ano].filter(Boolean).join("/");
-  if (out.length === 10) {
-    const [d, m, a] = out.split("/").map(Number);
-    const dt = new Date(a, (m || 1) - 1, d || 1);
-    if (
-      dt.getDate() !== d ||
-      dt.getMonth() !== (m - 1) ||
-      dt.getFullYear() !== a
-    ) {
-      out = "";
-    }
-  }
-  return out;
-}
 
 export default function FichaComplementarAnimal({
   pai,
   setPai,
   mae,
   setMae,
-  listaIAs,
-  setListaIAs,
-  listaPartos,
-  setListaPartos,
-  listaSecagens,
-  setListaSecagens,
+  inseminacoesAnteriores,
+  setInseminacoesAnteriores,
+  partosAnteriores,
+  setPartosAnteriores,
+  secagensAnteriores,
+  setSecagensAnteriores,
+  atualizarDataLista,
+  limparCamposVazios,
+  adicionarCampoSeUltimoPreenchido,
+  inputBase,
+  lbl,
 }) {
-  const handleChangeArray = (lista, setLista, index, value) => {
-    const nova = [...lista];
-    nova[index] = formatarDataDigitada(value);
-    setLista(nova);
-  };
+  const estiloInput = inputBase || inputBasePadrao;
+  const estiloLbl = lbl || lblPadrao;
 
-  const handleAddCampo = (lista, setLista) => {
-    const existeVazio = lista.some((v) => !v || !v.trim());
-    if (existeVazio) return; // evita mil linhas vazias
-    setLista([...lista, ""]);
-  };
+  const renderListaDatas = (lista, setLista, label) => (
+    <div style={{ marginTop: 24 }}>
+      <label style={estiloLbl}>{label}</label>
+      {lista.map((data, index) => (
+        <div
+          key={`${label}-${index}`}
+          style={{ ...linhaLista, marginTop: index === 0 ? 8 : 10 }}
+        >
+          <input
+            style={{ ...estiloInput, flex: 1 }}
+            placeholder="dd/mm/aaaa (opcional)"
+            value={data}
+            onChange={(e) =>
+              atualizarDataLista(lista, setLista, index, e.target.value)
+            }
+            onBlur={() => limparCamposVazios(lista, setLista)}
+          />
+          {index === lista.length - 1 && (
+            <button
+              type="button"
+              style={botaoAzulMais}
+              onClick={() => adicionarCampoSeUltimoPreenchido(lista, setLista)}
+              title="Adicionar nova data"
+            >
+              +
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <div
       style={{
-        marginTop: 16,
+        marginTop: 8,
         borderTop: "1px solid #e5e7eb",
         paddingTop: 16,
       }}
     >
       <div style={grid2}>
         <div>
-          <label style={lbl}>Pai (nome)</label>
+          <label style={estiloLbl}>Pai (nome)</label>
           <input
-            style={inputBase}
+            style={estiloInput}
             value={pai}
             onChange={(e) => setPai(e.target.value)}
             placeholder="Opcional"
           />
         </div>
         <div>
-          <label style={lbl}>Mãe (nome)</label>
+          <label style={estiloLbl}>Mãe (nome)</label>
           <input
-            style={inputBase}
+            style={estiloInput}
             value={mae}
             onChange={(e) => setMae(e.target.value)}
             placeholder="Opcional"
@@ -122,96 +130,17 @@ export default function FichaComplementarAnimal({
         </div>
       </div>
 
-      {/* Inseminações anteriores */}
-      <div style={{ marginTop: 20 }}>
-        <label style={lbl}>Inseminações anteriores</label>
-        {listaIAs.map((valor, index) => (
-          <div key={index} style={linhaLista}>
-            <input
-              style={inputBase}
-              placeholder="dd/mm/aaaa (opcional)"
-              value={valor}
-              onChange={(e) =>
-                handleChangeArray(listaIAs, setListaIAs, index, e.target.value)
-              }
-            />
-            {index === listaIAs.length - 1 && (
-              <button
-                type="button"
-                style={botaoMais}
-                onClick={() => handleAddCampo(listaIAs, setListaIAs)}
-                title="Adicionar outra inseminação"
-              >
-                +
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {/* Partos anteriores */}
-      <div style={{ marginTop: 20 }}>
-        <label style={lbl}>Partos anteriores</label>
-        {listaPartos.map((valor, index) => (
-          <div key={index} style={linhaLista}>
-            <input
-              style={inputBase}
-              placeholder="dd/mm/aaaa (opcional)"
-              value={valor}
-              onChange={(e) =>
-                handleChangeArray(
-                  listaPartos,
-                  setListaPartos,
-                  index,
-                  e.target.value
-                )
-              }
-            />
-            {index === listaPartos.length - 1 && (
-              <button
-                type="button"
-                style={botaoMais}
-                onClick={() => handleAddCampo(listaPartos, setListaPartos)}
-                title="Adicionar outro parto"
-              >
-                +
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {/* Secagens anteriores */}
-      <div style={{ marginTop: 20 }}>
-        <label style={lbl}>Secagens anteriores</label>
-        {listaSecagens.map((valor, index) => (
-          <div key={index} style={linhaLista}>
-            <input
-              style={inputBase}
-              placeholder="dd/mm/aaaa (opcional)"
-              value={valor}
-              onChange={(e) =>
-                handleChangeArray(
-                  listaSecagens,
-                  setListaSecagens,
-                  index,
-                  e.target.value
-                )
-              }
-            />
-            {index === listaSecagens.length - 1 && (
-              <button
-                type="button"
-                style={botaoMais}
-                onClick={() => handleAddCampo(listaSecagens, setListaSecagens)}
-                title="Adicionar outra secagem"
-              >
-                +
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
+      {renderListaDatas(
+        inseminacoesAnteriores,
+        setInseminacoesAnteriores,
+        "Inseminações anteriores"
+      )}
+      {renderListaDatas(partosAnteriores, setPartosAnteriores, "Partos anteriores")}
+      {renderListaDatas(
+        secagensAnteriores,
+        setSecagensAnteriores,
+        "Secagens anteriores"
+      )}
 
       <p
         style={{
