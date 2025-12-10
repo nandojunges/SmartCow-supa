@@ -203,6 +203,7 @@ export default function CadastroAnimal() {
               maxHeight: "calc(100vh - 220px)",
               overflowY: "auto",
               paddingRight: 8,
+              paddingBottom: 40,
             }}
           >
             {/* Título */}
@@ -442,6 +443,7 @@ export default function CadastroAnimal() {
                   nascimento={nascimento}
                   sexo={sexo}
                   raca={raca}
+                  titulo="Ficha do animal"
                 />
               )}
             </div>
