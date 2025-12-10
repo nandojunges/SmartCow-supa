@@ -62,6 +62,7 @@ function maskMoedaBR(v) {
    Componente principal
 ============================ */
 export default function CadastroAnimal() {
+  const [mostrarFichaComplementar, setMostrarFichaComplementar] = useState(false);
   // básicos
   const [numero, setNumero] = useState("1");
   const [brinco, setBrinco] = useState("");
@@ -83,7 +84,7 @@ export default function CadastroAnimal() {
   // feedback
   const [mensagemSucesso, setMensagemSucesso] = useState("");
   const [mensagemErro, setMensagemErro] = useState("");
-  const [abaLateral, setAbaLateral] = useState("ficha");
+  const [abaLateral] = useState("ficha");
 
   // selects
   const sexoOptions = [
@@ -195,7 +196,15 @@ export default function CadastroAnimal() {
       >
         {/* ------- COLUNA ESQUERDA ------- */}
         <div>
-          <div style={colunaEsquerdaScroll}>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              maxHeight: "calc(100vh - 220px)",
+              overflowY: "auto",
+              paddingRight: 8,
+            }}
+          >
             {/* Título */}
             <div style={{ marginBottom: 12 }}>
               <h1 style={tituloPagina}>Entrada de Animal</h1>
@@ -374,22 +383,49 @@ export default function CadastroAnimal() {
               </div>
             </div>
 
-            <div style={botoesRodape}>
+            <div style={{ ...card, marginTop: 16 }}>
+              <div style={cardHeader}>
+                <span style={cardTitle}>Ficha complementar</span>
+              </div>
+
+              <button
+                type="button"
+                style={btnGhost}
+                onClick={() => setMostrarFichaComplementar((prev) => !prev)}
+              >
+                📄 {" "}
+                {mostrarFichaComplementar
+                  ? "Fechar ficha complementar"
+                  : "Preencher ficha complementar"}
+              </button>
+
+              {mostrarFichaComplementar && (
+                <div style={{ marginTop: 12 }}>
+                  <FichaComplementarAnimal
+                    numero={numero}
+                    brinco={brinco}
+                    nascimento={nascimento}
+                    sexo={sexo}
+                    raca={raca}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div
+              style={{
+                ...card,
+                marginTop: 16,
+                display: "flex",
+                gap: 12,
+                justifyContent: "flex-end",
+              }}
+            >
               <button type="button" style={btnGhost} onClick={limpar}>
                 Limpar formulário
               </button>
               <button type="button" style={btnPrimario} onClick={salvar}>
                 💾 Salvar
-              </button>
-            </div>
-
-            <div style={botaoFichaContainer}>
-              <button
-                type="button"
-                style={btnGhost}
-                onClick={() => setAbaLateral("ficha")}
-              >
-                📄 Ficha complementar
               </button>
             </div>
           </div>
@@ -441,15 +477,6 @@ const cardTitle = {
 };
 
 const tituloPagina = { fontSize: 28, fontWeight: 900, marginBottom: 12, margin: 0 };
-
-const colunaEsquerdaScroll = {
-  maxHeight: "calc(100vh - 200px)",
-  overflowY: "auto",
-  paddingRight: 8,
-  display: "flex",
-  flexDirection: "column",
-  gap: 0,
-};
 
 const colunaDireitaSticky = {
   position: "sticky",
@@ -548,20 +575,6 @@ const alertErro = {
   borderRadius: 12,
   marginBottom: 12,
   fontWeight: 700,
-};
-
-const botoesRodape = {
-  marginTop: 28,
-  display: "flex",
-  justifyContent: "flex-end",
-  alignItems: "center",
-  gap: 12,
-};
-
-const botaoFichaContainer = {
-  marginTop: 16,
-  display: "flex",
-  justifyContent: "flex-end",
 };
 
 const cardResumo = {
