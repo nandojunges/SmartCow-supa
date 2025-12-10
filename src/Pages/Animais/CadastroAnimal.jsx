@@ -92,7 +92,6 @@ export default function CadastroAnimal() {
   const [sexo, setSexo] = useState("");
   const [raca, setRaca] = useState("");
   const [novaRaca, setNovaRaca] = useState("");
-  const [racasAdicionais, setRacasAdicionais] = useState([]);
   const [racasBanco, setRacasBanco] = useState([]);
 
   // complementar
@@ -126,13 +125,10 @@ export default function CadastroAnimal() {
     { value: "femea", label: "Fêmea" },
     { value: "macho", label: "Macho" },
   ];
-  const racaOptions = [
-    ...racasBanco.map((r) => ({ id: r.id, nome: r.nome })),
-    ...racasAdicionais.map((r) => ({ id: r, nome: r })),
-  ];
+  const racaOptions = racasBanco.map((r) => ({ value: r.id, label: r.nome }));
 
   const racaSelecionadaLabel = useMemo(
-    () => racaOptions.find((opt) => opt.id === raca)?.nome || "",
+    () => racaOptions.find((opt) => opt.value === raca)?.label || "",
     [racaOptions, raca]
   );
   const origemOptions = [
@@ -323,29 +319,35 @@ export default function CadastroAnimal() {
   );
 
   useEffect(() => {
-    const carregarRacas = async () => {
+    async function carregarRacas() {
       const { data, error } = await supabase
         .from("racas")
-        .select("*")
+        .select("id, nome")
         .order("nome", { ascending: true });
 
-      if (!error && Array.isArray(data)) {
+      if (!error && data) {
         setRacasBanco(data);
       }
-    };
+    }
 
     carregarRacas();
   }, []);
 
   /* ========= ações ========= */
 
-  const adicionarNovaRaca = () => {
+  const adicionarNovaRaca = async () => {
     const v = (novaRaca || "").trim();
     if (!v) return;
-    if (!racasAdicionais.includes(v))
-      setRacasAdicionais([...racasAdicionais, v]);
-    setRaca(v);
-    setNovaRaca("");
+    const { data, error } = await supabase
+      .from("racas")
+      .insert({ nome: v })
+      .select("id, nome")
+      .single();
+    if (!error && data) {
+      setRacasBanco((prev) => [...prev, data]);
+      setRaca(data.id);
+      setNovaRaca("");
+    }
   };
 
   const limpar = () => {
@@ -579,10 +581,8 @@ export default function CadastroAnimal() {
                 <div style={{ display: "flex", gap: 18, alignItems: "stretch" }}>
                   <Select
                     options={racaOptions}
-                    getOptionLabel={(opt) => opt.nome}
-                    getOptionValue={(opt) => opt.id}
-                    value={racaOptions.find((opt) => opt.id === raca) || null}
-                    onChange={(opt) => setRaca(opt?.id || "")}
+                    value={racaOptions.find((opt) => opt.value === raca) || null}
+                    onChange={(opt) => setRaca(opt?.value || "")}
                     placeholder="Selecione"
                     styles={{
                       container: (base) => ({
