@@ -1,4 +1,4 @@
-// src/pages/Animais/CadastroAnimal.jsx
+// src/Pages/Animais/CadastroAnimal.jsx
 import React, { useEffect, useState } from "react";
 import Select from "react-select";
 import FichaComplementarAnimal from "./FichaComplementarAnimal";
@@ -89,21 +89,19 @@ export default function CadastroAnimal() {
     { value: "femea", label: "Fêmea" },
     { value: "macho", label: "Macho" },
   ];
-
   const racaOptions = [
     { value: "Holandês", label: "Holandês" },
     { value: "Jersey", label: "Jersey" },
     { value: "Girolando", label: "Girolando" },
     ...racasAdicionais.map((r) => ({ value: r, label: r })),
   ];
-
   const origemOptions = [
     { value: "propriedade", label: "Nascido na propriedade" },
     { value: "comprado", label: "Comprado" },
     { value: "doacao", label: "Doação" },
   ];
 
-  // idade / categoria
+  // idade / categoria automáticas
   useEffect(() => {
     const { idade: id, categoria: cat } = calcularIdadeECategoria(
       nascimento,
@@ -118,9 +116,8 @@ export default function CadastroAnimal() {
   const adicionarNovaRaca = () => {
     const v = (novaRaca || "").trim();
     if (!v) return;
-    if (!racasAdicionais.includes(v)) {
+    if (!racasAdicionais.includes(v))
       setRacasAdicionais([...racasAdicionais, v]);
-    }
     setRaca(v);
     setNovaRaca("");
   };
@@ -172,67 +169,85 @@ export default function CadastroAnimal() {
   /* ========= layout ========= */
 
   return (
-    <div style={pageContainer}>
-      {/* Título (sem texto embaixo) */}
-      <div style={{ marginBottom: 8 }}>
-        <h1 style={tituloPagina}>Entrada de Animal</h1>
+    <div
+      style={{
+        maxWidth: 1300,
+        margin: "0 auto",
+        padding: "16px 20px 120px", // padding inferior grande pra garantir rolagem até o final
+        fontFamily: "Poppins, system-ui, sans-serif",
+        boxSizing: "border-box",
+      }}
+    >
+      {/* Título */}
+      <div style={{ marginBottom: 24 }}>
+        <h1 style={{ margin: 0, fontSize: 28, fontWeight: 900 }}>
+          Entrada de Animal
+        </h1>
+        <p style={{ margin: 0, color: "#64748b", fontSize: 13 }}>
+          Cadastro rápido; histórico complementar será feito em outra tela.
+        </p>
       </div>
 
       {/* Feedback */}
-      {mensagemSucesso && (
-        <div style={alertSucesso}>{mensagemSucesso}</div>
-      )}
+      {mensagemSucesso && <div style={alertSucesso}>{mensagemSucesso}</div>}
       {mensagemErro && <div style={alertErro}>{mensagemErro}</div>}
 
-      {/* 2 colunas: esquerda (form com scroll) / direita (ficha fixa) */}
-      <div style={gridPrincipal}>
-        {/* ------- COLUNA ESQUERDA — SCROLL SOMENTE AQUI ------- */}
-        <div style={colEsquerda}>
-          <div style={colEsquerdaInner}>
-            {/* Identificação */}
-            <div style={{ ...card, marginBottom: 24 }}>
-              <div style={cardHeader}>
-                <span style={cardTitle}>Identificação</span>
-                <span style={pill}>campos obrigatórios</span>
-              </div>
+      {/* 2 colunas: esquerda (form) / direita (ficha) */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 2fr) minmax(0, 1fr)",
+          columnGap: 56,
+          alignItems: "flex-start",
+        }}
+      >
+        {/* ------- COLUNA ESQUERDA ------- */}
+        <div>
+          {/* Identificação */}
+          <div style={{ ...card, marginBottom: 28 }}>
+            <div style={cardHeader}>
+              <span style={cardTitle}>Identificação</span>
+              <span style={pill}>campos obrigatórios</span>
+            </div>
 
-              <div style={grid2}>
-                <div>
-                  <label style={lbl}>Número</label>
-                  <input
-                    type="text"
-                    value={numero}
-                    readOnly
-                    style={inputReadOnly}
-                  />
-                </div>
-                <div>
-                  <label style={lbl}>Brinco *</label>
-                  <input
-                    type="text"
-                    value={brinco}
-                    onChange={(e) => setBrinco(e.target.value)}
-                    style={inputBase}
-                    placeholder="Digite o brinco"
-                  />
-                </div>
+            <div style={grid2}>
+              <div>
+                <label style={lbl}>Número</label>
+                <input
+                  type="text"
+                  value={numero}
+                  readOnly
+                  style={inputReadOnly}
+                />
               </div>
+              <div>
+                <label style={lbl}>Brinco *</label>
+                <input
+                  type="text"
+                  value={brinco}
+                  onChange={(e) => setBrinco(e.target.value)}
+                  style={inputBase}
+                  placeholder="Digite o brinco"
+                />
+              </div>
+            </div>
 
-              <div style={grid2}>
-                <div>
-                  <label style={lbl}>Nascimento *</label>
-                  <input
-                    type="text"
-                    value={nascimento}
-                    onChange={(e) =>
-                      setNascimento(formatarDataDigitada(e.target.value))
-                    }
-                    style={inputBase}
-                    placeholder="dd/mm/aaaa"
-                  />
-                </div>
-                <div>
-                  <label style={lbl}>Sexo *</label>
+            <div style={grid2}>
+              <div>
+                <label style={lbl}>Nascimento *</label>
+                <input
+                  type="text"
+                  value={nascimento}
+                  onChange={(e) =>
+                    setNascimento(formatarDataDigitada(e.target.value))
+                  }
+                  style={inputBase}
+                  placeholder="dd/mm/aaaa"
+                />
+              </div>
+              <div>
+                <label style={lbl}>Sexo *</label>
+                <div style={{ display: "flex", width: "100%" }}>
                   <Select
                     options={sexoOptions}
                     value={
@@ -241,163 +256,183 @@ export default function CadastroAnimal() {
                     onChange={(opt) => setSexo(opt?.value || "")}
                     placeholder="Selecione"
                     styles={{
-                      container: (base) => ({ ...base, width: "100%" }),
+                      container: (base) => ({
+                        ...base,
+                        flex: 1,
+                        width: "100%",
+                        boxSizing: "border-box",
+                      }),
                       control: (base) => ({
                         ...base,
-                        borderRadius: 12,
+                        borderRadius: 14,
                         borderColor: "#d1d5db",
-                        minHeight: 48,
-                      }),
-                      valueContainer: (base) => ({
-                        ...base,
-                        paddingLeft: 10,
-                        paddingRight: 8,
+                        minHeight: 52,
                       }),
                     }}
                   />
-                </div>
-              </div>
-
-              <div style={{ marginTop: 6 }}>
-                <label style={lbl}>Raça *</label>
-                <div
-                  style={{ display: "flex", gap: 12, alignItems: "stretch" }}
-                >
-                  <Select
-                    options={racaOptions}
-                    value={
-                      racaOptions.find((opt) => opt.value === raca) || null
-                    }
-                    onChange={(opt) => setRaca(opt?.value || "")}
-                    placeholder="Selecione"
-                    styles={{
-                      container: (base) => ({ ...base, flex: 1 }),
-                      control: (base) => ({
-                        ...base,
-                        borderRadius: 12,
-                        borderColor: "#d1d5db",
-                        minHeight: 48,
-                      }),
-                      valueContainer: (base) => ({
-                        ...base,
-                        paddingLeft: 10,
-                        paddingRight: 8,
-                      }),
-                    }}
-                  />
-                  <input
-                    type="text"
-                    value={novaRaca}
-                    onChange={(e) => setNovaRaca(e.target.value)}
-                    placeholder="Nova raça"
-                    style={{ ...inputBase, flex: 1 }}
-                  />
-                  <button
-                    type="button"
-                    style={btnVerde}
-                    onClick={adicionarNovaRaca}
-                  >
-                    Adicionar
-                  </button>
                 </div>
               </div>
             </div>
 
-            {/* Origem */}
-            <div style={{ ...card, marginBottom: 24 }}>
-              <div style={cardHeader}>
-                <span style={cardTitle}>Origem do animal</span>
+            <div style={{ marginTop: 18 }}>
+              <label style={lbl}>Raça *</label>
+              <div style={{ display: "flex", gap: 18, alignItems: "stretch" }}>
+                <Select
+                  options={racaOptions}
+                  value={racaOptions.find((opt) => opt.value === raca) || null}
+                  onChange={(opt) => setRaca(opt?.value || "")}
+                  placeholder="Selecione"
+                  styles={{
+                    container: (base) => ({
+                      ...base,
+                      flex: 1,
+                      width: "100%",
+                      boxSizing: "border-box",
+                    }),
+                    control: (base) => ({
+                      ...base,
+                      borderRadius: 14,
+                      borderColor: "#d1d5db",
+                      minHeight: 52,
+                    }),
+                  }}
+                />
+                <input
+                  type="text"
+                  value={novaRaca}
+                  onChange={(e) => setNovaRaca(e.target.value)}
+                  placeholder="Nova raça"
+                  style={{ ...inputBase, flex: 1 }}
+                />
+                <button
+                  type="button"
+                  style={btnVerde}
+                  onClick={adicionarNovaRaca}
+                >
+                  Adicionar
+                </button>
               </div>
+            </div>
+          </div>
 
-              <div style={grid2}>
-                <div>
-                  <label style={lbl}>Origem</label>
+          {/* Origem */}
+          <div style={card}>
+            <div style={cardHeader}>
+              <span style={cardTitle}>Origem do animal</span>
+            </div>
+
+            <div style={grid2}>
+              <div>
+                <label style={lbl}>Origem</label>
+                <div style={{ display: "flex", width: "100%" }}>
                   <Select
                     options={origemOptions}
                     value={
                       origemOptions.find((opt) => opt.value === origem) || null
                     }
-                    onChange={(opt) =>
-                      setOrigem(opt?.value || "propriedade")
-                    }
+                    onChange={(opt) => setOrigem(opt?.value || "propriedade")}
                     placeholder="Selecione"
                     styles={{
-                      container: (base) => ({ ...base, width: "100%" }),
+                      container: (base) => ({
+                        ...base,
+                        flex: 1,
+                        width: "100%",
+                        boxSizing: "border-box",
+                      }),
                       control: (base) => ({
                         ...base,
-                        borderRadius: 12,
+                        borderRadius: 14,
                         borderColor: "#d1d5db",
-                        minHeight: 48,
-                      }),
-                      valueContainer: (base) => ({
-                        ...base,
-                        paddingLeft: 10,
-                        paddingRight: 8,
+                        minHeight: 52,
                       }),
                     }}
                   />
                 </div>
-
-                {origem === "comprado" && (
-                  <div>
-                    <label style={lbl}>Valor de compra (R$)</label>
-                    <input
-                      type="text"
-                      value={valorCompra}
-                      onChange={(e) =>
-                        setValorCompra(maskMoedaBR(e.target.value))
-                      }
-                      style={inputBase}
-                      placeholder="Opcional"
-                    />
-                  </div>
-                )}
               </div>
 
-              <div style={{ marginTop: 10 }}>
-                <label style={lbl}>Data de entrada na fazenda</label>
-                <input
-                  type="text"
-                  value={dataEntrada}
-                  onChange={(e) =>
-                    setDataEntrada(formatarDataDigitada(e.target.value))
-                  }
-                  style={inputBase}
-                  placeholder="dd/mm/aaaa (opcional)"
-                />
-              </div>
+              {origem === "comprado" && (
+                <div>
+                  <label style={lbl}>Valor de compra (R$)</label>
+                  <input
+                    type="text"
+                    value={valorCompra}
+                    onChange={(e) =>
+                      setValorCompra(maskMoedaBR(e.target.value))
+                    }
+                    style={inputBase}
+                    placeholder="Opcional"
+                  />
+                </div>
+              )}
             </div>
 
-            {/* Botões no fim do formulário (aparecem ao descer o scroll da lista) */}
-            <div style={botoesRodape}>
-              <button type="button" style={btnGhost} onClick={limpar}>
-                Limpar formulário
-              </button>
-              <button type="button" style={btnPrimario} onClick={salvar}>
-                💾 Salvar
-              </button>
+            <div style={{ marginTop: 18 }}>
+              <label style={lbl}>Data de entrada na fazenda</label>
+              <input
+                type="text"
+                value={dataEntrada}
+                onChange={(e) =>
+                  setDataEntrada(formatarDataDigitada(e.target.value))
+                }
+                style={inputBase}
+                placeholder="dd/mm/aaaa (opcional)"
+              />
             </div>
           </div>
         </div>
 
-        {/* ------- COLUNA DIREITA — FICHA FIXA ------- */}
-        <div style={colDireita}>
-          <div style={cardFicha}>
-            <h2 style={tituloFicha}>Ficha complementar</h2>
+        {/* ------- COLUNA DIREITA: SOMENTE FICHA ------- */}
+        <div>
+          <div
+            style={{
+              ...card,
+              paddingTop: 28,
+              paddingBottom: 24,
+              marginTop: 10,
+            }}
+          >
+            <h2
+              style={{
+                margin: 0,
+                marginBottom: 10,
+                fontSize: 16,
+                fontWeight: 900,
+              }}
+            >
+              Ficha complementar
+            </h2>
+
             <FichaComplementarAnimal
               numero={numero}
               brinco={brinco}
               nascimento={nascimento}
               sexo={sexo}
               raca={raca}
-              idade={idade}
-              categoria={categoria}
-              origem={origem}
-              valorCompra={valorCompra}
-              dataEntrada={dataEntrada}
             />
           </div>
         </div>
+      </div>
+
+      {/* ------- RODAPÉ: BOTÕES DE AÇÃO ------- */}
+      <div style={botoesRodape}>
+        <button
+          type="button"
+          style={btnSecundario}
+          onClick={() =>
+            console.log("Abrir tela da ficha complementar detalhada")
+          }
+        >
+          📄 Ficha complementar
+        </button>
+
+        <div style={{ flex: 1 }} />
+
+        <button type="button" style={btnGhost} onClick={limpar}>
+          Limpar formulário
+        </button>
+        <button type="button" style={btnPrimario} onClick={salvar}>
+          💾 Salvar
+        </button>
       </div>
     </div>
   );
@@ -406,59 +441,20 @@ export default function CadastroAnimal() {
 /* ============================
    Estilos
 ============================ */
-const pageContainer = {
-  maxWidth: 1350,
-  margin: "0 auto",
-  padding: "16px 24px 24px",
-  fontFamily: "Poppins, system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
-  // Segura o conteúdo dentro da altura da tela
-  height: "calc(100vh - 130px)", // ~descontando cabeçalho azul + margens
-  boxSizing: "border-box",
-  overflow: "hidden", // tira o scroll da PÁGINA
-};
-
-const tituloPagina = {
-  margin: 0,
-  fontSize: 28,
-  fontWeight: 900,
-};
-
-const gridPrincipal = {
-  display: "grid",
-  gridTemplateColumns: "minmax(0, 2fr) minmax(0, 1fr)",
-  columnGap: 48,
-  alignItems: "stretch",
-  width: "100%",
-  height: "100%",
-};
-
-const colEsquerda = {
-  height: "100%",
-  overflowY: "auto", // scroll SÓ AQUI
-  paddingRight: 12,
-};
-
-const colEsquerdaInner = {
-  paddingRight: 4,
-};
-
-const colDireita = {
-  alignSelf: "flex-start",
-};
-
 const card = {
   background: "#ffffff",
-  borderRadius: 16,
+  borderRadius: 18,
   border: "1px solid #e5e7eb",
-  padding: 22,
-  boxShadow: "0 1px 6px rgba(15, 23, 42, 0.05)",
+  padding: 32,
+  boxShadow: "0 1px 6px rgba(15, 23, 42, 0.04)",
+  boxSizing: "border-box",
 };
 
 const cardHeader = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
-  marginBottom: 14,
+  marginBottom: 18,
 };
 
 const cardTitle = {
@@ -479,9 +475,9 @@ const pill = {
 const grid2 = {
   display: "grid",
   gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)",
-  columnGap: 20,
-  rowGap: 18,
-  marginBottom: 12,
+  columnGap: 48,  // MAIS espaço entre colunas
+  rowGap: 26,     // MAIS espaço vertical
+  marginBottom: 18,
 };
 
 const lbl = {
@@ -494,11 +490,12 @@ const lbl = {
 
 const inputBase = {
   width: "100%",
-  borderRadius: 12,
+  borderRadius: 14,
   border: "1px solid #d1d5db",
-  padding: "11px 12px",
+  padding: "12px 14px",
   fontSize: 15,
   background: "#ffffff",
+  boxSizing: "border-box",
 };
 
 const inputReadOnly = {
@@ -510,8 +507,8 @@ const btnPrimario = {
   background: "#2563eb",
   color: "#ffffff",
   border: "none",
-  padding: "11px 20px",
-  borderRadius: 999,
+  padding: "11px 26px",
+  borderRadius: 14,
   fontWeight: 800,
   fontSize: 15,
   cursor: "pointer",
@@ -521,9 +518,20 @@ const btnGhost = {
   background: "#f9fafb",
   color: "#111827",
   border: "1px solid #e5e7eb",
-  padding: "11px 18px",
-  borderRadius: 999,
+  padding: "11px 24px",
+  borderRadius: 14,
   fontWeight: 600,
+  fontSize: 14,
+  cursor: "pointer",
+};
+
+const btnSecundario = {
+  background: "#eef2ff",
+  color: "#1d4ed8",
+  border: "1px solid #c7d2fe",
+  padding: "10px 22px",
+  borderRadius: 999,
+  fontWeight: 700,
   fontSize: 14,
   cursor: "pointer",
 };
@@ -532,12 +540,11 @@ const btnVerde = {
   background: "#10b981",
   color: "#ffffff",
   border: "none",
-  padding: "11px 18px",
-  borderRadius: 12,
+  padding: "11px 16px",
+  borderRadius: 14,
   fontWeight: 800,
   fontSize: 14,
   cursor: "pointer",
-  whiteSpace: "nowrap",
 };
 
 const alertSucesso = {
@@ -548,7 +555,6 @@ const alertSucesso = {
   borderRadius: 12,
   marginBottom: 12,
   fontWeight: 700,
-  fontSize: 13,
 };
 
 const alertErro = {
@@ -559,26 +565,12 @@ const alertErro = {
   borderRadius: 12,
   marginBottom: 12,
   fontWeight: 700,
-  fontSize: 13,
 };
 
 const botoesRodape = {
+  marginTop: 32,
   display: "flex",
-  justifyContent: "flex-end",
-  gap: 10,
-  marginTop: 4,
-  paddingBottom: 4,
+  alignItems: "center",
+  gap: 12,
 };
 
-const cardFicha = {
-  ...card,
-  paddingTop: 24,
-  paddingBottom: 20,
-};
-
-const tituloFicha = {
-  margin: 0,
-  marginBottom: 12,
-  fontSize: 16,
-  fontWeight: 900,
-};
