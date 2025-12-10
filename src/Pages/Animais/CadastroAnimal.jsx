@@ -83,6 +83,7 @@ export default function CadastroAnimal() {
   // feedback
   const [mensagemSucesso, setMensagemSucesso] = useState("");
   const [mensagemErro, setMensagemErro] = useState("");
+  const [abaLateral, setAbaLateral] = useState("ficha");
 
   // selects
   const sexoOptions = [
@@ -173,9 +174,10 @@ export default function CadastroAnimal() {
       style={{
         maxWidth: 1300,
         margin: "0 auto",
-        padding: "16px 20px 120px", // padding inferior grande pra garantir rolagem até o final
+        padding: "16px 20px 32px",
         fontFamily: "Poppins, system-ui, sans-serif",
         boxSizing: "border-box",
+        overflow: "hidden",
       }}
     >
       {/* Título */}
@@ -252,6 +254,7 @@ export default function CadastroAnimal() {
                       container: (base) => ({
                         ...base,
                         width: "100%",
+                        flex: 1,
                       }),
                       control: (base) => ({
                         ...base,
@@ -379,6 +382,16 @@ export default function CadastroAnimal() {
                 💾 Salvar
               </button>
             </div>
+
+            <div style={botaoFichaContainer}>
+              <button
+                type="button"
+                style={btnGhost}
+                onClick={() => setAbaLateral("ficha")}
+              >
+                Ficha complementar
+              </button>
+            </div>
           </div>
         </div>
 
@@ -386,24 +399,15 @@ export default function CadastroAnimal() {
         <div>
           <div style={colunaDireitaSticky}>
             <div style={cardResumo}>
-              <h2
-                style={{
-                  margin: 0,
-                  marginBottom: 10,
-                  fontSize: 16,
-                  fontWeight: 900,
-                }}
-              >
-                Ficha complementar
-              </h2>
-
-              <FichaComplementarAnimal
-                numero={numero}
-                brinco={brinco}
-                nascimento={nascimento}
-                sexo={sexo}
-                raca={raca}
-              />
+              {abaLateral === "ficha" && (
+                <FichaComplementarAnimal
+                  numero={numero}
+                  brinco={brinco}
+                  nascimento={nascimento}
+                  sexo={sexo}
+                  raca={raca}
+                />
+              )}
             </div>
           </div>
         </div>
@@ -439,9 +443,12 @@ const cardTitle = {
 const tituloPagina = { fontSize: 28, fontWeight: 900, marginBottom: 12, margin: 0 };
 
 const colunaEsquerdaScroll = {
-  maxHeight: "calc(100vh - 260px)",
+  maxHeight: "calc(100vh - 220px)",
   overflowY: "auto",
   paddingRight: 8,
+  display: "flex",
+  flexDirection: "column",
+  gap: 0,
 };
 
 const colunaDireitaSticky = {
@@ -549,6 +556,12 @@ const botoesRodape = {
   justifyContent: "flex-end",
   alignItems: "center",
   gap: 12,
+};
+
+const botaoFichaContainer = {
+  marginTop: 16,
+  display: "flex",
+  justifyContent: "flex-end",
 };
 
 const cardResumo = {
