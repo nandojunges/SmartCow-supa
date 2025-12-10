@@ -29,11 +29,11 @@ function formatarDataDigitada(valor) {
 
 function calcularIdadeECategoria(nascimento, sexo) {
   if (!nascimento || nascimento.length !== 10)
-    return { idade: "", categoria: "" };
+    return { idade: "", categoria: "", meses: 0 };
 
   const [dia, mes, ano] = nascimento.split("/").map(Number);
   const nascDate = new Date(ano, mes - 1, dia);
-  if (Number.isNaN(+nascDate)) return { idade: "", categoria: "" };
+  if (Number.isNaN(+nascDate)) return { idade: "", categoria: "", meses: 0 };
 
   const diffMs = Date.now() - nascDate.getTime();
   const meses = Math.floor(diffMs / (1000 * 60 * 60 * 24 * 30.44));
@@ -46,7 +46,7 @@ function calcularIdadeECategoria(nascimento, sexo) {
     categoria = sexo === "macho" ? "Touro jovem" : "Novilha";
   else categoria = sexo === "macho" ? "Touro" : "Vaca adulta";
 
-  return { idade, categoria };
+  return { idade, categoria, meses };
 }
 
 function maskMoedaBR(v) {
@@ -56,6 +56,40 @@ function maskMoedaBR(v) {
   const [int, dec] = n.split(".");
   const intComPontos = int.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
   return `${intComPontos},${dec}`;
+}
+
+function parseDataBR(str) {
+  if (!str) return null;
+  const s = String(str).trim();
+  const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!m) return null;
+  const [, d, mo, y] = m.map(Number);
+  const dt = new Date(y, mo - 1, d);
+  return Number.isNaN(+dt) ? null : dt;
+}
+
+function getUltimaData(lista) {
+  const datas = (lista || [])
+    .map(parseDataBR)
+    .filter((d) => d instanceof Date);
+  if (!datas.length) return "";
+  datas.sort((a, b) => a.getTime() - b.getTime());
+  const ultimo = datas[datas.length - 1];
+  const dd = String(ultimo.getDate()).padStart(2, "0");
+  const mm = String(ultimo.getMonth() + 1).padStart(2, "0");
+  const yyyy = ultimo.getFullYear();
+  return `${dd}/${mm}/${yyyy}`;
+}
+
+function previsaoPartoISO(ultimaIABR) {
+  const dt = parseDataBR(ultimaIABR);
+  if (!dt) return { iso: "", br: "" };
+  const previsao = new Date(dt);
+  previsao.setDate(previsao.getDate() + 283);
+  const dd = String(previsao.getDate()).padStart(2, "0");
+  const mm = String(previsao.getMonth() + 1).padStart(2, "0");
+  const yyyy = previsao.getFullYear();
+  return { iso: previsao.toISOString().split("T")[0], br: `${dd}/${mm}/${yyyy}` };
 }
 
 /* ============================
@@ -72,6 +106,17 @@ export default function CadastroAnimal() {
   const [novaRaca, setNovaRaca] = useState("");
   const [racasAdicionais, setRacasAdicionais] = useState([]);
 
+  // complementar
+  const [pai, setPai] = useState("");
+  const [mae, setMae] = useState("");
+  const [listaIAs, setListaIAs] = useState([""]);
+  const [listaPartos, setListaPartos] = useState([""]);
+  const [listaSecagens, setListaSecagens] = useState([""]);
+
+  // situações calculadas
+  const [sitProd, setSitProd] = useState("");
+  const [sitReprod, setSitReprod] = useState("");
+
   // origem
   const [origem, setOrigem] = useState("propriedade");
   const [valorCompra, setValorCompra] = useState("");
@@ -80,6 +125,7 @@ export default function CadastroAnimal() {
   // derivados
   const [idade, setIdade] = useState("");
   const [categoria, setCategoria] = useState("");
+  const [mesesIdade, setMesesIdade] = useState(0);
 
   // feedback
   const [mensagemSucesso, setMensagemSucesso] = useState("");
@@ -103,15 +149,62 @@ export default function CadastroAnimal() {
     { value: "doacao", label: "Doação" },
   ];
 
+  const ultimaIABR = getUltimaData(listaIAs);
+  const ultimoPartoBR = getUltimaData(listaPartos);
+  const ultimaSecagemBR = getUltimaData(listaSecagens);
+  const { br: prevPartoBR } = previsaoPartoISO(ultimaIABR);
+
   // idade / categoria automáticas
   useEffect(() => {
-    const { idade: id, categoria: cat } = calcularIdadeECategoria(
+    const { idade: id, categoria: cat, meses } = calcularIdadeECategoria(
       nascimento,
       sexo
     );
     setIdade(id);
     setCategoria(cat);
+    setMesesIdade(meses);
   }, [nascimento, sexo]);
+
+  useEffect(() => {
+    // produtiva
+    if (sexo === "macho") {
+      setSitProd("não lactante");
+    } else {
+      const dtUltParto = parseDataBR(ultimoPartoBR);
+      const dtUltSecagem = parseDataBR(ultimaSecagemBR);
+
+      if (dtUltParto && (!dtUltSecagem || dtUltParto > dtUltSecagem)) {
+        setSitProd("lactante");
+      } else if (dtUltSecagem && (!dtUltParto || dtUltSecagem >= dtUltParto)) {
+        setSitProd("seca");
+      } else if (mesesIdade < 24) {
+        setSitProd("novilha");
+      } else {
+        setSitProd("não lactante");
+      }
+    }
+
+    // reprodutiva
+    const dtUltIA = parseDataBR(ultimaIABR);
+    const dtUltParto = parseDataBR(ultimoPartoBR);
+    const dtUltSecagem = parseDataBR(ultimaSecagemBR);
+
+    if (!dtUltIA) {
+      setSitReprod("vazia");
+    } else {
+      const temEventoDepoisDaIA =
+        (dtUltParto && dtUltParto > dtUltIA) ||
+        (dtUltSecagem && dtUltSecagem > dtUltIA);
+
+      if (!temEventoDepoisDaIA) {
+        setSitReprod("inseminada");
+      } else if (dtUltParto && dtUltParto > dtUltIA) {
+        setSitReprod("PEV / pós-parto");
+      } else {
+        setSitReprod("vazia");
+      }
+    }
+  }, [sexo, mesesIdade, ultimaIABR, ultimoPartoBR, ultimaSecagemBR]);
 
   /* ========= ações ========= */
 
@@ -130,6 +223,13 @@ export default function CadastroAnimal() {
     setSexo("");
     setRaca("");
     setNovaRaca("");
+    setPai("");
+    setMae("");
+    setListaIAs([""]);
+    setListaPartos([""]);
+    setListaSecagens([""]);
+    setSitProd("");
+    setSitReprod("");
     setOrigem("propriedade");
     setValorCompra("");
     setDataEntrada("");
@@ -209,6 +309,38 @@ export default function CadastroAnimal() {
             {/* Título */}
             <div style={{ marginBottom: 12 }}>
               <h1 style={tituloPagina}>Entrada de Animal</h1>
+            </div>
+
+            <div style={{ ...card, marginBottom: 20 }}>
+              <div style={cardHeader}>
+                <div style={cardTitle}>Ficha complementar do animal</div>
+                <button
+                  type="button"
+                  style={btnGhost}
+                  onClick={() =>
+                    setMostrarFichaComplementar((v) => !v)
+                  }
+                >
+                  {mostrarFichaComplementar
+                    ? "Fechar ficha complementar"
+                    : "Abrir ficha complementar"}
+                </button>
+              </div>
+
+              {mostrarFichaComplementar && (
+                <FichaComplementarAnimal
+                  pai={pai}
+                  setPai={setPai}
+                  mae={mae}
+                  setMae={setMae}
+                  listaIAs={listaIAs}
+                  setListaIAs={setListaIAs}
+                  listaPartos={listaPartos}
+                  setListaPartos={setListaPartos}
+                  listaSecagens={listaSecagens}
+                  setListaSecagens={setListaSecagens}
+                />
+              )}
             </div>
 
             {/* Identificação */}
@@ -384,35 +516,6 @@ export default function CadastroAnimal() {
               </div>
             </div>
 
-            <div style={{ ...card, marginTop: 16 }}>
-              <div style={cardHeader}>
-                <span style={cardTitle}>Ficha complementar</span>
-              </div>
-
-              <button
-                type="button"
-                style={btnGhost}
-                onClick={() => setMostrarFichaComplementar((prev) => !prev)}
-              >
-                📄 {" "}
-                {mostrarFichaComplementar
-                  ? "Fechar ficha complementar"
-                  : "Preencher ficha complementar"}
-              </button>
-
-              {mostrarFichaComplementar && (
-                <div style={{ marginTop: 12 }}>
-                  <FichaComplementarAnimal
-                    numero={numero}
-                    brinco={brinco}
-                    nascimento={nascimento}
-                    sexo={sexo}
-                    raca={raca}
-                  />
-                </div>
-              )}
-            </div>
-
             <div
               style={{
                 ...card,
@@ -429,23 +532,86 @@ export default function CadastroAnimal() {
                 💾 Salvar
               </button>
             </div>
+
+            <div style={{ height: 40 }} />
           </div>
         </div>
 
-        {/* ------- COLUNA DIREITA: SOMENTE FICHA ------- */}
+        {/* ------- COLUNA DIREITA: FICHA RESUMIDA ------- */}
         <div>
           <div style={colunaDireitaSticky}>
-            <div style={cardResumo}>
-              {abaLateral === "ficha" && (
-                <FichaComplementarAnimal
-                  numero={numero}
-                  brinco={brinco}
-                  nascimento={nascimento}
-                  sexo={sexo}
-                  raca={raca}
-                  titulo="Ficha do animal"
-                />
-              )}
+            <div style={{ ...cardResumo, padding: "16px 16px 12px" }}>
+              <div style={{ ...cardHeader, marginBottom: 6 }}>
+                <div style={cardTitle}>Ficha do animal</div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
+                <div style={rowKV}>
+                  <span style={k}>Número</span>
+                  <span style={v}>{numero || "—"}</span>
+                </div>
+                <div style={rowKV}>
+                  <span style={k}>Brinco</span>
+                  <span style={v}>{brinco || "—"}</span>
+                </div>
+                <div style={rowKV}>
+                  <span style={k}>Nascimento</span>
+                  <span style={v}>{nascimento || "—"}</span>
+                </div>
+                <div style={rowKV}>
+                  <span style={k}>Sexo</span>
+                  <span style={v}>{sexo || "—"}</span>
+                </div>
+                <div style={rowKV}>
+                  <span style={k}>Raça</span>
+                  <span style={v}>{raca || "—"}</span>
+                </div>
+
+                <div style={{ height: 1, background: "#e5e7eb", margin: "4px 0" }} />
+
+                {mostrarFichaComplementar && (
+                  <>
+                    <div style={rowKV}>
+                      <span style={k}>Pai</span>
+                      <span style={v}>{pai || "—"}</span>
+                    </div>
+                    <div style={rowKV}>
+                      <span style={k}>Mãe</span>
+                      <span style={v}>{mae || "—"}</span>
+                    </div>
+
+                    <div
+                      style={{ height: 1, background: "#e5e7eb", margin: "4px 0" }}
+                    />
+
+                    <div style={rowKV}>
+                      <span style={k}>Último parto</span>
+                      <span style={v}>{ultimoPartoBR || "—"}</span>
+                    </div>
+                    <div style={rowKV}>
+                      <span style={k}>Última IA</span>
+                      <span style={v}>{ultimaIABR || "—"}</span>
+                    </div>
+                    <div style={rowKV}>
+                      <span style={k}>Previsão de parto</span>
+                      <span style={v}>{prevPartoBR || "—"}</span>
+                    </div>
+
+                    <div
+                      style={{ height: 1, background: "#e5e7eb", margin: "4px 0" }}
+                    />
+
+                    <div style={rowKV}>
+                      <span style={k}>Situação produtiva</span>
+                      <span style={v}>{sitProd || "—"}</span>
+                    </div>
+                    <div style={rowKV}>
+                      <span style={k}>Situação reprodutiva</span>
+                      <span style={v}>{sitReprod || "—"}</span>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -482,7 +648,7 @@ const tituloPagina = { fontSize: 28, fontWeight: 900, marginBottom: 12, margin: 
 
 const colunaDireitaSticky = {
   position: "sticky",
-  top: 120,
+  top: 12,
 };
 
 const pill = {
@@ -583,4 +749,22 @@ const cardResumo = {
   ...card,
   paddingTop: 28,
   paddingBottom: 24,
+};
+
+const rowKV = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+  fontSize: 14,
+};
+
+const k = {
+  color: "#64748b",
+  fontWeight: 700,
+};
+
+const v = {
+  color: "#111827",
+  fontWeight: 900,
 };
