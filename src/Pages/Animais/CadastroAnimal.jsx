@@ -426,13 +426,20 @@ export default function CadastroAnimal() {
         ? Number(valorCompra.replace(/\./g, "").replace(",", "."))
         : null;
 
+    const ultimoPartoISO = dataBRParaISO(ultimoPartoResumo);
+
     const payloadAnimal = {
       numero: Number(numero),
       brinco,
       nascimento: nascimentoISO,
       sexo,
       raca_id: raca,
+      categoria: categoria || null,
+      idade: idade || null,
       origem,
+      situacao_produtiva: sitProd || null,
+      situacao_reprodutiva: sitReprod || null,
+      ultimo_parto: ultimoPartoISO,
       valor_compra: valorCompraNumero,
       data_entrada: dataEntradaISO,
       pai_nome: pai || null,
