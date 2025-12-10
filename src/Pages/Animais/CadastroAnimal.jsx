@@ -311,38 +311,6 @@ export default function CadastroAnimal() {
               <h1 style={tituloPagina}>Entrada de Animal</h1>
             </div>
 
-            <div style={{ ...card, marginBottom: 20 }}>
-              <div style={cardHeader}>
-                <div style={cardTitle}>Ficha complementar do animal</div>
-                <button
-                  type="button"
-                  style={btnGhost}
-                  onClick={() =>
-                    setMostrarFichaComplementar((v) => !v)
-                  }
-                >
-                  {mostrarFichaComplementar
-                    ? "Fechar ficha complementar"
-                    : "Abrir ficha complementar"}
-                </button>
-              </div>
-
-              {mostrarFichaComplementar && (
-                <FichaComplementarAnimal
-                  pai={pai}
-                  setPai={setPai}
-                  mae={mae}
-                  setMae={setMae}
-                  listaIAs={listaIAs}
-                  setListaIAs={setListaIAs}
-                  listaPartos={listaPartos}
-                  setListaPartos={setListaPartos}
-                  listaSecagens={listaSecagens}
-                  setListaSecagens={setListaSecagens}
-                />
-              )}
-            </div>
-
             {/* Identificação */}
             <div style={{ ...card, marginBottom: 28 }}>
               <div style={cardHeader}>
@@ -514,6 +482,38 @@ export default function CadastroAnimal() {
                   placeholder="dd/mm/aaaa (opcional)"
                 />
               </div>
+            </div>
+
+            <div style={{ ...card, marginTop: 20 }}>
+              <div style={cardHeader}>
+                <div style={cardTitle}>Ficha complementar do animal</div>
+                <button
+                  type="button"
+                  style={btnGhost}
+                  onClick={() =>
+                    setMostrarFichaComplementar((v) => !v)
+                  }
+                >
+                  {mostrarFichaComplementar
+                    ? "Fechar ficha complementar"
+                    : "Abrir ficha complementar"}
+                </button>
+              </div>
+
+              {mostrarFichaComplementar && (
+                <FichaComplementarAnimal
+                  pai={pai}
+                  setPai={setPai}
+                  mae={mae}
+                  setMae={setMae}
+                  listaIAs={listaIAs}
+                  setListaIAs={setListaIAs}
+                  listaPartos={listaPartos}
+                  setListaPartos={setListaPartos}
+                  listaSecagens={listaSecagens}
+                  setListaSecagens={setListaSecagens}
+                />
+              )}
             </div>
 
             <div

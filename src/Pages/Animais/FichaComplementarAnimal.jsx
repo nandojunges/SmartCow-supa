@@ -34,14 +34,19 @@ const linhaLista = {
 };
 
 const botaoMais = {
-  minWidth: 32,
-  height: 36,
-  borderRadius: 999,
-  border: "1px solid #d1d5db",
-  background: "#f8fafc",
-  fontWeight: 900,
-  fontSize: 18,
+  width: 40,
+  height: 40,
+  borderRadius: "999px",
+  border: "none",
   cursor: "pointer",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: "1.2rem",
+  fontWeight: "800",
+  backgroundColor: "#2563eb",
+  color: "#ffffff",
+  boxShadow: "0 1px 4px rgba(0,0,0,0.15)",
 };
 
 function formatarDataDigitada(valor) {
@@ -55,7 +60,7 @@ function formatarDataDigitada(valor) {
     const dt = new Date(a, (m || 1) - 1, d || 1);
     if (
       dt.getDate() !== d ||
-      dt.getMonth() !== m - 1 ||
+      dt.getMonth() !== (m - 1) ||
       dt.getFullYear() !== a
     ) {
       out = "";
