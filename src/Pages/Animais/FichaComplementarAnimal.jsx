@@ -7,96 +7,120 @@ export default function FichaComplementarAnimal({
   nascimento,
   sexo,
   raca,
-  titulo = "Ficha complementar",
+  pai,
+  mae,
+  ultimoParto,
+  ultimaIA,
+  previsaoParto,
 }) {
-  // por enquanto é apenas visual; depois vamos ligar com pai, mãe,
-  // último parto, última IA, etc.
+  const safe = (v) => (v && String(v).trim() ? v : "—");
+
   return (
-    <div>
-      <h3
-        style={{
-          margin: "0 0 8px",
-          fontSize: 15,
-          fontWeight: 900,
-          color: "#0f172a",
-        }}
-      >
-        {titulo}
-      </h3>
-
-      <div style={linha}>
-        <span style={k}>Número</span>
-        <span style={v}>{numero || "—"}</span>
-      </div>
-      <div style={linha}>
-        <span style={k}>Brinco</span>
-        <span style={v}>{brinco || "—"}</span>
-      </div>
-      <div style={linha}>
-        <span style={k}>Nascimento</span>
-        <span style={v}>{nascimento || "—"}</span>
-      </div>
-      <div style={linha}>
-        <span style={k}>Sexo</span>
-        <span style={v}>
-          {sexo === "femea" ? "Fêmea" : sexo === "macho" ? "Macho" : "—"}
-        </span>
-      </div>
-      <div style={linha}>
-        <span style={k}>Raça</span>
-        <span style={v}>{raca || "—"}</span>
+    <div style={card}>
+      <div style={cardHeader}>
+        <div style={cardTitle}>Ficha complementar</div>
       </div>
 
-      <div style={divisor} />
+      <div style={grid}>
+        <LinhaKV rotulo="Número" valor={safe(numero)} />
+        <LinhaKV rotulo="Brinco" valor={safe(brinco)} />
+        <LinhaKV rotulo="Nascimento" valor={safe(nascimento)} />
+        <LinhaKV rotulo="Sexo" valor={safe(sexo)} />
+        <LinhaKV rotulo="Raça" valor={safe(raca)} />
 
-      <div style={linha}>
-        <span style={k}>Pai</span>
-        <span style={v}>—</span>
-      </div>
-      <div style={linha}>
-        <span style={k}>Mãe</span>
-        <span style={v}>—</span>
-      </div>
-      <div style={linha}>
-        <span style={k}>Último parto</span>
-        <span style={v}>—</span>
-      </div>
-      <div style={linha}>
-        <span style={k}>Última IA</span>
-        <span style={v}>—</span>
-      </div>
-      <div style={linha}>
-        <span style={k}>Previsão de parto</span>
-        <span style={v}>—</span>
+        <Separador />
+
+        <LinhaKV rotulo="Pai" valor={safe(pai)} />
+        <LinhaKV rotulo="Mãe" valor={safe(mae)} />
+
+        <Separador />
+
+        <LinhaKV rotulo="Último parto" valor={safe(ultimoParto)} />
+        <LinhaKV rotulo="Última IA" valor={safe(ultimaIA)} />
+        <LinhaKV rotulo="Previsão de parto" valor={safe(previsaoParto)} />
       </div>
 
-      <p
-        style={{
-          marginTop: 10,
-          fontSize: 11,
-          color: "#6b7280",
-        }}
-      >
+      <div style={notaRodape}>
         Em breve esta ficha vai puxar automaticamente o histórico completo
         (pai, mãe, partos, secagens e inseminações) do animal.
-      </p>
+      </div>
     </div>
   );
 }
 
-const linha = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  fontSize: 13,
-  marginBottom: 5,
+/* ========== componentes internos ========== */
+
+function LinhaKV({ rotulo, valor }) {
+  return (
+    <div style={rowKV}>
+      <span style={k}>{rotulo}</span>
+      <span style={v}>{valor}</span>
+    </div>
+  );
+}
+
+function Separador() {
+  return <div style={separator} />;
+}
+
+/* ========== estilos locais (baseados no projeto antigo) ========== */
+
+const card = {
+  background: "#ffffff",
+  border: "1px solid #e5e7eb",
+  borderRadius: 16,
+  padding: 20,
+  boxShadow: "0 1px 8px rgba(0,0,0,0.04)",
+  marginTop: 12,
+  fontFamily: "Poppins, system-ui, sans-serif",
 };
 
-const k = { color: "#64748b", fontWeight: 700 };
-const v = { color: "#111827", fontWeight: 900 };
+const cardHeader = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  marginBottom: 10,
+};
 
-const divisor = {
+const cardTitle = {
+  fontWeight: 900,
+  fontSize: 16,
+  color: "#0f172a",
+};
+
+const grid = {
+  display: "grid",
+  gridTemplateColumns: "1fr",
+  gap: 6,
+};
+
+const rowKV = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+  fontSize: 14,
+};
+
+const k = {
+  color: "#64748b",
+  fontWeight: 700,
+};
+
+const v = {
+  color: "#111827",
+  fontWeight: 900,
+};
+
+const separator = {
   height: 1,
   background: "#e5e7eb",
-  margin: "8px 0",
+  margin: "6px 0",
+};
+
+const notaRodape = {
+  marginTop: 10,
+  fontSize: 12,
+  color: "#94a3b8",
+  lineHeight: 1.4,
 };
