@@ -87,6 +87,7 @@ export default function CadastroAnimal() {
   const [mostrarFichaComplementar, setMostrarFichaComplementar] = useState(false);
   // básicos
   const [numero, setNumero] = useState("1");
+  const [autoNumero, setAutoNumero] = useState(true);
   const [brinco, setBrinco] = useState("");
   const [nascimento, setNascimento] = useState("");
   const [sexo, setSexo] = useState("");
@@ -212,6 +213,29 @@ export default function CadastroAnimal() {
     () => obterUltimaDataValidaBR(secagensAnteriores),
     [secagensAnteriores]
   );
+
+  async function carregarProximoNumero() {
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) return;
+    const { data, error } = await supabase
+      .from("animais")
+      .select("numero")
+      .eq("user_id", user.id)
+      .order("numero", { ascending: false })
+      .limit(1);
+    if (error) return;
+    const proximo =
+      data && data.length > 0 && data[0].numero != null
+        ? data[0].numero + 1
+        : 1;
+    setNumero(String(proximo));
+  }
+
+  useEffect(() => {
+    if (autoNumero) {
+      carregarProximoNumero();
+    }
+  }, [autoNumero]);
 
   const { br: prevPartoBR } = previsaoPartoISO(ultimaIAResumo);
 
@@ -370,7 +394,11 @@ export default function CadastroAnimal() {
     setCategoria("");
     setMensagemErro("");
     setMensagemSucesso("");
-    setNumero(String(parseInt(numero || "0", 10) + 1));
+    if (autoNumero) {
+      carregarProximoNumero();
+    } else {
+      setNumero("");
+    }
   };
 
   const salvar = async () => {
@@ -518,12 +546,24 @@ export default function CadastroAnimal() {
 
               <div style={grid2}>
                 <div>
-                  <label style={lbl}>Número</label>
+                  <label style={lbl}>
+                    Número
+                    <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 400 }}>
+                      <input
+                        type="checkbox"
+                        checked={autoNumero}
+                        onChange={(e) => setAutoNumero(e.target.checked)}
+                        style={{ marginRight: 4 }}
+                      />
+                      numeração automática
+                    </span>
+                  </label>
                   <input
                     type="text"
                     value={numero}
-                    readOnly
-                    style={inputReadOnly}
+                    onChange={(e) => !autoNumero && setNumero(e.target.value)}
+                    readOnly={autoNumero}
+                    style={autoNumero ? inputReadOnly : inputBase}
                   />
                 </div>
                 <div>
