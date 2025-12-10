@@ -1,5 +1,5 @@
 // src/Pages/Animais/CadastroAnimal.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Select from "react-select";
 import FichaComplementarAnimal from "./FichaComplementarAnimal";
 
@@ -68,19 +68,6 @@ function parseDataBR(str) {
   return Number.isNaN(+dt) ? null : dt;
 }
 
-function getUltimaData(lista) {
-  const datas = (lista || [])
-    .map(parseDataBR)
-    .filter((d) => d instanceof Date);
-  if (!datas.length) return "";
-  datas.sort((a, b) => a.getTime() - b.getTime());
-  const ultimo = datas[datas.length - 1];
-  const dd = String(ultimo.getDate()).padStart(2, "0");
-  const mm = String(ultimo.getMonth() + 1).padStart(2, "0");
-  const yyyy = ultimo.getFullYear();
-  return `${dd}/${mm}/${yyyy}`;
-}
-
 function previsaoPartoISO(ultimaIABR) {
   const dt = parseDataBR(ultimaIABR);
   if (!dt) return { iso: "", br: "" };
@@ -109,9 +96,9 @@ export default function CadastroAnimal() {
   // complementar
   const [pai, setPai] = useState("");
   const [mae, setMae] = useState("");
-  const [listaIAs, setListaIAs] = useState([""]);
-  const [listaPartos, setListaPartos] = useState([""]);
-  const [listaSecagens, setListaSecagens] = useState([""]);
+  const [inseminacoesAnteriores, setInseminacoesAnteriores] = useState([""]);
+  const [partosAnteriores, setPartosAnteriores] = useState([""]);
+  const [secagensAnteriores, setSecagensAnteriores] = useState([""]);
 
   // situações calculadas
   const [sitProd, setSitProd] = useState("");
@@ -149,10 +136,74 @@ export default function CadastroAnimal() {
     { value: "doacao", label: "Doação" },
   ];
 
-  const ultimaIABR = getUltimaData(listaIAs);
-  const ultimoPartoBR = getUltimaData(listaPartos);
-  const ultimaSecagemBR = getUltimaData(listaSecagens);
-  const { br: prevPartoBR } = previsaoPartoISO(ultimaIABR);
+  const atualizarDataLista = (lista, setLista, index, novoValorBruto) => {
+    const formatada = formatarDataDigitada(novoValorBruto);
+    const nova = [...lista];
+    nova[index] = formatada;
+    setLista(nova);
+  };
+
+  const limparCamposVazios = (lista, setLista) => {
+    const preenchidos = lista.filter((d) => d && d.trim() !== "");
+    if (preenchidos.length === 0) {
+      setLista([""]);
+    } else {
+      setLista([...preenchidos, ""]);
+    }
+  };
+
+  const adicionarCampoSeUltimoPreenchido = (lista, setLista) => {
+    const ultimo = lista[lista.length - 1];
+    if (ultimo && ultimo.length === 10) {
+      setLista([...lista, ""]);
+    }
+  };
+
+  const parseBRtoDate = (br) => {
+    if (!br || br.length !== 10) return null;
+    const [d, m, a] = br.split("/").map(Number);
+    const dt = new Date(a, m - 1, d);
+    return Number.isNaN(+dt) ? null : dt;
+  };
+
+  const obterUltimaDataValidaBR = (lista) => {
+    const datas = (lista || [])
+      .map(parseBRtoDate)
+      .filter(Boolean)
+      .sort((a, b) => a.getTime() - b.getTime());
+    if (!datas.length) return "";
+    const dt = datas[datas.length - 1];
+    const dd = String(dt.getDate()).padStart(2, "0");
+    const mm = String(dt.getMonth() + 1).padStart(2, "0");
+    const yyyy = dt.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  };
+
+  const diasEntre = (data) => {
+    if (!data) return null;
+    const dt = parseBRtoDate(data);
+    if (!dt) return null;
+    const hoje = new Date();
+    const diffMs = hoje.getTime() - dt.getTime();
+    return Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  };
+
+  const ultimaIAResumo = useMemo(
+    () => obterUltimaDataValidaBR(inseminacoesAnteriores),
+    [inseminacoesAnteriores]
+  );
+
+  const ultimoPartoResumo = useMemo(
+    () => obterUltimaDataValidaBR(partosAnteriores),
+    [partosAnteriores]
+  );
+
+  const ultimaSecagemResumo = useMemo(
+    () => obterUltimaDataValidaBR(secagensAnteriores),
+    [secagensAnteriores]
+  );
+
+  const { br: prevPartoBR } = previsaoPartoISO(ultimaIAResumo);
 
   // idade / categoria automáticas
   useEffect(() => {
@@ -170,8 +221,8 @@ export default function CadastroAnimal() {
     if (sexo === "macho") {
       setSitProd("não lactante");
     } else {
-      const dtUltParto = parseDataBR(ultimoPartoBR);
-      const dtUltSecagem = parseDataBR(ultimaSecagemBR);
+      const dtUltParto = parseDataBR(ultimoPartoResumo);
+      const dtUltSecagem = parseDataBR(ultimaSecagemResumo);
 
       if (dtUltParto && (!dtUltSecagem || dtUltParto > dtUltSecagem)) {
         setSitProd("lactante");
@@ -185,9 +236,9 @@ export default function CadastroAnimal() {
     }
 
     // reprodutiva
-    const dtUltIA = parseDataBR(ultimaIABR);
-    const dtUltParto = parseDataBR(ultimoPartoBR);
-    const dtUltSecagem = parseDataBR(ultimaSecagemBR);
+    const dtUltIA = parseDataBR(ultimaIAResumo);
+    const dtUltParto = parseDataBR(ultimoPartoResumo);
+    const dtUltSecagem = parseDataBR(ultimaSecagemResumo);
 
     if (!dtUltIA) {
       setSitReprod("vazia");
@@ -204,7 +255,58 @@ export default function CadastroAnimal() {
         setSitReprod("vazia");
       }
     }
-  }, [sexo, mesesIdade, ultimaIABR, ultimoPartoBR, ultimaSecagemBR]);
+  }, [
+    sexo,
+    mesesIdade,
+    ultimaIAResumo,
+    ultimoPartoResumo,
+    ultimaSecagemResumo,
+  ]);
+
+  const [situacaoProdutivaResumo, situacaoReprodutivaResumo, delResumo] = useMemo(
+    () => {
+      const ultimoParto = parseBRtoDate(ultimoPartoResumo);
+      const ultimaSecagem = parseBRtoDate(ultimaSecagemResumo);
+      const ultimaIa = parseBRtoDate(ultimaIAResumo);
+
+      let sitProdResumo = sitProd || "";
+      let sitReprodResumo = sitReprod || "";
+      let del = null;
+
+      if (ultimoParto) {
+        const temSecagemDepoisDoParto =
+          ultimaSecagem && ultimaSecagem.getTime() > ultimoParto.getTime();
+
+        if (!temSecagemDepoisDoParto) {
+          sitProdResumo = "lactante";
+          del = diasEntre(ultimoPartoResumo);
+        } else {
+          sitProdResumo = "seca";
+          del = null;
+        }
+      }
+
+      if (!ultimoParto && !ultimaIa) {
+        sitReprodResumo = "vazia";
+      } else if (ultimaIa && ultimoParto) {
+        const diffPartoIa = ultimoParto.getTime() - ultimaIa.getTime();
+        const dias = diffPartoIa / (1000 * 60 * 60 * 24);
+        if (dias >= 240) {
+          sitReprodResumo = "pev";
+        }
+      } else if (ultimaIa && !ultimoParto) {
+        sitReprodResumo = "inseminada";
+      }
+
+      return [sitProdResumo, sitReprodResumo, del];
+    }, [
+      ultimoPartoResumo,
+      ultimaSecagemResumo,
+      ultimaIAResumo,
+      sitProd,
+      sitReprod,
+    ]
+  );
 
   /* ========= ações ========= */
 
@@ -225,9 +327,9 @@ export default function CadastroAnimal() {
     setNovaRaca("");
     setPai("");
     setMae("");
-    setListaIAs([""]);
-    setListaPartos([""]);
-    setListaSecagens([""]);
+    setInseminacoesAnteriores([""]);
+    setPartosAnteriores([""]);
+    setSecagensAnteriores([""]);
     setSitProd("");
     setSitReprod("");
     setOrigem("propriedade");
@@ -506,12 +608,19 @@ export default function CadastroAnimal() {
                   setPai={setPai}
                   mae={mae}
                   setMae={setMae}
-                  listaIAs={listaIAs}
-                  setListaIAs={setListaIAs}
-                  listaPartos={listaPartos}
-                  setListaPartos={setListaPartos}
-                  listaSecagens={listaSecagens}
-                  setListaSecagens={setListaSecagens}
+                  inseminacoesAnteriores={inseminacoesAnteriores}
+                  setInseminacoesAnteriores={setInseminacoesAnteriores}
+                  partosAnteriores={partosAnteriores}
+                  setPartosAnteriores={setPartosAnteriores}
+                  secagensAnteriores={secagensAnteriores}
+                  setSecagensAnteriores={setSecagensAnteriores}
+                  atualizarDataLista={atualizarDataLista}
+                  limparCamposVazios={limparCamposVazios}
+                  adicionarCampoSeUltimoPreenchido={
+                    adicionarCampoSeUltimoPreenchido
+                  }
+                  inputBase={inputBase}
+                  lbl={lbl}
                 />
               )}
             </div>
@@ -569,48 +678,61 @@ export default function CadastroAnimal() {
 
                 <div style={{ height: 1, background: "#e5e7eb", margin: "4px 0" }} />
 
-                {mostrarFichaComplementar && (
-                  <>
-                    <div style={rowKV}>
-                      <span style={k}>Pai</span>
-                      <span style={v}>{pai || "—"}</span>
-                    </div>
-                    <div style={rowKV}>
-                      <span style={k}>Mãe</span>
-                      <span style={v}>{mae || "—"}</span>
-                    </div>
+                <div style={rowKV}>
+                  <span style={k}>Pai</span>
+                  <span style={v}>{pai || "—"}</span>
+                </div>
+                <div style={rowKV}>
+                  <span style={k}>Mãe</span>
+                  <span style={v}>{mae || "—"}</span>
+                </div>
 
-                    <div
-                      style={{ height: 1, background: "#e5e7eb", margin: "4px 0" }}
-                    />
+                <div
+                  style={{ height: 1, background: "#e5e7eb", margin: "4px 0" }}
+                />
 
-                    <div style={rowKV}>
-                      <span style={k}>Último parto</span>
-                      <span style={v}>{ultimoPartoBR || "—"}</span>
-                    </div>
-                    <div style={rowKV}>
-                      <span style={k}>Última IA</span>
-                      <span style={v}>{ultimaIABR || "—"}</span>
-                    </div>
-                    <div style={rowKV}>
-                      <span style={k}>Previsão de parto</span>
-                      <span style={v}>{prevPartoBR || "—"}</span>
-                    </div>
+                <div style={rowKV}>
+                  <span style={k}>Último parto</span>
+                  <span style={v}>{ultimoPartoResumo || "—"}</span>
+                </div>
+                <div style={rowKV}>
+                  <span style={k}>Última IA</span>
+                  <span style={v}>{ultimaIAResumo || "—"}</span>
+                </div>
+                <div style={rowKV}>
+                  <span style={k}>Previsão de parto</span>
+                  <span style={v}>{prevPartoBR || "—"}</span>
+                </div>
 
-                    <div
-                      style={{ height: 1, background: "#e5e7eb", margin: "4px 0" }}
-                    />
+                <div
+                  style={{ height: 1, background: "#e5e7eb", margin: "4px 0" }}
+                />
 
-                    <div style={rowKV}>
-                      <span style={k}>Situação produtiva</span>
-                      <span style={v}>{sitProd || "—"}</span>
-                    </div>
-                    <div style={rowKV}>
-                      <span style={k}>Situação reprodutiva</span>
-                      <span style={v}>{sitReprod || "—"}</span>
-                    </div>
-                  </>
-                )}
+                <div style={rowKV}>
+                  <span style={k}>Situação produtiva</span>
+                  <span style={v}>{situacaoProdutivaResumo || "—"}</span>
+                </div>
+                <div style={rowKV}>
+                  <span style={k}>Situação reprodutiva</span>
+                  <span style={v}>{situacaoReprodutivaResumo || "—"}</span>
+                </div>
+                <div style={rowKV}>
+                  <span style={k}>DEL</span>
+                  <span style={v}>{delResumo != null ? `${delResumo} dias` : "—"}</span>
+                </div>
+
+                <div
+                  style={{ height: 1, background: "#e5e7eb", margin: "4px 0" }}
+                />
+
+                <div style={rowKV}>
+                  <span style={k}>Origem</span>
+                  <span style={v}>
+                    {origem === "comprado" && valorCompra
+                      ? `Comprado por R$ ${valorCompra}`
+                      : origem || "—"}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
