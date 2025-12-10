@@ -127,12 +127,12 @@ export default function CadastroAnimal() {
     { value: "macho", label: "Macho" },
   ];
   const racaOptions = [
-    ...racasBanco.map((r) => ({ value: r.id, label: r.nome })),
-    ...racasAdicionais.map((r) => ({ value: r, label: r })),
+    ...racasBanco.map((r) => ({ id: r.id, nome: r.nome })),
+    ...racasAdicionais.map((r) => ({ id: r, nome: r })),
   ];
 
   const racaSelecionadaLabel = useMemo(
-    () => racaOptions.find((opt) => opt.value === raca)?.label || "",
+    () => racaOptions.find((opt) => opt.id === raca)?.nome || "",
     [racaOptions, raca]
   );
   const origemOptions = [
@@ -579,8 +579,10 @@ export default function CadastroAnimal() {
                 <div style={{ display: "flex", gap: 18, alignItems: "stretch" }}>
                   <Select
                     options={racaOptions}
-                    value={racaOptions.find((opt) => opt.value === raca) || null}
-                    onChange={(opt) => setRaca(opt?.value || "")}
+                    getOptionLabel={(opt) => opt.nome}
+                    getOptionValue={(opt) => opt.id}
+                    value={racaOptions.find((opt) => opt.id === raca) || null}
+                    onChange={(opt) => setRaca(opt?.id || "")}
                     placeholder="Selecione"
                     styles={{
                       container: (base) => ({
