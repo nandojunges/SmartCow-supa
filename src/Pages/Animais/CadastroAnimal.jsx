@@ -584,4 +584,3 @@ const cardResumo = {
   paddingTop: 28,
   paddingBottom: 24,
 };
-
