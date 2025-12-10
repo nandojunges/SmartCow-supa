@@ -1,6 +1,7 @@
 // src/Pages/Animais/CadastroAnimal.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import Select from "react-select";
+import { supabase } from "../../lib/supabaseClient";
 import FichaComplementarAnimal from "./FichaComplementarAnimal";
 
 /* ============================
@@ -92,6 +93,7 @@ export default function CadastroAnimal() {
   const [raca, setRaca] = useState("");
   const [novaRaca, setNovaRaca] = useState("");
   const [racasAdicionais, setRacasAdicionais] = useState([]);
+  const [racasBanco, setRacasBanco] = useState([]);
 
   // complementar
   const [pai, setPai] = useState("");
@@ -125,11 +127,14 @@ export default function CadastroAnimal() {
     { value: "macho", label: "Macho" },
   ];
   const racaOptions = [
-    { value: "Holandês", label: "Holandês" },
-    { value: "Jersey", label: "Jersey" },
-    { value: "Girolando", label: "Girolando" },
+    ...racasBanco.map((r) => ({ value: r.id, label: r.nome })),
     ...racasAdicionais.map((r) => ({ value: r, label: r })),
   ];
+
+  const racaSelecionadaLabel = useMemo(
+    () => racaOptions.find((opt) => opt.value === raca)?.label || "",
+    [racaOptions, raca]
+  );
   const origemOptions = [
     { value: "propriedade", label: "Nascido na propriedade" },
     { value: "comprado", label: "Comprado" },
@@ -164,6 +169,15 @@ export default function CadastroAnimal() {
     const [d, m, a] = br.split("/").map(Number);
     const dt = new Date(a, m - 1, d);
     return Number.isNaN(+dt) ? null : dt;
+  };
+
+  const dataBRParaISO = (br) => {
+    const dt = parseBRtoDate(br);
+    if (!dt) return null;
+    const yyyy = dt.getFullYear();
+    const mm = String(dt.getMonth() + 1).padStart(2, "0");
+    const dd = String(dt.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
   };
 
   const obterUltimaDataValidaBR = (lista) => {
@@ -308,6 +322,21 @@ export default function CadastroAnimal() {
     ]
   );
 
+  useEffect(() => {
+    const carregarRacas = async () => {
+      const { data, error } = await supabase
+        .from("racas")
+        .select("*")
+        .order("nome", { ascending: true });
+
+      if (!error && Array.isArray(data)) {
+        setRacasBanco(data);
+      }
+    };
+
+    carregarRacas();
+  }, []);
+
   /* ========= ações ========= */
 
   const adicionarNovaRaca = () => {
@@ -342,29 +371,82 @@ export default function CadastroAnimal() {
     setNumero(String(parseInt(numero || "0", 10) + 1));
   };
 
-  const salvar = () => {
+  const salvar = async () => {
     if (!brinco || !nascimento || !sexo || !raca) {
       setMensagemErro("Preencha Brinco, Nascimento, Sexo e Raça.");
       setTimeout(() => setMensagemErro(""), 2500);
       return;
     }
 
-    const payload = {
-      numero,
+    const nascimentoISO = dataBRParaISO(nascimento);
+    const dataEntradaISO = dataBRParaISO(dataEntrada);
+
+    const valorCompraNumero =
+      origem === "comprado" && valorCompra
+        ? Number(valorCompra.replace(/\./g, "").replace(",", "."))
+        : null;
+
+    const payloadAnimal = {
+      numero: Number(numero),
       brinco,
-      nascimento,
+      nascimento: nascimentoISO,
       sexo,
-      raca,
+      raca_id: raca,
       origem,
-      valor_compra: origem === "comprado" ? valorCompra || undefined : undefined,
-      data_entrada: dataEntrada || undefined,
-      idade: idade || undefined,
-      categoria: categoria || undefined,
+      valor_compra: valorCompraNumero,
+      data_entrada: dataEntradaISO,
+      pai_nome: pai || null,
+      mae_nome: mae || null,
+      categoria_atual: categoria || null,
+      idade_meses: mesesIdade || null,
     };
 
-    console.log("Payload pronto para enviar ao backend:", payload);
+    const { data: animalData, error: animalError } = await supabase
+      .from("animais")
+      .insert(payloadAnimal)
+      .select()
+      .single();
 
-    setMensagemSucesso("Animal cadastrado (payload pronto).");
+    if (animalError || !animalData) {
+      console.error(animalError);
+      setMensagemErro("Erro ao salvar o animal no banco.");
+      setTimeout(() => setMensagemErro(""), 2500);
+      return;
+    }
+
+    const animalId = animalData.id;
+    const eventos = [];
+
+    const adicionarEventos = (lista, tipo) => {
+      (lista || []).forEach((item) => {
+        if (!item || !item.trim()) return;
+        const iso = dataBRParaISO(item);
+        if (!iso) return;
+        eventos.push({
+          animal_id: animalId,
+          tipo_evento: tipo,
+          data_evento: iso,
+        });
+      });
+    };
+
+    adicionarEventos(inseminacoesAnteriores, "inseminacao");
+    adicionarEventos(partosAnteriores, "parto");
+    adicionarEventos(secagensAnteriores, "secagem");
+
+    if (eventos.length > 0) {
+      const { error: eventosError } = await supabase
+        .from("eventos_reprodutivos")
+        .insert(eventos);
+
+      if (eventosError) {
+        console.error(eventosError);
+      }
+    }
+
+    setMensagemSucesso(
+      "Animal e histórico reprodutivo básico cadastrados com sucesso!"
+    );
     setTimeout(() => setMensagemSucesso(""), 2500);
 
     limpar();
@@ -673,7 +755,7 @@ export default function CadastroAnimal() {
                 </div>
                 <div style={rowKV}>
                   <span style={k}>Raça</span>
-                  <span style={v}>{raca || "—"}</span>
+                  <span style={v}>{racaSelecionadaLabel || raca || "—"}</span>
                 </div>
 
                 <div style={{ height: 1, background: "#e5e7eb", margin: "4px 0" }} />
