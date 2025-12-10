@@ -7,6 +7,7 @@ export default function FichaComplementarAnimal({
   nascimento,
   sexo,
   raca,
+  titulo = "Ficha complementar",
 }) {
   // por enquanto é apenas visual; depois vamos ligar com pai, mãe,
   // último parto, última IA, etc.
@@ -20,7 +21,7 @@ export default function FichaComplementarAnimal({
           color: "#0f172a",
         }}
       >
-        Ficha complementar
+        {titulo}
       </h3>
 
       <div style={linha}>
