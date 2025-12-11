@@ -210,8 +210,10 @@ export default function Animais() {
 
         let dataFormatada = "";
         if (ultima?.data_saida) {
-          const [ano, mes, dia] = ultima.data_saida.split("-");
-          if (ano && mes && dia) dataFormatada = `${dia}/${mes}/${ano}`;
+          const dataObj = new Date(ultima.data_saida);
+          if (!Number.isNaN(dataObj.getTime())) {
+            dataFormatada = dataObj.toLocaleDateString("pt-BR");
+          }
         }
 
         return {
