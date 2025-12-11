@@ -92,10 +92,10 @@ export default function SaidaAnimal({ onAtualizar }) {
       const { error: insertError } = await supabase.from('saidas_animais').insert({
         user_id: user.id,
         animal_id: animalSelecionado.value,
-        tipo: tipo,
-        motivo: motivo,
-        data: dataISO,
-        valor: tipo === 'venda' ? valor : null,
+        tipo_saida: tipo,
+        motivo_saida: motivo,
+        data_saida: dataISO,
+        valor_venda: tipo === 'venda' ? valor : null,
         observacao: observacao,
       });
 
