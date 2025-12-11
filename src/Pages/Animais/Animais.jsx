@@ -160,9 +160,9 @@ export default function Animais() {
       if (idsInativos.length > 0) {
         const { data: saidas } = await supabase
           .from("saidas_animais")
-          .select("id, animal_id, tipo, motivo, data_saida, valor_venda, observacao")
+          .select("id, animal_id, tipo, motivo, data, valor, observacao")
           .in("animal_id", idsInativos)
-          .order("data_saida", { ascending: true });
+          .order("data", { ascending: true });
 
         if (Array.isArray(saidas)) {
           saidasPorAnimal = saidas.reduce((acc, item) => {
@@ -180,8 +180,8 @@ export default function Animais() {
         const ultima = historico.length > 0 ? historico[historico.length - 1] : null;
 
         let dataFormatada = "—";
-        if (ultima?.data_saida) {
-          const [ano, mes, dia] = ultima.data_saida.split("-");
+        if (ultima?.data) {
+          const [ano, mes, dia] = ultima.data.split("-");
           if (ano && mes && dia) dataFormatada = `${dia}/${mes}/${ano}`;
         }
 
@@ -193,7 +193,7 @@ export default function Animais() {
           motivo_saida: ultima?.motivo || "",
           data_saida: dataFormatada,
           observacao_saida: ultima?.observacao || "",
-          valor_saida: ultima?.valor_venda || null,
+          valor_saida: ultima?.valor || null,
         };
       });
 
