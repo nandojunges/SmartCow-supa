@@ -1,4 +1,35 @@
-// src/Pages/Animais/Inativas.jsx
+// CODEX: Ajustar ESTE arquivo Inativas.jsx para:
+// 1. Usar o objeto vindo de Animais.jsx (animaisInativos) já com os campos:
+//      id, numero, brinco, saida_id, tipo_saida, motivo_saida, data_saida, observacao_saida, valor_saida.
+// 2. Garantir que a coluna "Observações" exiba corretamente o texto salvo em banco,
+//    tentando nestas chaves, na ordem:
+//      a.observacao_saida ?? a.observacao ?? a.observacoesSaida ?? a.observacoes_saida ?? "—"
+// 3. Manter o layout de tabela com a classe "tabela-padrao", colunas:
+//      "Número", "Categoria", "Tipo de Saída", "Motivo", "Data", "Valor", "Observações", "Ações".
+// 4. A função "isInativo(a)" deve simplesmente garantir que só entrem animais realmente inativos, por exemplo:
+//      - se (a.status ?? "").toLowerCase() === "inativo" → true
+//      - se tiver qualquer um: a.tipo_saida, a.data_saida, a.motivo_saida, a.observacao_saida → true
+//      - caso contrário → false.
+// 5. A função "reativar" deve RECEBER o objeto do animal inteiro (não apenas o id), por exemplo:
+//      const reativar = async (animal) => { ... }
+//    e dentro dela:
+//      - pegar const { id, saida_id } = animal;
+//      - se não houver id, retornar.
+// 6. No fluxo de reativação:
+//      - Atualizar o animal para ativo:
+//          supabase
+//            .from("animais")
+//            .update({ ativo: true })
+//            .eq("id", id);
+//      - SE existir saida_id (não nulo), deletar apenas essa linha da tabela saidas_animais:
+//          supabase
+//            .from("saidas_animais")
+//            .delete()
+//            .eq("id", saida_id);
+//      - Em caso de sucesso, setar mensagem "✅ Animal reativado." e chamar onAtualizar?.()
+//        para que o componente pai recarregue as listas de ativos/inativos.
+// 7. O botão "Reativar" na tabela deve chamar reativar(a), e não reativar(a.id).
+// 8. Manter o restante do layout (botões, classes, etc.) exatamente como está.
 import React, { useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 
@@ -58,7 +89,8 @@ export default function Inativas({
     }
   };
 
-  const reativar = async (id) => {
+  const reativar = async (animal) => {
+    const { id, saida_id } = animal || {};
     if (!id) return;
 
     setLoadingId(id);
@@ -71,22 +103,12 @@ export default function Inativas({
 
       if (erroAtivo) throw erroAtivo;
 
-      // 2) Remove a ÚLTIMA saída registrada para esse animal
-      const { data: saidas, error: erroSaidas } = await supabase
-        .from("saidas_animais")
-        .select("id, data_saida")
-        .eq("animal_id", id)
-        .order("data_saida", { ascending: true });
-
-      if (erroSaidas) throw erroSaidas;
-
-      if (Array.isArray(saidas) && saidas.length > 0) {
-        const ultimaSaida = saidas[saidas.length - 1];
-
+      // 2) Remove a saída vinculada (quando existir)
+      if (saida_id) {
         const { error: erroDelete } = await supabase
           .from("saidas_animais")
           .delete()
-          .eq("id", ultimaSaida.id);
+          .eq("id", saida_id);
 
         if (erroDelete) throw erroDelete;
       }
@@ -160,7 +182,7 @@ export default function Inativas({
                   "—";
 
                 const idRow = a.id ?? `${a.numero}-${rIdx}`;
-                const busy = loadingId === idRow;
+                const busy = loadingId === a.id;
 
                 return (
                   <tr key={idRow}>
@@ -188,7 +210,7 @@ export default function Inativas({
                               ? "opacity-60 cursor-wait border-emerald-700/40"
                               : "border-emerald-700/40 hover:border-emerald-700"
                           }`}
-                          onClick={() => !busy && reativar(a.id)}
+                          onClick={() => !busy && reativar(a)}
                           disabled={busy}
                           title="Reativar animal"
                         >
