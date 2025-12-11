@@ -155,31 +155,28 @@ export default function Animais() {
 
       const idsInativos = inativosRaw.map((a) => a.id).filter(Boolean);
 
-      // 3) SAÍDAS separadas
-      let saidasPorAnimal = {};
-      if (idsInativos.length > 0) {
-        const { data: saidas } = await supabase
-          .from("saidas_animais")
-          .select("id, animal_id, tipo_saida, motivo_saida, data_saida, valor_venda, observacao")
-          .in("animal_id", idsInativos)
-          .order("data_saida", { ascending: true });
+      const { data: saidas, error: erroSaidas } = idsInativos.length
+        ? await supabase
+            .from("saidas_animais")
+            .select(
+              "id, animal_id, tipo_saida, motivo_saida, data_saida, valor_venda, observacao"
+            )
+            .in("animal_id", idsInativos)
+            .order("data_saida", { ascending: true })
+        : { data: [], error: null };
 
-        if (Array.isArray(saidas)) {
-          saidasPorAnimal = saidas.reduce((acc, item) => {
-            const list = acc[item.animal_id] || [];
-            list.push(item);
-            acc[item.animal_id] = list;
-            return acc;
-          }, {});
-        }
-      }
+      const ultimaPorAnimal = {};
+      (saidas || []).forEach((s) => {
+        const lista = ultimaPorAnimal[s.animal_id] || [];
+        lista.push(s);
+        ultimaPorAnimal[s.animal_id] = lista;
+      });
 
-      // 4) Monta objeto final com última saída
       const formatado = inativosRaw.map((a) => {
-        const historico = saidasPorAnimal[a.id] || [];
-        const ultima = historico.length > 0 ? historico[historico.length - 1] : null;
+        const historico = ultimaPorAnimal[a.id] || [];
+        const ultima = historico[historico.length - 1];
 
-        let dataFormatada = "—";
+        let dataFormatada = "";
         if (ultima?.data_saida) {
           const [ano, mes, dia] = ultima.data_saida.split("-");
           if (ano && mes && dia) dataFormatada = `${dia}/${mes}/${ano}`;
@@ -193,7 +190,7 @@ export default function Animais() {
           motivo_saida: ultima?.motivo_saida || "",
           data_saida: dataFormatada,
           observacao_saida: ultima?.observacao || "",
-          valor_saida: ultima?.valor_venda || null,
+          valor_saida: ultima?.valor_venda ?? null,
         };
       });
 
