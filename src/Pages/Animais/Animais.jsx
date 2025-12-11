@@ -1,44 +1,41 @@
-// CODEX: Ajustar este arquivo Animais.jsx para que as observações das saídas
-// apareçam corretamente na tabela de Animais Inativos.
-// 1. NÃO mudar layout nem JSX, apenas a lógica dentro da função carregarAnimais.
-// 2. Dentro do mapeamento "const formatado = inativosRaw.map((a) => { ... })":
-//    - Usar ultima.observacao para preencher as chaves:
-//      observacao_saida  e  observacoesSaida.
-//    - Replicar ultima.valor_venda em valor_saida, valorSaida e valor_venda.
-// 3. Manter o restante da função exatamente como está.
+// CODEX: Ajustar ESTE arquivo Animais.jsx para integrar corretamente saídas e reativação:
 //
-// Trecho a ser reescrito dentro de carregarAnimais, no map de inativosRaw:
+// 1. MANTER a lógica atual de carregar animais ativos e inativos separadamente:
+//    - Ativos: select em "animais" com campos (id, numero, brinco) e filtro .eq("ativo", true).
+//    - Inativos: select em "animais" com campos (id, numero, brinco) e filtro .eq("ativo", false).
 //
-// const formatado = inativosRaw.map((a) => {
-//   const historico = ultimaPorAnimal[a.id] || [];
-//   const ultima = historico[historico.length - 1];
+// 2. PARA os inativos ("inativosRaw"):
+//    - Montar um array com todos os ids: const idsInativos = inativosRaw.map(a => a.id).filter(Boolean);
+//    - Buscar as saídas em "saidas_animais" usando:
+//        supabase
+//          .from("saidas_animais")
+//          .select("id, animal_id, tipo_saida, motivo_saida, data_saida, valor_venda, observacao")
+//          .in("animal_id", idsInativos)
+//          .order("data_saida", { ascending: true });
 //
-//   let dataFormatada = "";
-//   if (ultima?.data_saida) {
-//     const [ano, mes, dia] = ultima.data_saida.split("-");
-//     if (ano && mes && dia) dataFormatada = `${dia}/${mes}/${ano}`;
-//   }
+// 3. Montar um dicionário "ultimaPorAnimal" onde a chave é animal_id e o valor é um array de saídas,
+//    depois pegar SEMPRE a última saída de cada animal (historico[historico.length - 1]).
 //
-//   return {
-//     id: a.id,
-//     numero: a.numero,
-//     brinco: a.brinco,
+// 4. No map que monta o array final "formatado", incluir obrigatoriamente as seguintes propriedades:
+//      {
+//        id: a.id,
+//        numero: a.numero,
+//        brinco: a.brinco,
+//        saida_id: ultima?.id ?? null,          // ID real da linha em saidas_animais
+//        tipo_saida: ultima?.tipo_saida || "",
+//        motivo_saida: ultima?.motivo_saida || "",
+//        data_saida: dataFormatada,             // dd/mm/aaaa se houver data
+//        observacao_saida: ultima?.observacao || "",
+//        valor_saida: ultima?.valor_venda ?? null,
+//      }
 //
-//     // campos de tipo/motivo/data já usados na tabela
-//     tipo_saida: ultima?.tipo_saida || "",
-//     motivo_saida: ultima?.motivo_saida || "",
-//     data_saida: dataFormatada,
+// 5. NÃO alterar o layout nem o switch das abas. Apenas garantir que "animaisInativos" receba esse
+//    objeto formatado (com saida_id e observacao_saida) e seja passado para <Inativas animais={animaisInativos} />.
 //
-//     // 👇 garantir que o Inativas.jsx consiga ler a OBSERVAÇÃO
-//     observacao_saida: ultima?.observacao || "",
-//     observacoesSaida: ultima?.observacao || "",
-//
-//     // 👇 e o VALOR da saída, em todos os nomes que o Inativas.jsx entende
-//     valor_saida: ultima?.valor_venda ?? null,
-//     valorSaida: ultima?.valor_venda ?? null,
-//     valor_venda: ultima?.valor_venda ?? null,
-//   };
-// });
+// 6. Garantir que "carregarAnimais" continue sendo chamado em:
+//    - useEffect inicial,
+//    - handleAtualizar,
+//    - e no onAtualizar passado para <SaidaAnimal onAtualizar={handleAtualizar} />.
 import React, { useState, useEffect, useCallback } from "react";
 import {
   ListChecks,
@@ -195,6 +192,11 @@ export default function Animais() {
             .order("data_saida", { ascending: true })
         : { data: [], error: null };
 
+      if (erroSaidas) {
+        setAnimaisInativos([]);
+        return;
+      }
+
       const ultimaPorAnimal = {};
       (saidas || []).forEach((s) => {
         const lista = ultimaPorAnimal[s.animal_id] || [];
@@ -216,20 +218,12 @@ export default function Animais() {
           id: a.id,
           numero: a.numero,
           brinco: a.brinco,
-
-          // campos de tipo/motivo/data já usados na tabela
+          saida_id: ultima?.id ?? null,
           tipo_saida: ultima?.tipo_saida || "",
           motivo_saida: ultima?.motivo_saida || "",
           data_saida: dataFormatada,
-
-          // 👇 garantir que o Inativas.jsx consiga ler a OBSERVAÇÃO
           observacao_saida: ultima?.observacao || "",
-          observacoesSaida: ultima?.observacao || "",
-
-          // 👇 e o VALOR da saída, em todos os nomes que o Inativas.jsx entende
           valor_saida: ultima?.valor_venda ?? null,
-          valorSaida: ultima?.valor_venda ?? null,
-          valor_venda: ultima?.valor_venda ?? null,
         };
       });
 
