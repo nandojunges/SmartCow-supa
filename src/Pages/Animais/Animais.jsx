@@ -1,3 +1,13 @@
+// CODEX: Ajustar este arquivo Animais.jsx para:
+// 1. Remover a relação saidas_animais do select (está dando erro 400).
+// 2. Criar duas consultas separadas no Supabase:
+//    - animais ativos (ativo = true)
+//    - animais inativos (ativo = false)
+// 3. Fazer uma consulta separada em saidas_animais usando .in("animal_id", idsInativos)
+// 4. Montar em JS o objeto do inativo contendo motivo_saida e data_saida.
+// 5. Preencher SubAbasAnimais com animaisAtivos e Inativas com animaisInativos.
+// 6. Após registrar saída em SaidaAnimal, chamar carregarAnimais() no onAtualizar.
+// 7. Não alterar layout, só a lógica de carregar dados.
 // src/Pages/Animais/Animais.jsx
 import React, { useState, useEffect, useCallback } from "react";
 import {
@@ -121,48 +131,57 @@ export default function Animais() {
   // 🔄 Carrega ativos + inativos do Supabase
   const carregarAnimais = useCallback(async () => {
     setCarregando(true);
+    try {
+      // 1) ATIVOS
+      const { data: ativos, error: erroAtivos } = await supabase
+        .from("animais")
+        .select("id, numero, brinco")
+        .eq("ativo", true)
+        .order("numero", { ascending: true });
 
-    // 1) ATIVOS
-    const { data: ativos, error: erroAtivos } = await supabase
-      .from("animais")
-      .select("id, numero, brinco")
-      .eq("ativo", true)
-      .order("numero", { ascending: true });
+      setAnimaisAtivos(!erroAtivos && ativos ? ativos : []);
 
-    if (!erroAtivos && ativos) {
-      setAnimaisAtivos(ativos);
-    } else {
-      setAnimaisAtivos([]);
-    }
+      // 2) INATIVOS (sem relação)
+      const { data: inativosRaw, error: erroInativos } = await supabase
+        .from("animais")
+        .select("id, numero, brinco")
+        .eq("ativo", false)
+        .order("numero", { ascending: true });
 
-    // 2) INATIVOS + SAÍDAS
-    // OBS: se o nome da relação em Supabase for diferente, ajuste "saidas_animais"
-    const { data: inativosRaw, error: erroInativos } = await supabase
-      .from("animais")
-      .select(`
-        id,
-        numero,
-        brinco,
-        saidas_animais (
-          id,
-          tipo,
-          motivo,
-          data,
-          valor,
-          observacao
-        )
-      `)
-      .eq("ativo", false)
-      .order("numero", { ascending: true });
+      if (erroInativos || !inativosRaw) {
+        setAnimaisInativos([]);
+        return;
+      }
 
-    if (!erroInativos && inativosRaw) {
+      const idsInativos = inativosRaw.map((a) => a.id).filter(Boolean);
+
+      // 3) SAÍDAS separadas
+      let saidasPorAnimal = {};
+      if (idsInativos.length > 0) {
+        const { data: saidas } = await supabase
+          .from("saidas_animais")
+          .select("id, animal_id, tipo, motivo, data_saida, valor_venda, observacao")
+          .in("animal_id", idsInativos)
+          .order("data_saida", { ascending: true });
+
+        if (Array.isArray(saidas)) {
+          saidasPorAnimal = saidas.reduce((acc, item) => {
+            const list = acc[item.animal_id] || [];
+            list.push(item);
+            acc[item.animal_id] = list;
+            return acc;
+          }, {});
+        }
+      }
+
+      // 4) Monta objeto final com última saída
       const formatado = inativosRaw.map((a) => {
-        const historico = a.saidas_animais || [];
-        const ultima = historico[historico.length - 1];
+        const historico = saidasPorAnimal[a.id] || [];
+        const ultima = historico.length > 0 ? historico[historico.length - 1] : null;
 
         let dataFormatada = "—";
-        if (ultima?.data) {
-          const [ano, mes, dia] = ultima.data.split("-");
+        if (ultima?.data_saida) {
+          const [ano, mes, dia] = ultima.data_saida.split("-");
           if (ano && mes && dia) dataFormatada = `${dia}/${mes}/${ano}`;
         }
 
@@ -174,15 +193,14 @@ export default function Animais() {
           motivo_saida: ultima?.motivo || "",
           data_saida: dataFormatada,
           observacao_saida: ultima?.observacao || "",
+          valor_saida: ultima?.valor_venda || null,
         };
       });
 
       setAnimaisInativos(formatado);
-    } else {
-      setAnimaisInativos([]);
+    } finally {
+      setCarregando(false);
     }
-
-    setCarregando(false);
   }, []);
 
   // Carrega ao entrar na página
