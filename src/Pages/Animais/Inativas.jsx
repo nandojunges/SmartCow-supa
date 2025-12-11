@@ -1,113 +1,217 @@
 // src/Pages/Animais/Inativas.jsx
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
+import { supabase } from "../../lib/supabaseClient";
 
-/**
- * Layout simples de Inativas:
- * - usa apenas os dados recebidos via props.animais
- * - não faz chamadas de API
- * - só mostra uma tabela de exemplo
- */
+/* ===== helpers ===== */
+const fmtData = (d, fallback = "—") => {
+  if (!d) return fallback;
+  if (typeof d === "string" && d.includes("/")) return d; // já está dd/mm/aaaa
+  const dt = new Date(d);
+  return Number.isNaN(dt.getTime()) ? d : dt.toLocaleDateString("pt-BR");
+};
+
+const fmtValor = (v) => {
+  if (v == null || v === "") return "—";
+  const num =
+    typeof v === "number"
+      ? v
+      : parseFloat(String(v).replace(/[^0-9,.-]/g, "").replace(",", "."));
+  return Number.isNaN(num)
+    ? v
+    : num.toLocaleString("pt-BR", {
+        style: "currency",
+        currency: "BRL",
+      });
+};
+
+// segurança extra: garante que só inativos entrem na lista
+const isInativo = (a) => {
+  if (!a) return false;
+  if ((a.status ?? "").toLowerCase() === "inativo") return true;
+  if (
+    a.tipo_saida ||
+    a.data_saida ||
+    a.motivo_saida ||
+    a.observacao_saida
+  )
+    return true;
+  return false;
+};
+
 export default function Inativas({
-  animais = [],
-  onAtualizar, // reservado para futuro
-  onVerFicha,  // callback para abrir ficha se quiser
+  animais = [],   // recebido pronto do Animais.jsx (já inativos formatados)
+  onAtualizar,   // função do pai para recarregar listas após reativar
+  onVerFicha,    // opcional: (animal) => void
 }) {
-  // Se tiver algum campo de status, filtra. Senão, usa tudo mesmo só pra layout.
-  const inativos = useMemo(() => {
-    if (!Array.isArray(animais)) return [];
-    return animais.filter((a) => {
-      const st = String(a?.status ?? "").toLowerCase();
-      if (st === "inativo") return true;
-      if (a?.tipo_saida || a?.motivo_saida || a?.data_saida) return true;
-      return false;
-    });
-  }, [animais]);
+  const [hoverCol, setHoverCol] = useState(null);
+  const [okMsg, setOkMsg] = useState("");
+  const [loadingId, setLoadingId] = useState(null);
+
+  const lista = useMemo(
+    () => (Array.isArray(animais) ? animais : []).filter(isInativo),
+    [animais]
+  );
+
+  const doVerFicha = (animal) => {
+    if (typeof onVerFicha === "function") {
+      onVerFicha(animal);
+    }
+  };
+
+  const reativar = async (id) => {
+    if (!id) return;
+
+    setLoadingId(id);
+    try {
+      // 1) Volta o animal para ativo
+      const { error: erroAtivo } = await supabase
+        .from("animais")
+        .update({ ativo: true })
+        .eq("id", id);
+
+      if (erroAtivo) throw erroAtivo;
+
+      // 2) Remove a ÚLTIMA saída registrada para esse animal
+      const { data: saidas, error: erroSaidas } = await supabase
+        .from("saidas_animais")
+        .select("id, data_saida")
+        .eq("animal_id", id)
+        .order("data_saida", { ascending: true });
+
+      if (erroSaidas) throw erroSaidas;
+
+      if (Array.isArray(saidas) && saidas.length > 0) {
+        const ultimaSaida = saidas[saidas.length - 1];
+
+        const { error: erroDelete } = await supabase
+          .from("saidas_animais")
+          .delete()
+          .eq("id", ultimaSaida.id);
+
+        if (erroDelete) throw erroDelete;
+      }
+
+      setOkMsg("✅ Animal reativado.");
+      // pede para o componente pai recarregar tudo (ativos + inativos)
+      onAtualizar?.();
+    } catch (e) {
+      console.error("Erro ao reativar animal:", e);
+      setOkMsg("❌ Falha ao reativar no servidor.");
+    } finally {
+      setLoadingId(null);
+      setTimeout(() => setOkMsg(""), 2500);
+    }
+  };
+
+  const colunas = [
+    "Número",
+    "Categoria",
+    "Tipo de Saída",
+    "Motivo",
+    "Data",
+    "Valor",
+    "Observações",
+    "Ações",
+  ];
 
   return (
-    <section className="w-full h-full px-4 py-6 font-sans">
-      <div className="max-w-6xl mx-auto bg-white rounded-xl shadow-md border border-gray-100 p-4 md:p-6">
-        <header className="mb-4 md:mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <div>
-            <h1 className="text-xl md:text-2xl font-bold text-blue-900">
-              Animais Inativos
-            </h1>
-            <p className="text-sm text-gray-500">
-              Lista apenas para visualização de layout. Funcionalidades serão adicionadas depois.
-            </p>
-          </div>
-        </header>
+    <section className="w-full py-6 font-sans">
+      <div className="px-2 md:px-4 lg:px-6">
+        <h2 className="text-xl font-bold mb-3 text-[#1e3a8a]">
+          ❌ Animais Inativos
+        </h2>
 
-        <div className="overflow-x-auto">
-          <table className="w-full border-separate [border-spacing:0_6px] text-sm text-gray-800">
+        {!!okMsg && (
+          <div className="mb-3 text-emerald-800 bg-emerald-50 border border-emerald-300 px-3 py-2 rounded">
+            {okMsg}
+          </div>
+        )}
+
+        <div style={{ width: "100%", overflowX: "auto" }}>
+          <table className="tabela-padrao">
             <thead>
               <tr>
-                <th className="bg-blue-50 text-blue-900 font-semibold px-3 py-2 text-left rounded-l-lg">
-                  Número
-                </th>
-                <th className="bg-blue-50 text-blue-900 font-semibold px-3 py-2 text-left">
-                  Brinco
-                </th>
-                <th className="bg-blue-50 text-blue-900 font-semibold px-3 py-2 text-left">
-                  Motivo saída
-                </th>
-                <th className="bg-blue-50 text-blue-900 font-semibold px-3 py-2 text-left">
-                  Data saída
-                </th>
-                <th className="bg-blue-50 text-blue-900 font-semibold px-3 py-2 text-left rounded-r-lg">
-                  Ações
-                </th>
+                {colunas.map((c, i) => (
+                  <th
+                    key={c}
+                    className={hoverCol === i ? "coluna-hover" : ""}
+                    onMouseEnter={() => setHoverCol(i)}
+                    onMouseLeave={() => setHoverCol(null)}
+                  >
+                    {c}
+                  </th>
+                ))}
               </tr>
             </thead>
+
             <tbody>
-              {inativos.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={5}
-                    className="text-center text-gray-400 py-6"
-                  >
-                    Nenhum animal inativo para exibir (layout de teste).
-                  </td>
-                </tr>
-              ) : (
-                inativos.map((a, idx) => (
-                  <tr
-                    key={a.id ?? a.numero ?? a.brinco ?? idx}
-                    className="bg-white shadow-xs hover:bg-blue-50 transition-colors"
-                  >
-                    <td className="px-3 py-2 border-b border-gray-100">
-                      {a.numero ?? "—"}
-                    </td>
-                    <td className="px-3 py-2 border-b border-gray-100">
-                      {a.brinco ?? "—"}
-                    </td>
-                    <td className="px-3 py-2 border-b border-gray-100">
-                      {a.motivo_saida ?? a.motivo ?? "—"}
-                    </td>
-                    <td className="px-3 py-2 border-b border-gray-100">
-                      {a.data_saida ?? "—"}
-                    </td>
-                    <td className="px-3 py-2 border-b border-gray-100">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          onVerFicha && onVerFicha(a)
-                        }
-                        className="text-blue-700 border border-blue-200 hover:border-blue-500 hover:bg-blue-50 rounded-md px-3 py-1 text-xs font-semibold"
-                      >
-                        Ver ficha
-                      </button>
+              {lista.map((a, rIdx) => {
+                const tipoSaida = a.tipo_saida || "—";
+                const motivoSaida = a.motivo_saida || "—";
+                const dataSaida = a.data_saida || null;
+                const valorSaida = a.valor_saida ?? a.valor_venda ?? null;
+
+                // pega observação independente do nome da chave
+                const observacoesSaida =
+                  a.observacao_saida ??
+                  a.observacao ??
+                  a.observacoesSaida ??
+                  a.observacoes_saida ??
+                  "—";
+
+                const idRow = a.id ?? `${a.numero}-${rIdx}`;
+                const busy = loadingId === idRow;
+
+                return (
+                  <tr key={idRow}>
+                    <td>{a.numero || a.brinco || "—"}</td>
+                    <td>{a.categoria || a.tipo || "—"}</td>
+                    <td>{tipoSaida}</td>
+                    <td className="coluna-limitada">{motivoSaida}</td>
+                    <td>{fmtData(dataSaida)}</td>
+                    <td>{fmtValor(valorSaida)}</td>
+                    <td className="coluna-limitada">{observacoesSaida}</td>
+                    <td className="coluna-acoes">
+                      <div className="botoes-tabela">
+                        <button
+                          type="button"
+                          className="px-3 py-1.5 rounded-md border border-[#1e3a8a]/40 text-[#1e3a8a] text-sm hover:border-[#1e3a8a] transition-colors"
+                          onClick={() => doVerFicha(a)}
+                          title="Ver ficha do animal"
+                        >
+                          📋 Ver Ficha
+                        </button>
+                        <button
+                          type="button"
+                          className={`px-3 py-1.5 rounded-md border text-emerald-700 text-sm transition-colors ${
+                            busy
+                              ? "opacity-60 cursor-wait border-emerald-700/40"
+                              : "border-emerald-700/40 hover:border-emerald-700"
+                          }`}
+                          onClick={() => !busy && reativar(a.id)}
+                          disabled={busy}
+                          title="Reativar animal"
+                        >
+                          🔁 {busy ? "Reativando…" : "Reativar"}
+                        </button>
+                      </div>
                     </td>
                   </tr>
-                ))
+                );
+              })}
+
+              {lista.length === 0 && (
+                <tr>
+                  <td colSpan={colunas.length}>
+                    <div className="text-center text-gray-600 py-6">
+                      Nenhum animal inativo registrado.
+                    </div>
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
         </div>
-
-        <p className="mt-4 text-xs text-gray-400">
-          * Este componente está apenas com layout estático (sem lógica de banco).{" "}
-          Depois conectamos filtros, paginação e relatórios.
-        </p>
       </div>
     </section>
   );
