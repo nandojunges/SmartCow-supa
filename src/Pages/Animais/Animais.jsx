@@ -1,5 +1,5 @@
 // src/Pages/Animais/Animais.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   ListChecks,
   PlusCircle,
@@ -9,6 +9,7 @@ import {
   UploadCloud,
   DownloadCloud,
 } from "lucide-react";
+import { supabase } from "../../lib/supabaseClient";
 
 // Páginas internas (apenas layout)
 import SubAbasAnimais from "./SubAbasAnimais";
@@ -108,9 +109,86 @@ function BarraLateral({ abaAtiva, setAbaAtiva }) {
 // =========================
 export default function Animais() {
   const [abaAtiva, setAbaAtiva] = useState("todos");
-  const [animais] = useState([]); // só layout neste momento
+
+  // 👇 Agora separamos ativos e inativos
+  const [animaisAtivos, setAnimaisAtivos] = useState([]);
+  const [animaisInativos, setAnimaisInativos] = useState([]);
+  const [carregando, setCarregando] = useState(false);
+
   const [fichaOpen, setFichaOpen] = useState(false);
   const [animalFicha, setAnimalFicha] = useState(null);
+
+  // 🔄 Carrega ativos + inativos do Supabase
+  const carregarAnimais = useCallback(async () => {
+    setCarregando(true);
+
+    // 1) ATIVOS
+    const { data: ativos, error: erroAtivos } = await supabase
+      .from("animais")
+      .select("id, numero, brinco")
+      .eq("ativo", true)
+      .order("numero", { ascending: true });
+
+    if (!erroAtivos && ativos) {
+      setAnimaisAtivos(ativos);
+    } else {
+      setAnimaisAtivos([]);
+    }
+
+    // 2) INATIVOS + SAÍDAS
+    // OBS: se o nome da relação em Supabase for diferente, ajuste "saidas_animais"
+    const { data: inativosRaw, error: erroInativos } = await supabase
+      .from("animais")
+      .select(`
+        id,
+        numero,
+        brinco,
+        saidas_animais (
+          id,
+          tipo,
+          motivo,
+          data,
+          valor,
+          observacao
+        )
+      `)
+      .eq("ativo", false)
+      .order("numero", { ascending: true });
+
+    if (!erroInativos && inativosRaw) {
+      const formatado = inativosRaw.map((a) => {
+        const historico = a.saidas_animais || [];
+        const ultima = historico[historico.length - 1];
+
+        let dataFormatada = "—";
+        if (ultima?.data) {
+          const [ano, mes, dia] = ultima.data.split("-");
+          if (ano && mes && dia) dataFormatada = `${dia}/${mes}/${ano}`;
+        }
+
+        return {
+          id: a.id,
+          numero: a.numero,
+          brinco: a.brinco,
+          tipo_saida: ultima?.tipo || "",
+          motivo_saida: ultima?.motivo || "",
+          data_saida: dataFormatada,
+          observacao_saida: ultima?.observacao || "",
+        };
+      });
+
+      setAnimaisInativos(formatado);
+    } else {
+      setAnimaisInativos([]);
+    }
+
+    setCarregando(false);
+  }, []);
+
+  // Carrega ao entrar na página
+  useEffect(() => {
+    carregarAnimais();
+  }, [carregarAnimais]);
 
   // 🔒 Desliga o scroll da página e deixa só o da tabela
   useEffect(() => {
@@ -124,7 +202,8 @@ export default function Animais() {
   }, []);
 
   const handleAtualizar = () => {
-    // Placeholder: aqui depois entra Supabase / API
+    // chamada única para recarregar tudo que depende de animais
+    carregarAnimais();
   };
 
   const handleVerFicha = (animal) => {
@@ -137,7 +216,7 @@ export default function Animais() {
       case "todos":
         return (
           <SubAbasAnimais
-            animais={animais}
+            animais={animaisAtivos}      // ✅ só ativos
             onRefresh={handleAtualizar}
           />
         );
@@ -145,7 +224,7 @@ export default function Animais() {
       case "entrada":
         return (
           <CadastroAnimal
-            animais={animais}
+            animais={animaisAtivos}      // se precisar listar, só ativos
             onAtualizar={handleAtualizar}
           />
         );
@@ -153,7 +232,7 @@ export default function Animais() {
       case "saida":
         return (
           <SaidaAnimal
-            animais={animais}
+            animais={animaisAtivos}      // opcional, mas coerente
             onAtualizar={handleAtualizar}
           />
         );
@@ -161,7 +240,7 @@ export default function Animais() {
       case "inativas":
         return (
           <Inativas
-            animais={animais}
+            animais={animaisInativos}    // ✅ aqui vão só inativos
             onAtualizar={handleAtualizar}
             onVerFicha={handleVerFicha}
           />
@@ -223,7 +302,13 @@ export default function Animais() {
               overflowY: "auto",
             }}
           >
-            {renderizarPrincipal()}
+            {carregando ? (
+              <div className="p-4 text-sm text-gray-500">
+                Carregando animais...
+              </div>
+            ) : (
+              renderizarPrincipal()
+            )}
           </div>
         </div>
       </div>
