@@ -1,8 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import Select from 'react-select';
-import api from '../../api'; // default export = apiV1
+import { supabase } from '../../lib/supabaseClient';
 
-export default function SaidaAnimal({ animais = [], onAtualizar }) {
+export default function SaidaAnimal({ onAtualizar }) {
   const [animalSelecionado, setAnimalSelecionado] = useState(null);
   const [tipo, setTipo] = useState('');
   const [motivo, setMotivo] = useState('');
@@ -12,6 +12,7 @@ export default function SaidaAnimal({ animais = [], onAtualizar }) {
   const [erros, setErros] = useState({});
   const [ok, setOk] = useState('');
   const [salvando, setSalvando] = useState(false);
+  const [animais, setAnimais] = useState([]);
 
   const motivosVenda = [
     'Baixa produção','Problemas reprodutivos','Problemas de casco','Excesso de animais',
@@ -52,49 +53,63 @@ export default function SaidaAnimal({ animais = [], onAtualizar }) {
     return Object.keys(e).length === 0;
   };
 
+  const carregarAnimais = useCallback(async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuário não autenticado.');
+
+      const { data, error } = await supabase
+        .from('animais')
+        .select('id, numero, brinco')
+        .eq('user_id', user.id)
+        .eq('ativo', true)
+        .order('numero', { ascending: true });
+
+      if (error) throw error;
+      setAnimais(data || []);
+    } catch (err) {
+      console.error('Falha ao carregar animais:', err);
+      const msg = err?.message || 'Erro ao carregar animais';
+      setOk(`❌ ${msg}`);
+      setTimeout(() => setOk(''), 5000);
+    }
+  }, []);
+
+  useEffect(() => {
+    carregarAnimais();
+  }, [carregarAnimais]);
+
   const submit = async () => {
     if (!validar() || salvando) return;
     setSalvando(true);
     try {
-      // procurar o animal pelo id selecionado
-      const alvo = (Array.isArray(animais) ? animais : []).find(a => a.id === animalSelecionado?.value);
-      if (!alvo?.id) throw new Error('Animal não encontrado pela seleção.');
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuário não autenticado.');
 
-      // payload que o backend espera (resource /saida)
-      const payload = {
-        tipo_saida: tipo,
-        motivo_saida: motivo,
-        observacao_saida: observacao,
-        data_saida: data, // dd/mm/aaaa
-      };
+      const [dia, mes, ano] = data.split('/');
+      const dataISO = `${ano}-${mes}-${dia}`;
 
-      // persistência
-      const { data: atualizado } = await api.post(`/animals/${alvo.id}/saida`, payload);
+      const { error: insertError } = await supabase.from('saidas_animais').insert({
+        user_id: user.id,
+        animal_id: animalSelecionado.value,
+        tipo: tipo,
+        motivo: motivo,
+        data_saida: dataISO,
+        valor_venda: tipo === 'venda' ? valor : null,
+        observacao: observacao,
+      });
 
-      // Anexamos o valor de venda no objeto local (backend não armazena esse campo)
-      const saidaLocal = {
-        tipo, motivo, data, observacao,
-        valor: tipo === 'venda' ? valor : undefined,
-        dataISO: new Date().toISOString(),
-        idSaida: Date.now(),
-      };
+      if (insertError) throw insertError;
 
-      const novaLista = (Array.isArray(animais) ? animais : []).map((a) =>
-        a.id === alvo.id
-          ? {
-              ...a,
-              ...atualizado, // status inativo + colunas *_saida/historico conforme resource
-              saida: saidaLocal,
-              tipoSaida: saidaLocal.tipo,
-              motivoSaida: saidaLocal.motivo,
-              dataSaida: saidaLocal.data,
-              valorVenda: saidaLocal.valor,
-              observacoesSaida: saidaLocal.observacao,
-            }
-          : a
-      );
+      const { error: updateError } = await supabase
+        .from('animais')
+        .update({ ativo: false })
+        .eq('id', animalSelecionado.value);
 
-      onAtualizar?.(novaLista);
+      if (updateError) throw updateError;
+
+      await carregarAnimais();
+      onAtualizar?.();
       setOk('✅ Saída registrada com sucesso!');
       setTimeout(() => setOk(''), 3000);
 
@@ -108,7 +123,7 @@ export default function SaidaAnimal({ animais = [], onAtualizar }) {
       setErros({});
     } catch (err) {
       console.error('Falha ao registrar saída:', err);
-      const msg = err?.response?.data?.error || err?.message || 'Erro ao registrar saída';
+      const msg = err?.message || 'Erro ao registrar saída';
       setOk(`❌ ${msg}`);
       setTimeout(() => setOk(''), 5000);
     } finally {
@@ -118,10 +133,9 @@ export default function SaidaAnimal({ animais = [], onAtualizar }) {
 
   const opcoesAnimais = useMemo(
     () => (Array.isArray(animais) ? animais : [])
-      .filter(a => (a.status ?? 'ativo') !== 'inativo')
       .map(a => ({
-        value: a.id, // usa ID para bater com a API /:id/saida
-        label: `${a.numero || '—'} – Brinco ${a.brinco || '—'}`,
+        value: a.id,
+        label: `${a.numero || '—'} • Brinco ${a.brinco || '—'}`,
       })),
     [animais]
   );
