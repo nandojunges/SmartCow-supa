@@ -94,8 +94,8 @@ export default function SaidaAnimal({ onAtualizar }) {
         animal_id: animalSelecionado.value,
         tipo: tipo,
         motivo: motivo,
-        data_saida: dataISO,
-        valor_venda: tipo === 'venda' ? valor : null,
+        data: dataISO,
+        valor: tipo === 'venda' ? valor : null,
         observacao: observacao,
       });
 
