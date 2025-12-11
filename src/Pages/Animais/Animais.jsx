@@ -1,14 +1,44 @@
-// CODEX: Ajustar este arquivo Animais.jsx para:
-// 1. Remover a relação saidas_animais do select (está dando erro 400).
-// 2. Criar duas consultas separadas no Supabase:
-//    - animais ativos (ativo = true)
-//    - animais inativos (ativo = false)
-// 3. Fazer uma consulta separada em saidas_animais usando .in("animal_id", idsInativos)
-// 4. Montar em JS o objeto do inativo contendo motivo_saida e data_saida.
-// 5. Preencher SubAbasAnimais com animaisAtivos e Inativas com animaisInativos.
-// 6. Após registrar saída em SaidaAnimal, chamar carregarAnimais() no onAtualizar.
-// 7. Não alterar layout, só a lógica de carregar dados.
-// src/Pages/Animais/Animais.jsx
+// CODEX: Ajustar este arquivo Animais.jsx para que as observações das saídas
+// apareçam corretamente na tabela de Animais Inativos.
+// 1. NÃO mudar layout nem JSX, apenas a lógica dentro da função carregarAnimais.
+// 2. Dentro do mapeamento "const formatado = inativosRaw.map((a) => { ... })":
+//    - Usar ultima.observacao para preencher as chaves:
+//      observacao_saida  e  observacoesSaida.
+//    - Replicar ultima.valor_venda em valor_saida, valorSaida e valor_venda.
+// 3. Manter o restante da função exatamente como está.
+//
+// Trecho a ser reescrito dentro de carregarAnimais, no map de inativosRaw:
+//
+// const formatado = inativosRaw.map((a) => {
+//   const historico = ultimaPorAnimal[a.id] || [];
+//   const ultima = historico[historico.length - 1];
+//
+//   let dataFormatada = "";
+//   if (ultima?.data_saida) {
+//     const [ano, mes, dia] = ultima.data_saida.split("-");
+//     if (ano && mes && dia) dataFormatada = `${dia}/${mes}/${ano}`;
+//   }
+//
+//   return {
+//     id: a.id,
+//     numero: a.numero,
+//     brinco: a.brinco,
+//
+//     // campos de tipo/motivo/data já usados na tabela
+//     tipo_saida: ultima?.tipo_saida || "",
+//     motivo_saida: ultima?.motivo_saida || "",
+//     data_saida: dataFormatada,
+//
+//     // 👇 garantir que o Inativas.jsx consiga ler a OBSERVAÇÃO
+//     observacao_saida: ultima?.observacao || "",
+//     observacoesSaida: ultima?.observacao || "",
+//
+//     // 👇 e o VALOR da saída, em todos os nomes que o Inativas.jsx entende
+//     valor_saida: ultima?.valor_venda ?? null,
+//     valorSaida: ultima?.valor_venda ?? null,
+//     valor_venda: ultima?.valor_venda ?? null,
+//   };
+// });
 import React, { useState, useEffect, useCallback } from "react";
 import {
   ListChecks,
@@ -186,11 +216,20 @@ export default function Animais() {
           id: a.id,
           numero: a.numero,
           brinco: a.brinco,
+
+          // campos de tipo/motivo/data já usados na tabela
           tipo_saida: ultima?.tipo_saida || "",
           motivo_saida: ultima?.motivo_saida || "",
           data_saida: dataFormatada,
+
+          // 👇 garantir que o Inativas.jsx consiga ler a OBSERVAÇÃO
           observacao_saida: ultima?.observacao || "",
+          observacoesSaida: ultima?.observacao || "",
+
+          // 👇 e o VALOR da saída, em todos os nomes que o Inativas.jsx entende
           valor_saida: ultima?.valor_venda ?? null,
+          valorSaida: ultima?.valor_venda ?? null,
+          valor_venda: ultima?.valor_venda ?? null,
         };
       });
 
