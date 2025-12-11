@@ -8,6 +8,11 @@
 // 5. Preencher SubAbasAnimais com animaisAtivos e Inativas com animaisInativos.
 // 6. Após registrar saída em SaidaAnimal, chamar carregarAnimais() no onAtualizar.
 // 7. Não alterar layout, só a lógica de carregar dados.
+//
+// CODEX: Corrigir os erros 400 do Supabase:
+// 1) Em todas as queries na tabela saidas_animais, trocar data_saida -> data e valor_venda -> valor, inclusive no .order.
+// 2) Remover qualquer select relacional saidas_animais(...) dentro de from("animais") e usar apenas select("id, numero, brinco") com ativo=false.
+// 3) Manter a lógica de buscar saidas_animais em uma query separada com .in("animal_id", idsInativos) e montar ultimaSaidaPorAnimal em JavaScript.
 // src/Pages/Animais/Animais.jsx
 import React, { useState, useEffect, useCallback } from "react";
 import {
