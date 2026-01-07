@@ -1,134 +1,222 @@
 // src/layout/NavegacaoPrincipal.jsx
+import React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 
-// SEM ADMIN E SEM RELATÓRIOS
 const ABAS_BASE = [
-  { id: "inicio",     label: "INÍCIO",              icone: "/icones/home.png",       title: "Página inicial" },
-  { id: "animais",    label: "ANIMAIS",             icone: "/icones/plantel.png",    title: "Controle de animais" },
-  { id: "bezerras",   label: "BEZERRAS",            icone: "/icones/bezerra.png",    title: "Controle das bezerras" },
-  { id: "reproducao", label: "REPRODUÇÃO",          icone: "/icones/reproducao.png", title: "Reprodução e fertilidade" },
-  { id: "leite",      label: "LEITE",               icone: "/icones/leite.png",      title: "Controle leiteiro" },
-  { id: "saude",      label: "SAÚDE",               icone: "/icones/saude.png",      title: "Controle sanitário" },
-  { id: "consumo",    label: "CONSUMO E REPOSIÇÃO", icone: "/icones/estoque.png",    title: "Gestão de estoque" },
-  { id: "financeiro", label: "FINANCEIRO",          icone: "/icones/financeiro.png", title: "Relatórios financeiros" },
-  { id: "calendario", label: "CALENDÁRIO",          icone: "/icones/calendario.png", title: "Agenda de atividades" },
-  { id: "ajustes",    label: "AJUSTES",             icone: "/icones/indicadores.png",title: "Configurações do sistema" },
+  { id: "inicio",     label: "Início",            title: "Página inicial" },
+  { id: "animais",    label: "Animais",           title: "Plantel e fichas" },
+  { id: "bezerras",   label: "Bezerras",          title: "Cria e recria" },
+  { id: "reproducao", label: "Reprodução",        title: "IATF, IA e DG" },
+  { id: "leite",      label: "Leite",             title: "Controle leiteiro" },
+  { id: "saude",      label: "Saúde",             title: "Sanitário e manejo" },
+  { id: "consumo",    label: "Consumo/Reposição", title: "Estoque e consumo" },
+  { id: "financeiro", label: "Financeiro",        title: "Custos e receitas" },
+  { id: "calendario", label: "Calendário",        title: "Agenda e alertas" },
+  { id: "ajustes",    label: "Ajustes",           title: "Configurações" },
 ];
+
+function useAbaAtiva(pathname) {
+  const seg = pathname.split("/")[1] || "inicio";
+  return ABAS_BASE.some((a) => a.id === seg) ? seg : "inicio";
+}
 
 export default function NavegacaoPrincipal() {
   const navigate = useNavigate();
-  const location = useLocation();
-  const abaAtiva = location.pathname.split("/")[1] || "inicio";
+  const { pathname } = useLocation();
+  const abaAtiva = useAbaAtiva(pathname);
 
-  const abas = ABAS_BASE;
-  const sizeBase = 65;
+  // ===== PALETA “AgTech premium” =====
+  const NAV_BG = "#0B1F3A";           // navy profundo
+  const ACCENT = "#19B6A4";           // teal (agtech)
+  const TXT = "rgba(255,255,255,0.92)";
+  const TXT_MUTED = "rgba(255,255,255,0.72)";
+
+  const ativa = ABAS_BASE.find((a) => a.id === abaAtiva);
 
   return (
-    <div
+    <header
       style={{
         width: "100%",
-        backgroundColor: "#1c3586",
-        padding: "12px 16px",
-        boxSizing: "border-box",
-        position: "relative",
+        position: "sticky",
+        top: 0,
+        zIndex: 60,
+        background: NAV_BG,
+        borderBottom: "1px solid rgba(255,255,255,0.10)",
+        boxShadow: "0 10px 26px rgba(0,0,0,0.22)",
+        overflow: "visible", // evita qualquer clipping visual
       }}
     >
-      {/* Botão Sair, fixo no canto direito */}
-      <button
-        onClick={async () => {
-          await supabase.auth.signOut(); // App.jsx volta pro Login
-        }}
-        title="Sair do sistema"
+      <div
         style={{
-          position: "absolute",
-          top: 8,
-          right: 16,
-          backgroundColor: "#dc2626",
-          color: "white",
-          border: "none",
-          borderRadius: "6px",
-          padding: "6px 12px",
-          cursor: "pointer",
-          fontWeight: "bold",
-          boxShadow: "0 2px 4px rgba(0, 0, 0, 0.2)",
-          transition: "background-color 0.2s ease, opacity 0.2s ease",
-        }}
-        onMouseOver={(e) => {
-          e.currentTarget.style.backgroundColor = "#b91c1c";
-          e.currentTarget.style.opacity = 0.9;
-        }}
-        onMouseOut={(e) => {
-          e.currentTarget.style.backgroundColor = "#dc2626";
-          e.currentTarget.style.opacity = 1;
-        }}
-      >
-        Sair
-      </button>
-
-      {/* Abas – ocupando 100% da largura */}
-      <nav
-        style={{
-          width: "100%",
           display: "flex",
-          justifyContent: "space-evenly",
           alignItems: "center",
-          flexWrap: "wrap",
-          gap: "1rem",
+          gap: 16,
+          padding: "12px 16px",
         }}
       >
-        {abas.map((aba) => {
-          const isAtiva = abaAtiva === aba.id;
-          const size = isAtiva ? sizeBase + 15 : sizeBase;
-
-          return (
-            <div
-              key={aba.id}
-              data-id={aba.id}
-              onClick={() => navigate(`/${aba.id}`)}
-              title={aba.title}
+        {/* Marca / contexto mínimo (sem barra extra) */}
+        <div style={{ display: "flex", flexDirection: "column", minWidth: 180 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span
               style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                minWidth: "100px",
+                width: 10,
+                height: 10,
+                borderRadius: 999,
+                background: ACCENT,
+                boxShadow: "0 0 0 4px rgba(25,182,164,0.14)",
                 flexShrink: 0,
-                cursor: "pointer",
-                borderRadius: "14px",
-                padding: "10px 6px",
-                textAlign: "center",
-                backgroundColor: isAtiva ? "white" : "transparent",
-                boxShadow: isAtiva ? "0 4px 12px rgba(0, 0, 0, 0.1)" : "none",
-                transition: "all 0.2s ease-in-out",
+              }}
+            />
+            <span
+              style={{
+                color: TXT,
+                fontWeight: 950,
+                letterSpacing: 0.2,
+                fontSize: 14,
+                lineHeight: 1,
               }}
             >
-              <img
-                alt={aba.label}
-                src={aba.icone}
-                onError={(e) => (e.currentTarget.src = "/icones/padrao.png")}
+              SmartCow
+            </span>
+          </div>
+
+          <span
+            style={{
+              marginLeft: 20,
+              marginTop: 3,
+              fontSize: 11.5,
+              color: TXT_MUTED,
+              fontWeight: 750,
+              lineHeight: 1.2,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              maxWidth: 240,
+            }}
+            title={`${ativa?.label || ""} · ${ativa?.title || ""}`}
+          >
+            {ativa?.label} · {ativa?.title}
+          </span>
+        </div>
+
+        {/* Tabs ERP (sem contorno externo; underline interno não “corta”) */}
+        <nav
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 16,
+            overflowX: "auto",
+            WebkitOverflowScrolling: "touch",
+            flex: 1,
+            paddingBottom: 2,
+            scrollbarWidth: "none",
+          }}
+        >
+          <style>{`nav::-webkit-scrollbar{height:0px;}`}</style>
+
+          {ABAS_BASE.map((aba) => {
+            const isAtiva = abaAtiva === aba.id;
+
+            return (
+              <button
+                key={aba.id}
+                type="button"
+                onClick={() => navigate(`/${aba.id}`)}
+                title={aba.title}
                 style={{
-                  width: `${size}px`,
-                  height: `${size}px`,
-                  objectFit: "contain",
-                  transition: "all 0.2s ease-in-out",
+                  border: "none",
+                  background: isAtiva ? "rgba(255,255,255,0.06)" : "transparent",
+                  cursor: "pointer",
+
+                  // área vertical suficiente: não “corta” nada visualmente
+                  padding: "9px 10px",
+                  lineHeight: 1,
+
+                  color: isAtiva ? TXT : TXT_MUTED,
+                  fontWeight: isAtiva ? 950 : 820,
+                  fontSize: 13.5,
+                  letterSpacing: 0.15,
+                  whiteSpace: "nowrap",
+
+                  borderRadius: 10,
+
+                  // indicador interno (profissional e nunca sofre clipping)
+                  boxShadow: isAtiva ? `inset 0 -3px 0 ${ACCENT}` : "none",
+
+                  outline: "none",
+                  transition:
+                    "background 0.12s ease, color 0.12s ease, box-shadow 0.12s ease",
                 }}
-              />
-              <span
-                style={{
-                  marginTop: "8px",
-                  fontSize: "15px",
-                  fontWeight: isAtiva ? 700 : 600,
-                  color: isAtiva ? "#000" : "#fff",
-                  textAlign: "center",
+                onMouseEnter={(e) => {
+                  if (!isAtiva) e.currentTarget.style.background = "rgba(255,255,255,0.04)";
+                }}
+                onMouseLeave={(e) => {
+                  if (!isAtiva) e.currentTarget.style.background = "transparent";
                 }}
               >
                 {aba.label}
-              </span>
-            </div>
-          );
-        })}
-      </nav>
-    </div>
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Sair (ghost, menos chamativo, combina com paleta) */}
+        <button
+          onClick={async () => {
+            await supabase.auth.signOut();
+          }}
+          title="Sair do sistema"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "9px 10px",
+            borderRadius: 10,
+
+            background: "rgba(255,255,255,0.05)",
+            border: "1px solid rgba(255,255,255,0.10)",
+            color: "rgba(255,255,255,0.90)",
+
+            cursor: "pointer",
+            fontWeight: 900,
+            whiteSpace: "nowrap",
+
+            transition:
+              "background 0.12s ease, border-color 0.12s ease, transform 0.12s ease, color 0.12s ease",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "rgba(220,38,38,0.14)";
+            e.currentTarget.style.borderColor = "rgba(220,38,38,0.35)";
+            e.currentTarget.style.color = "rgba(255,255,255,0.96)";
+            e.currentTarget.style.transform = "translateY(-1px)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "rgba(255,255,255,0.05)";
+            e.currentTarget.style.borderColor = "rgba(255,255,255,0.10)";
+            e.currentTarget.style.color = "rgba(255,255,255,0.90)";
+            e.currentTarget.style.transform = "translateY(0px)";
+          }}
+        >
+          {/* ícone logout inline */}
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M10 7V6a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-7a2 2 0 0 1-2-2v-1"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+            <path
+              d="M15 12H3m0 0 3-3m-3 3 3 3"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          Sair
+        </button>
+      </div>
+    </header>
   );
 }
