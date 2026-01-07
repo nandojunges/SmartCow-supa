@@ -51,7 +51,7 @@ function BarraLateral({ abaAtiva, setAbaAtiva }) {
       style={{
         position: "fixed",
         left: 0,
-        top: 0,
+        top: 72, // 👈 altura real do TopBar (ajuste fino se precisar)
         bottom: 0,
         width: `${LARGURA_BARRA}px`,
         background: `linear-gradient(180deg, ${NAVY} 0%, ${NAVY_2} 100%)`,
@@ -59,10 +59,10 @@ function BarraLateral({ abaAtiva, setAbaAtiva }) {
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        paddingTop: ALTURA_CABECALHO + 18, // mantém seu “offset” do cabeçalho
-        paddingBottom: 18,
-        gap: 10,
-        zIndex: 20, // abaixo do TopBar (que está em 60), acima do conteúdo
+        paddingTop: 20, // 👈 espaço interno uniforme
+        paddingBottom: 20,
+        gap: 14, // 👈 mais respiro entre botões
+        zIndex: 20,
       }}
     >
       {botoesBarra.map((btn) => {
