@@ -1,41 +1,3 @@
-// CODEX: Ajustar ESTE arquivo Animais.jsx para integrar corretamente saídas e reativação:
-//
-// 1. MANTER a lógica atual de carregar animais ativos e inativos separadamente:
-//    - Ativos: select em "animais" com campos (id, numero, brinco) e filtro .eq("ativo", true).
-//    - Inativos: select em "animais" com campos (id, numero, brinco) e filtro .eq("ativo", false).
-//
-// 2. PARA os inativos ("inativosRaw"):
-//    - Montar um array com todos os ids: const idsInativos = inativosRaw.map(a => a.id).filter(Boolean);
-//    - Buscar as saídas em "saidas_animais" usando:
-//        supabase
-//          .from("saidas_animais")
-//          .select("id, animal_id, tipo_saida, motivo_saida, data_saida, valor_venda, observacao")
-//          .in("animal_id", idsInativos)
-//          .order("data_saida", { ascending: true });
-//
-// 3. Montar um dicionário "ultimaPorAnimal" onde a chave é animal_id e o valor é um array de saídas,
-//    depois pegar SEMPRE a última saída de cada animal (historico[historico.length - 1]).
-//
-// 4. No map que monta o array final "formatado", incluir obrigatoriamente as seguintes propriedades:
-//      {
-//        id: a.id,
-//        numero: a.numero,
-//        brinco: a.brinco,
-//        saida_id: ultima?.id ?? null,          // ID real da linha em saidas_animais
-//        tipo_saida: ultima?.tipo_saida || "",
-//        motivo_saida: ultima?.motivo_saida || "",
-//        data_saida: dataFormatada,             // dd/mm/aaaa se houver data
-//        observacao_saida: ultima?.observacao || "",
-//        valor_saida: ultima?.valor_venda ?? null,
-//      }
-//
-// 5. NÃO alterar o layout nem o switch das abas. Apenas garantir que "animaisInativos" receba esse
-//    objeto formatado (com saida_id e observacao_saida) e seja passado para <Inativas animais={animaisInativos} />.
-//
-// 6. Garantir que "carregarAnimais" continue sendo chamado em:
-//    - useEffect inicial,
-//    - handleAtualizar,
-//    - e no onAtualizar passado para <SaidaAnimal onAtualizar={handleAtualizar} />.
 import React, { useState, useEffect, useCallback } from "react";
 import {
   ListChecks,
@@ -48,7 +10,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 
-// Páginas internas (apenas layout)
+// Páginas internas
 import SubAbasAnimais from "./SubAbasAnimais";
 import SaidaAnimal from "./SaidaAnimal";
 import Inativas from "./Inativas";
@@ -58,86 +20,116 @@ import FichaAnimal from "./FichaAnimal/FichaAnimal";
 // =========================
 //   CONSTANTES DE LAYOUT
 // =========================
-
-// largura da barra lateral
 const LARGURA_BARRA = 80;
-
-// altura aproximada do cabeçalho com ícones (ANIMAIS, BEZERRAS, etc.)
-const ALTURA_CABECALHO = 150;
-
-// 👉 AJUSTE AQUI O TAMANHO DOS ÍCONES DA BARRA LATERAL
-//    Se quiser maior, por ex. 32. Se quiser menor, 24.
-const TAMANHO_ICONE_LATERAL = 28;
-
-// espaço interno superior do conteúdo (entre cabeçalho e card branco)
+const ALTURA_CABECALHO = 150; // (mantido) — mas a lateral agora não depende disso visualmente
+const TAMANHO_ICONE_LATERAL = 22; // um pouco menor para ficar “enterprise”
 const PADDING_TOPO_CONTEUDO = 24;
 
 const botoesBarra = [
-  { id: "todos", label: "Todos os Animais", icon: <ListChecks /> },
-  { id: "entrada", label: "Entrada de Animais", icon: <PlusCircle /> },
-  { id: "saida", label: "Saída de Animais", icon: <ArrowRightCircle /> },
-  { id: "inativas", label: "Inativas", icon: <Ban /> },
-  { id: "relatorio", label: "Relatórios", icon: <FileText /> },
-  { id: "importar", label: "Importar Dados", icon: <UploadCloud /> },
-  { id: "exportar", label: "Exportar Dados", icon: <DownloadCloud /> },
+  { id: "todos", label: "Todos os Animais", icon: ListChecks },
+  { id: "entrada", label: "Entrada de Animais", icon: PlusCircle },
+  { id: "saida", label: "Saída de Animais", icon: ArrowRightCircle },
+  { id: "inativas", label: "Inativas", icon: Ban },
+  { id: "relatorio", label: "Relatórios", icon: FileText },
+  { id: "importar", label: "Importar Dados", icon: UploadCloud },
+  { id: "exportar", label: "Exportar Dados", icon: DownloadCloud },
 ];
 
 // =========================
-//   BARRA LATERAL FIXA
+//   BARRA LATERAL FIXA (PRO)
 // =========================
 function BarraLateral({ abaAtiva, setAbaAtiva }) {
+  // Paleta alinhada ao TopBar novo
+  const NAVY = "#0B1F3A";
+  const NAVY_2 = "#0A1A33";
+  const ACCENT = "#19B6A4";
+  const TXT = "rgba(255,255,255,0.86)";
+  const MUTED = "rgba(255,255,255,0.62)";
+
   return (
-    <div
+    <aside
       style={{
         position: "fixed",
         left: 0,
-        top: 0,          // ocupa desde o topo
-        bottom: 0,       // até o rodapé
+        top: 0,
+        bottom: 0,
         width: `${LARGURA_BARRA}px`,
-        backgroundColor: "#17398d",
+        background: `linear-gradient(180deg, ${NAVY} 0%, ${NAVY_2} 100%)`,
+        borderRight: "1px solid rgba(255,255,255,0.08)",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        // ícones começam só depois do cabeçalho
-        paddingTop: ALTURA_CABECALHO + 24,
-        paddingBottom: 20,
-        gap: 16, // ~0,5 cm entre ícones
-        zIndex: 1, // fica por baixo do cabeçalho azul
+        paddingTop: ALTURA_CABECALHO + 18, // mantém seu “offset” do cabeçalho
+        paddingBottom: 18,
+        gap: 10,
+        zIndex: 20, // abaixo do TopBar (que está em 60), acima do conteúdo
       }}
     >
       {botoesBarra.map((btn) => {
         const ativo = abaAtiva === btn.id;
+        const Icon = btn.icon;
+
         return (
           <button
             key={btn.id}
             onClick={() => setAbaAtiva(btn.id)}
             title={btn.label}
             style={{
-              width: 58,
-              height: 58,
-              borderRadius: "9999px",
-              border: "2px solid #ffffff",
-              backgroundColor: ativo ? "#ffffff" : "transparent",
-              color: ativo ? "#17398d" : "#ffffff",
+              width: 56,
+              height: 46,
+              borderRadius: 14,
+              border: "1px solid rgba(255,255,255,0.10)",
+              background: ativo ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.03)",
+              color: ativo ? TXT : MUTED,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              boxShadow: ativo
-                ? "0 0 0 4px rgba(255,255,255,0.32)"
-                : "0 4px 10px rgba(0,0,0,0.20)",
               cursor: "pointer",
-              transition: "all 0.18s ease-out",
-              transform: ativo ? "translateX(2px)" : "translateX(0)",
+              position: "relative",
+              transition: "background 0.12s ease, transform 0.12s ease, border-color 0.12s ease",
+              boxShadow: ativo ? "0 10px 18px rgba(0,0,0,0.22)" : "none",
+              outline: "none",
+            }}
+            onMouseEnter={(e) => {
+              if (!ativo) {
+                e.currentTarget.style.background = "rgba(255,255,255,0.06)";
+                e.currentTarget.style.transform = "translateY(-1px)";
+                e.currentTarget.style.borderColor = "rgba(255,255,255,0.14)";
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!ativo) {
+                e.currentTarget.style.background = "rgba(255,255,255,0.03)";
+                e.currentTarget.style.transform = "translateY(0px)";
+                e.currentTarget.style.borderColor = "rgba(255,255,255,0.10)";
+              }
             }}
           >
-            {React.cloneElement(btn.icon, {
-              size: TAMANHO_ICONE_LATERAL, // 👈 mexe só nessa constante
-              strokeWidth: 2.4,
-            })}
+            {/* Indicador ativo (barra teal à esquerda) */}
+            {ativo && (
+              <span
+                style={{
+                  position: "absolute",
+                  left: 6,
+                  top: 10,
+                  bottom: 10,
+                  width: 4,
+                  borderRadius: 999,
+                  background: ACCENT,
+                  boxShadow: "0 0 0 4px rgba(25,182,164,0.12)",
+                }}
+              />
+            )}
+
+            <Icon
+              size={TAMANHO_ICONE_LATERAL}
+              strokeWidth={2.2}
+              color={ativo ? ACCENT : "rgba(255,255,255,0.72)"}
+            />
           </button>
         );
       })}
-    </div>
+    </aside>
   );
 }
 
@@ -147,7 +139,6 @@ function BarraLateral({ abaAtiva, setAbaAtiva }) {
 export default function Animais() {
   const [abaAtiva, setAbaAtiva] = useState("todos");
 
-  // 👇 Agora separamos ativos e inativos
   const [animaisAtivos, setAnimaisAtivos] = useState([]);
   const [animaisInativos, setAnimaisInativos] = useState([]);
   const [carregando, setCarregando] = useState(false);
@@ -155,11 +146,68 @@ export default function Animais() {
   const [fichaOpen, setFichaOpen] = useState(false);
   const [animalFicha, setAnimalFicha] = useState(null);
 
-  // 🔄 Carrega ativos + inativos do Supabase
+  // =========================
+  //   CARREGAR ANIMAL COMPLETO
+  // =========================
+  const carregarAnimalCompleto = useCallback(async (id) => {
+    if (!id) return null;
+
+    const { data, error } = await supabase
+      .from("animais")
+      .select(
+        `
+        id,
+        numero,
+        brinco,
+        nascimento,
+        sexo,
+        origem,
+        raca_id,
+        pai_nome,
+        mae_nome,
+        categoria,
+        categoria_atual,
+        situacao_produtiva,
+        situacao_reprodutiva,
+        ultimo_parto,
+        ultima_ia
+      `
+      )
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error || !data) {
+      console.error("Erro ao carregar animal completo:", error || "sem dados");
+      return null;
+    }
+
+    let racaNome = null;
+    if (data.raca_id) {
+      const { data: racaRow, error: errorRaca } = await supabase
+        .from("racas")
+        .select("nome")
+        .eq("id", data.raca_id)
+        .maybeSingle();
+
+      if (!errorRaca && racaRow) {
+        racaNome = racaRow.nome;
+      }
+    }
+
+    const animalCompleto = {
+      ...data,
+      raca_nome: racaNome,
+    };
+
+    return animalCompleto;
+  }, []);
+
+  // =========================
+  //   CARREGAR ATIVOS + INATIVOS
+  // =========================
   const carregarAnimais = useCallback(async () => {
     setCarregando(true);
     try {
-      // 1) ATIVOS
       const { data: ativos, error: erroAtivos } = await supabase
         .from("animais")
         .select("id, numero, brinco")
@@ -168,7 +216,6 @@ export default function Animais() {
 
       setAnimaisAtivos(!erroAtivos && ativos ? ativos : []);
 
-      // 2) INATIVOS (sem relação)
       const { data: inativosRaw, error: erroInativos } = await supabase
         .from("animais")
         .select("id, numero, brinco")
@@ -185,9 +232,7 @@ export default function Animais() {
       const { data: saidas, error: erroSaidas } = idsInativos.length
         ? await supabase
             .from("saidas_animais")
-            .select(
-              "id, animal_id, tipo_saida, motivo_saida, data_saida, valor_venda, observacao"
-            )
+            .select("id, animal_id, tipo_saida, motivo, data_saida, valor, observacoes")
             .in("animal_id", idsInativos)
             .order("data_saida", { ascending: true })
         : { data: [], error: null };
@@ -222,10 +267,10 @@ export default function Animais() {
           brinco: a.brinco,
           saida_id: ultima?.id ?? null,
           tipo_saida: ultima?.tipo_saida || "",
-          motivo_saida: ultima?.motivo_saida || "",
+          motivo: ultima?.motivo || "",
           data_saida: dataFormatada,
-          observacao_saida: ultima?.observacao || "",
-          valor_saida: ultima?.valor_venda ?? null,
+          observacao_saida: ultima?.observacoes || "",
+          valor_saida: ultima?.valor ?? null,
         };
       });
 
@@ -235,29 +280,25 @@ export default function Animais() {
     }
   }, []);
 
-  // Carrega ao entrar na página
   useEffect(() => {
     carregarAnimais();
   }, [carregarAnimais]);
 
-  // 🔒 Desliga o scroll da página e deixa só o da tabela
   useEffect(() => {
     const overflowOriginal = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-
     return () => {
-      // volta ao normal quando sair da página
       document.body.style.overflow = overflowOriginal || "";
     };
   }, []);
 
   const handleAtualizar = () => {
-    // chamada única para recarregar tudo que depende de animais
     carregarAnimais();
   };
 
-  const handleVerFicha = (animal) => {
-    setAnimalFicha(animal);
+  const handleVerFicha = async (animalBasico) => {
+    const completo = await carregarAnimalCompleto(animalBasico?.id);
+    setAnimalFicha(completo || animalBasico || null);
     setFichaOpen(true);
   };
 
@@ -266,31 +307,22 @@ export default function Animais() {
       case "todos":
         return (
           <SubAbasAnimais
-            animais={animaisAtivos}      // ✅ só ativos
+            animais={animaisAtivos}
             onRefresh={handleAtualizar}
+            // onVerFicha={handleVerFicha}
           />
         );
 
       case "entrada":
-        return (
-          <CadastroAnimal
-            animais={animaisAtivos}      // se precisar listar, só ativos
-            onAtualizar={handleAtualizar}
-          />
-        );
+        return <CadastroAnimal animais={animaisAtivos} onAtualizar={handleAtualizar} />;
 
       case "saida":
-        return (
-          <SaidaAnimal
-            animais={animaisAtivos}      // opcional, mas coerente
-            onAtualizar={handleAtualizar}
-          />
-        );
+        return <SaidaAnimal animais={animaisAtivos} onAtualizar={handleAtualizar} />;
 
       case "inativas":
         return (
           <Inativas
-            animais={animaisInativos}    // ✅ aqui vão só inativos
+            animais={animaisInativos}
             onAtualizar={handleAtualizar}
             onVerFicha={handleVerFicha}
           />
@@ -310,20 +342,17 @@ export default function Animais() {
     }
   };
 
-  // altura máxima da “caixa branca” (sem depender do cabeçalho)
-  const cardMaxHeight = "calc(100vh - 2 * 24px)"; // 24px top + 24px bottom
+  const cardMaxHeight = "calc(100vh - 2 * 24px)";
 
   return (
     <div
       style={{
         minHeight: "100vh",
-        overflow: "hidden", // garante que só a área interna role
+        overflow: "hidden",
       }}
     >
-      {/* Barra lateral fixa, passando por trás do cabeçalho */}
       <BarraLateral abaAtiva={abaAtiva} setAbaAtiva={setAbaAtiva} />
 
-      {/* Conteúdo principal, deslocado para a direita da barra */}
       <div
         style={{
           marginLeft: `${LARGURA_BARRA}px`,
@@ -345,17 +374,9 @@ export default function Animais() {
             flexDirection: "column",
           }}
         >
-          {/* Área que rola (sub-abas + tabelas) */}
-          <div
-            style={{
-              flex: 1,
-              overflowY: "auto",
-            }}
-          >
+          <div style={{ flex: 1, overflowY: "auto" }}>
             {carregando ? (
-              <div className="p-4 text-sm text-gray-500">
-                Carregando animais...
-              </div>
+              <div className="p-4 text-sm text-gray-500">Carregando animais...</div>
             ) : (
               renderizarPrincipal()
             )}
@@ -363,7 +384,6 @@ export default function Animais() {
         </div>
       </div>
 
-      {/* Modal de ficha reutilizável */}
       {fichaOpen && animalFicha && (
         <FichaAnimal
           animal={animalFicha}
