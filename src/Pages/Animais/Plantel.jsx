@@ -168,12 +168,12 @@ export default function Plantel() {
           <table className="st-table">
             <thead>
               <tr>
-                <th style={{ width: 520 }}>Animal</th>
-                <th className="st-td-center" style={{ width: 120 }}>Prod.</th>
-                <th className="st-td-center" style={{ width: 120 }}>Reprod.</th>
-                <th className="st-td-center" style={{ width: 90 }}>DEL</th>
-                <th style={{ width: 140 }}>Origem</th>
-                <th className="st-td-center" style={{ width: 110 }}>Ações</th>
+                <th style={{ width: "46%" }}>Animal</th>
+                <th className="st-td-center" style={{ width: "12%" }}>Prod.</th>
+                <th className="st-td-center" style={{ width: "12%" }}>Reprod.</th>
+                <th className="st-td-center" style={{ width: "10%" }}>DEL</th>
+                <th style={{ width: "12%" }}>Origem</th>
+                <th className="st-td-center" style={{ width: "8%" }}>Ações</th>
               </tr>
             </thead>
 
@@ -211,7 +211,12 @@ export default function Plantel() {
                     {/* ANIMAL (duas linhas, mas com respiro) */}
                     <td>
                       <div className="st-animal">
-                        <span className="st-animal-num">{a.numero ?? "—"}</span>
+                        <span
+                          className="st-animal-num"
+                          title={`Nº do animal: ${a.numero ?? "—"}`}
+                        >
+                          {a.numero ?? "—"}
+                        </span>
 
                         <div className="st-animal-main">
                           <div className="st-animal-title">
