@@ -1,147 +1,215 @@
 /* src/styles/tabelaModerna.css */
 
-/* =========================
-   SMARTCOW TABLE SYSTEM (st-*)
-   Padrão global para todas as tabelas do sistema
-   ========================= */
+/* =========================================================
+   SMARTCOW — TABELA PADRÃO (GLOBAL)
+   Use em todos os lugares: .st-table
+   ========================================================= */
 
-/* Wrapper geral */
-.st-table-wrap {
-  width: 100%;
-  background: transparent;
+:root {
+  --st-bg: #ffffff;
+  --st-line: #e5e7eb;
+  --st-line-soft: #eef2f7;
+
+  --st-head-bg: #eef6ff;
+  --st-head-text: #0b2a66;
+
+  --st-row-odd: #ffffff;
+  --st-row-even: #f6fbff;
+  --st-row-hover: #e9f5ff;
+
+  --st-text: #0f172a;
+  --st-muted: #64748b;
+
+  --st-pill-bg: #eef2ff;
+  --st-pill-text: #1e40af;
+
+  --st-shadow: 0 8px 22px rgba(15, 23, 42, 0.08);
+  --st-shadow-hover: 0 10px 26px rgba(15, 23, 42, 0.12);
+
+  --st-radius: 14px;
+  --st-radius-sm: 10px;
 }
 
-/* Área rolável (para telas menores) */
+/* wrapper geral */
+.st-table-wrap {
+  width: 100%;
+  overflow: hidden;
+  border-radius: var(--st-radius);
+  background: var(--st-bg);
+  border: 1px solid var(--st-line);
+  box-shadow: var(--st-shadow);
+}
+
+/* área rolável (para telas menores) */
 .st-scroll {
   width: 100%;
   overflow-x: auto;
-  border-radius: 14px;
 }
 
-/* Tabela base */
+/* tabela base */
 .st-table {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
   table-layout: fixed;
-  background: #ffffff;
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  border-radius: 14px;
-  overflow: hidden;
+  font-size: 14px;
+  color: var(--st-text);
 }
 
-/* Cabeçalho */
+/* cabeçalho */
+.st-table thead th,
 .st-table thead th.st-th {
+  background: linear-gradient(180deg, var(--st-head-bg), #ffffff);
+  color: var(--st-head-text);
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--st-line);
   position: sticky;
   top: 0;
-  z-index: 2;
-  background: linear-gradient(180deg, rgba(226, 232, 240, 0.85), rgba(226, 232, 240, 0.60));
-  color: #0f172a;
-  font-weight: 800;
-  font-size: 0.82rem;
-  letter-spacing: 0.2px;
-  text-transform: none;
-  padding: 12px 14px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+  z-index: 3;
   white-space: nowrap;
 }
 
-/* Corpo */
+/* células */
+.st-table td,
 .st-table tbody td.st-td {
-  padding: 12px 14px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--st-line-soft);
   vertical-align: middle;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #0f172a;
-  font-size: 0.9rem;
 }
 
-/* Linhas */
+/* zebra */
+.st-table tbody tr:nth-child(odd) {
+  background: var(--st-row-odd);
+}
+
+.st-table tbody tr:nth-child(even) {
+  background: var(--st-row-even);
+}
+
+/* hover de linha */
+.st-table tbody tr:hover,
+.st-row:hover {
+  background: var(--st-row-hover);
+}
+
+/* evita que o hover fique “amontoado” visualmente */
+.st-table tbody tr:hover td {
+  border-bottom-color: #dbeafe;
+}
+
+/* linha base */
 .st-row {
-  background: #ffffff;
+  background: var(--st-row-odd);
   transition: background 0.15s ease, box-shadow 0.15s ease;
 }
 
-/* Alternância suave (menos “cinza forte”) */
-.st-row:nth-child(even) {
-  background: rgba(241, 245, 249, 0.55);
+/* primeira/última célula com cantos arredondados (visual de card) */
+.st-table tbody tr td:first-child {
+  border-left: 3px solid transparent;
 }
 
-/* Hover linha (profissional, não azulão) */
-.st-row:hover {
-  background: rgba(224, 242, 254, 0.55);
+.st-table tbody tr:hover td:first-child {
+  border-left-color: #38bdf8;
 }
 
-/* Coluna hover (efeito “mágico” que você gosta) */
+.st-table thead th:first-child {
+  border-top-left-radius: var(--st-radius);
+}
+
+.st-table thead th:last-child {
+  border-top-right-radius: var(--st-radius);
+}
+
+/* alinhamentos utilitários */
+.st-td-center {
+  text-align: center;
+}
+
+.st-td-right {
+  text-align: right;
+}
+
+/* colunas que precisam quebrar linha (ex.: observação) */
+.st-td-wrap {
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: unset !important;
+}
+
+/* coluna hover */
 .coluna-hover,
 .st-table thead th.coluna-hover {
   background-color: rgba(56, 189, 248, 0.12) !important;
 }
 
-/* Linha vazia */
+/* linha vazia */
 .st-empty td {
-  padding: 18px 14px;
-  color: #64748b;
+  padding: 18px 16px;
+  color: var(--st-muted);
   font-weight: 600;
 }
 
-/* Loading */
+/* loading */
 .st-loading {
   padding: 10px 2px;
   font-size: 0.85rem;
-  color: #64748b;
+  color: var(--st-muted);
 }
 
-/* Alertas */
+/* alertas */
 .st-alert {
   margin-bottom: 10px;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--st-radius-sm);
   font-size: 0.9rem;
   font-weight: 700;
 }
+
 .st-alert--danger {
   background: #fef2f2;
   border: 1px solid #fecaca;
   color: #b91c1c;
 }
 
-/* =========================
-   Entity column (Animal)
-   ========================= */
+/* =========================================================
+   “COLUNA ANIMAL” (duas linhas) — menos amontoado
+   ========================================================= */
+
 .st-entity {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   min-width: 240px;
 }
 
 .st-entity__top {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: center;
+  gap: 12px;
 }
 
 .st-entity__id {
+  min-width: 38px;
+  height: 28px;
+  border-radius: 999px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 40px;
-  height: 26px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: rgba(59, 130, 246, 0.12);
-  color: #1e3a8a;
   font-weight: 900;
-  font-size: 0.9rem;
+  background: #eaf2ff;
+  color: #0b2a66;
+  border: 1px solid rgba(11, 42, 102, 0.12);
 }
 
 .st-entity__meta {
-  color: #334155;
-  font-weight: 700;
-  font-size: 0.9rem;
+  font-weight: 900;
+  color: var(--st-text);
+  line-height: 1.1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -149,96 +217,152 @@
 
 .st-entity__sub {
   display: flex;
-  align-items: center;
   gap: 8px;
-  color: #64748b;
+  color: var(--st-muted);
+  font-size: 12px;
   font-weight: 700;
-  font-size: 0.78rem;
+  line-height: 1.1;
   white-space: nowrap;
+}
+
+.st-animal {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 280px;
+}
+
+.st-animal-num {
+  min-width: 38px;
+  height: 28px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  background: #eaf2ff;
+  color: #0b2a66;
+  border: 1px solid rgba(11, 42, 102, 0.12);
+}
+
+.st-animal-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.st-animal-title {
+  font-weight: 900;
+  color: var(--st-text);
+  line-height: 1.1;
+}
+
+.st-animal-sub {
+  display: flex;
+  gap: 8px;
+  color: var(--st-muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.1;
 }
 
 .st-subitem {
   white-space: nowrap;
 }
 
+/* separador pontinho */
 .st-dot {
-  opacity: 0.7;
+  opacity: 0.6;
 }
 
-/* =========================
-   Chips (status)
-   ========================= */
+/* =========================================================
+   COMPONENTES VISUAIS REUTILIZÁVEIS (chips/pills/badges)
+   ========================================================= */
+
+.st-pill,
 .st-chip {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  height: 22px;
+  gap: 6px;
+  height: 24px;
   padding: 0 10px;
   border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 900;
-  letter-spacing: 0.4px;
-  border: 1px solid rgba(148, 163, 184, 0.35);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: var(--st-pill-bg);
+  color: var(--st-pill-text);
+  white-space: nowrap;
   width: fit-content;
 }
 
+.st-pill--ok,
 .st-chip--ok {
-  background: rgba(16, 185, 129, 0.10);
+  background: #eafaf3;
   color: #065f46;
-  border-color: rgba(16, 185, 129, 0.22);
+  border-color: rgba(6, 95, 70, 0.18);
 }
+
+.st-pill--info,
 .st-chip--info {
-  background: rgba(59, 130, 246, 0.10);
+  background: #eef6ff;
   color: #1e40af;
-  border-color: rgba(59, 130, 246, 0.22);
+  border-color: rgba(30, 64, 175, 0.18);
 }
+
+.st-pill--warn,
 .st-chip--warn {
-  background: rgba(245, 158, 11, 0.12);
-  color: #92400e;
-  border-color: rgba(245, 158, 11, 0.24);
+  background: #fff7ed;
+  color: #9a3412;
+  border-color: rgba(154, 52, 18, 0.18);
 }
+
+.st-pill--mute,
 .st-chip--muted {
-  background: rgba(148, 163, 184, 0.18);
+  background: #f1f5f9;
   color: #334155;
-  border-color: rgba(148, 163, 184, 0.30);
+  border-color: rgba(51, 65, 85, 0.18);
+}
+
+/* botão de ação padrão pequeno (global) */
+.st-btn,
+.st-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(37, 99, 235, 0.25);
+  background: #eef6ff;
+  color: #1e40af;
+  font-weight: 800;
+  font-size: 12px;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  white-space: nowrap;
+}
+
+.st-btn:hover,
+.st-action:hover {
+  background: #e3f0ff;
+  box-shadow: 0 6px 16px rgba(30, 64, 175, 0.12);
+  transform: translateY(-1px);
 }
 
 /* Números (DEL etc.) */
 .st-num {
   font-variant-numeric: tabular-nums;
   font-weight: 900;
-  color: #0f172a;
+  color: var(--st-text);
 }
 
 /* Texto normal */
 .st-text {
-  color: #0f172a;
+  color: var(--st-text);
   font-weight: 700;
-}
-
-/* =========================
-   Actions
-   ========================= */
-.st-action {
-  height: 30px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(59, 130, 246, 0.25);
-  background: rgba(59, 130, 246, 0.10);
-  color: #1e3a8a;
-  font-weight: 900;
-  font-size: 0.78rem;
-  cursor: pointer;
-  transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease;
-  white-space: nowrap;
-}
-.st-action:hover {
-  background: rgba(59, 130, 246, 0.16);
-  border-color: rgba(59, 130, 246, 0.35);
-  transform: translateY(-1px);
-}
-.st-action:active {
-  transform: translateY(0px);
 }
 
 /* =========================
