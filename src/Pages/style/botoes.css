@@ -1,0 +1,148 @@
+/* BOTÃO USADO EM TABELAS OU AÇÕES SECUNDÁRIAS PEQUENAS */
+.botao-editar {
+  background-color: transparent;
+  border: 1px solid #1976d2;
+  color: #1976d2;
+  padding: 4px 12px;
+  font-size: 0.75rem;
+  border-radius: 9999px; /* pílula arredondada */
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.botao-editar:hover {
+  background-color: #e3f2fd;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.botao-editar:active {
+  transform: scale(0.97);
+}
+
+/* BOTÃO PRINCIPAL: APLICAR, SALVAR, CONFIRMAR */
+.botao-acao {
+  background-color: #2563eb;
+  color: white;
+  font-weight: 600;
+  padding: 0.6rem 1.2rem;
+  font-size: 0.95rem;
+  border-radius: 0.75rem; /* mais arredondado */
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+/* Versão compacta para uso em modais menores */
+.botao-acao.pequeno,
+.botao-cancelar.pequeno {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+}
+
+.botao-acao:hover {
+  background-color: #1d4ed8;
+}
+
+.botao-acao:active {
+  transform: scale(0.98);
+}
+
+/* BOTÃO CANCELAR OU AÇÃO NEUTRA */
+.botao-cancelar {
+  background-color: #f3f4f6;
+  color: #111827;
+  font-weight: 500;
+  padding: 0.6rem 1.2rem;
+  font-size: 0.95rem;
+  border-radius: 0.75rem; /* mais arredondado */
+  border: 1px solid #cbd5e1;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.botao-cancelar:hover {
+  background-color: #e5e7eb;
+}
+
+.botao-cancelar:active {
+  transform: scale(0.98);
+}
+
+.botao-excluir {
+  background-color: #e63946;
+  color: white;
+  padding: 6px 14px;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.botao-excluir:hover {
+  background-color: #d62828;
+}
+
+/* NOVOS BOTÕES PADRONIZADOS */
+.btn-editar {
+  background-color: #007bff;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.3rem 0.6rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.btn-editar:hover {
+  background-color: #0069d9;
+}
+
+.btn-excluir {
+  background-color: #dc3545;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.3rem 0.6rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.btn-excluir:hover {
+  background-color: #c82333;
+}
+
+.btn-registrar {
+  background-color: #4dabf7;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.4rem 0.8rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.btn-registrar:hover {
+  background-color: #339af0;
+}
+
+/* =========================================
+   AJUSTES ESPECÍFICOS PARA A TABELA DE LEITE
+   (botões menores, cabem na mesma linha)
+   ========================================= */
+.botoes-tabela .botao-editar,
+.botoes-tabela .btn-registrar {
+  padding: 4px 10px;       /* mais compacto */
+  font-size: 0.75rem;
+  height: 28px;
+  border-radius: 9999px;   /* pílula fininha */
+}
+
+/* garante que o texto não quebre */
+.botoes-tabela .botao-editar span,
+.botoes-tabela .btn-registrar span {
+  white-space: nowrap;
+}
