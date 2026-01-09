@@ -229,7 +229,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  min-width: 280px;
+  min-width: 0;
 }
 
 .st-animal-num {
@@ -256,6 +256,9 @@
   font-weight: 900;
   color: var(--st-text);
   line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .st-animal-sub {
@@ -265,6 +268,9 @@
   font-size: 12px;
   font-weight: 700;
   line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .st-subitem {
