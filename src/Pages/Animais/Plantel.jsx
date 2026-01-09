@@ -73,40 +73,11 @@ function delFromParto(partoStr, secagemOpcional) {
   return String(Math.max(0, dias));
 }
 
-/* ========= “códigos” curtos (sem cortar) ========= */
-function shortProd(sit) {
-  const t = String(sit || "").toLowerCase();
-  if (!t || t === "—") return { label: "—", tone: "muted" };
-  if (t.includes("lact")) return { label: "LAC", tone: "ok" };
-  if (t.includes("seca")) return { label: "SEC", tone: "muted" };
-  return { label: String(sit).slice(0, 4).toUpperCase(), tone: "info" };
-}
-
-function shortReprod(sit) {
-  const t = String(sit || "").toLowerCase();
-  if (!t || t === "—") return { label: "—", tone: "muted" };
-  if (t.includes("pren") || t.includes("gest")) return { label: "PRE", tone: "info" };
-  if (t.includes("vaz")) return { label: "VAZ", tone: "muted" };
-  if (t.includes("cio")) return { label: "CIO", tone: "warn" };
-  return { label: String(sit).slice(0, 4).toUpperCase(), tone: "info" };
-}
-
-/* ========= headers do novo padrão ========= */
-const HEADERS = [
-  { key: "animal", label: "Animal" },
-  { key: "prod", label: "Prod." },
-  { key: "reprod", label: "Reprod." },
-  { key: "del", label: "DEL" },
-  { key: "origem", label: "Origem" },
-  { key: "acoes", label: "" }, // ações sem título (padrão de sistemas)
-];
-
 export default function Plantel() {
   const [animais, setAnimais] = useState([]);
   const [racaMap, setRacaMap] = useState({});
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
-  const [hoverCol, setHoverCol] = useState(null);
 
   // ficha
   const [animalSelecionado, setAnimalSelecionado] = useState(null);
@@ -184,122 +155,108 @@ export default function Plantel() {
 
   const linhas = useMemo(() => (Array.isArray(animais) ? animais : []), [animais]);
 
-  const thClass = (idx, key) => `st-th ${key} ${hoverCol === idx ? "coluna-hover" : ""}`;
-  const tdClass = (idx, key) => `st-td ${key} ${hoverCol === idx ? "coluna-hover" : ""}`;
-
   return (
     <section className="w-full">
-      <div className="st-table-wrap">
-        {erro && (
-          <div className="st-alert st-alert--danger">
-            {erro}
-          </div>
-        )}
+      {erro && (
+        <div className="st-alert st-alert--danger">
+          {erro}
+        </div>
+      )}
 
-        <div className="st-scroll">
-          <table className="st-table st-table--entity">
+      <div className="overflow-x-auto">
+        <div className="st-table-wrap">
+          <table className="st-table">
             <thead>
               <tr>
-                {HEADERS.map((h, idx) => (
-                  <th
-                    key={h.key}
-                    className={thClass(idx, h.key)}
-                    onMouseEnter={() => setHoverCol(idx)}
-                    onMouseLeave={() => setHoverCol(null)}
-                    title={h.label}
-                  >
-                    {h.label}
-                  </th>
-                ))}
+                <th style={{ width: 520 }}>Animal</th>
+                <th className="st-td-center" style={{ width: 120 }}>Prod.</th>
+                <th className="st-td-center" style={{ width: 120 }}>Reprod.</th>
+                <th className="st-td-center" style={{ width: 90 }}>DEL</th>
+                <th style={{ width: 140 }}>Origem</th>
+                <th className="st-td-center" style={{ width: 110 }}>Ações</th>
               </tr>
             </thead>
 
             <tbody>
               {linhas.length === 0 && !carregando && (
-                <tr className="st-empty">
-                  <td colSpan={HEADERS.length}>Nenhum animal cadastrado ainda.</td>
+                <tr>
+                  <td colSpan={6} style={{ padding: 18, color: "#64748b", fontWeight: 700 }}>
+                    Nenhum animal cadastrado ainda.
+                  </td>
                 </tr>
               )}
 
               {linhas.map((a, idx) => {
-                const idade = idadeTexto(a.nascimento);
+                const idade = a.idade || idadeTexto(a.nascimento);
                 const racaNome = racaMap[a.raca_id] || "—";
                 const sexoLabel =
-                  a.sexo === "macho"
-                    ? "Macho"
-                    : a.sexo === "femea"
-                    ? "Fêmea"
-                    : a.sexo || "—";
+                  a.sexo === "macho" ? "Macho" : a.sexo === "femea" ? "Fêmea" : a.sexo || "—";
 
                 const sitProd = a.situacao_produtiva || "—";
                 const sitReprod = a.situacao_reprodutiva || "—";
-                const prod = shortProd(sitProd);
-                const rep = shortReprod(sitReprod);
-
                 const del = delFromParto(a.ultimo_parto);
 
-                return (
-                  <tr
-                    key={a.id ?? a.numero ?? a.brinco ?? idx}
-                    className="st-row"
-                  >
-                    {/* ANIMAL (coluna principal) */}
-                    <td className={tdClass(0, "animal")}>
-                      <div className="st-entity">
-                        <div className="st-entity__top">
-                          <span className="st-entity__id">{a.numero ?? "—"}</span>
-                          <span className="st-entity__meta">
-                            {racaNome} • {sexoLabel}
-                          </span>
-                        </div>
+                const prodClass =
+                  String(sitProd).toLowerCase().includes("lact") ? "st-pill st-pill--ok" :
+                  String(sitProd).toLowerCase().includes("seca") ? "st-pill st-pill--mute" :
+                  "st-pill st-pill--info";
 
-                        <div className="st-entity__sub">
-                          <span className="st-subitem">{idade}</span>
-                          <span className="st-dot">•</span>
-                          <span className="st-subitem">Brinco {a.brinco || "—"}</span>
-                          {a.categoria ? (
-                            <>
-                              <span className="st-dot">•</span>
-                              <span className="st-subitem">{a.categoria}</span>
-                            </>
-                          ) : null}
+                const reprClass =
+                  String(sitReprod).toLowerCase().includes("pev") ? "st-pill st-pill--info" :
+                  String(sitReprod).toLowerCase().includes("vaz") ? "st-pill st-pill--mute" :
+                  "st-pill st-pill--info";
+
+                return (
+                  <tr key={a.id ?? a.numero ?? a.brinco ?? idx}>
+                    {/* ANIMAL (duas linhas, mas com respiro) */}
+                    <td>
+                      <div className="st-animal">
+                        <span className="st-animal-num">{a.numero ?? "—"}</span>
+
+                        <div className="st-animal-main">
+                          <div className="st-animal-title">
+                            {racaNome} <span className="st-dot">•</span> {sexoLabel}
+                          </div>
+                          <div className="st-animal-sub">
+                            <span>{idade}</span>
+                            <span className="st-dot">•</span>
+                            <span>Brinco {a.brinco || "—"}</span>
+                          </div>
                         </div>
                       </div>
                     </td>
 
                     {/* PROD */}
-                    <td className={tdClass(1, "prod")} title={sitProd}>
-                      <span className={`st-chip st-chip--${prod.tone}`}>
-                        {prod.label}
-                      </span>
+                    <td className="st-td-center">
+                      {sitProd === "—" ? "—" : (
+                        <span className={prodClass}>
+                          {sitProd === "lactante" ? "LAC" : sitProd}
+                        </span>
+                      )}
                     </td>
 
                     {/* REPROD */}
-                    <td className={tdClass(2, "reprod")} title={sitReprod}>
-                      <span className={`st-chip st-chip--${rep.tone}`}>
-                        {rep.label}
-                      </span>
+                    <td className="st-td-center">
+                      {sitReprod === "—" ? "—" : (
+                        <span className={reprClass}>
+                          {String(sitReprod).toUpperCase().slice(0, 3)}
+                        </span>
+                      )}
                     </td>
 
                     {/* DEL */}
-                    <td className={tdClass(3, "del")} title={del}>
-                      <span className="st-num">{del}</span>
+                    <td className="st-td-center" style={{ fontWeight: 900 }}>
+                      {del}
                     </td>
 
                     {/* ORIGEM */}
-                    <td className={tdClass(4, "origem")} title={a.origem || "—"}>
-                      <span className="st-text">{a.origem || "—"}</span>
+                    <td style={{ fontWeight: 700 }}>
+                      {a.origem || "—"}
                     </td>
 
                     {/* AÇÕES */}
-                    <td className={tdClass(5, "acoes")}>
-                      <button
-                        type="button"
-                        onClick={() => abrirFichaAnimal(a)}
-                        className="st-action"
-                        title="Abrir ficha"
-                        aria-label="Abrir ficha"
-                      >
+                    <td className="st-td-center">
+                      <button onClick={() => abrirFichaAnimal(a)} className="st-btn">
                         Ficha
                       </button>
                     </td>
@@ -309,11 +266,11 @@ export default function Plantel() {
             </tbody>
           </table>
         </div>
-
-        {carregando && (
-          <div className="st-loading">Carregando...</div>
-        )}
       </div>
+
+      {carregando && (
+        <div className="st-loading">Carregando...</div>
+      )}
 
       {animalSelecionado && (
         <FichaAnimal animal={animalSelecionado} onClose={fecharFichaAnimal} />
