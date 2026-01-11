@@ -89,7 +89,7 @@ export default function Plantel() {
   const [loteAviso, setLoteAviso] = useState("");
   const [hoveredRowId, setHoveredRowId] = useState(null);
   const [hoveredColKey, setHoveredColKey] = useState(null);
-  const [ultimaProducao, setUltimaProducao] = useState({});
+  const [ultimaProducaoMap, setUltimaProducaoMap] = useState({});
 
   // ficha
   const [animalSelecionado, setAnimalSelecionado] = useState(null);
@@ -232,52 +232,63 @@ export default function Plantel() {
 
     async function carregarUltimaProducao() {
       if (!Array.isArray(animais) || animais.length === 0) {
-        if (ativo) setUltimaProducao({});
+        if (ativo) setUltimaProducaoMap({});
         return;
       }
 
       const ids = animais.map((animal) => animal.id).filter(Boolean);
       if (ids.length === 0) {
-        if (ativo) setUltimaProducao({});
+        if (ativo) setUltimaProducaoMap({});
         return;
       }
 
       const tabelasLeite = ["medicoes_leite", "leite_registros", "producoes_leite", "leite"];
+      const camposAnimal = ["animal_id", "animalId", "id_animal", "idAnimal"];
       const camposData = ["data", "created_at"];
       const camposValor = ["litros", "producao", "volume"];
 
       for (const tabela of tabelasLeite) {
         let dados = null;
         let erroFinal = null;
+        let campoAnimalEncontrado = null;
 
-        for (const campoData of camposData) {
-          const { data, error } = await supabase
-            .from(tabela)
-            .select("*")
-            .in("animal_id", ids)
-            .order(campoData, { ascending: false })
-            .limit(200);
+        for (const campoAnimal of camposAnimal) {
+          for (const campoData of camposData) {
+            const { data, error } = await supabase
+              .from(tabela)
+              .select("*")
+              .in(campoAnimal, ids)
+              .order(campoData, { ascending: false })
+              .limit(400);
 
-          if (!error) {
-            dados = data;
-            erroFinal = null;
+            if (!error) {
+              dados = data;
+              erroFinal = null;
+              campoAnimalEncontrado = campoAnimal;
+              break;
+            }
+
+            const msg = error.message || "";
+            if (/column .* does not exist/i.test(msg)) {
+              erroFinal = error;
+              continue;
+            }
+
+            erroFinal = error;
             break;
           }
-
-          const msg = error.message || "";
-          if (/column .* does not exist/i.test(msg)) {
-            erroFinal = error;
-            continue;
-          }
-
-          erroFinal = error;
-          break;
+          if (dados) break;
         }
 
         if (Array.isArray(dados)) {
           const mapa = {};
           dados.forEach((registro) => {
-            const animalId = registro?.animal_id;
+            const animalId =
+              registro?.[campoAnimalEncontrado] ??
+              registro?.animal_id ??
+              registro?.animalId ??
+              registro?.id_animal ??
+              registro?.idAnimal;
             if (!animalId || Object.prototype.hasOwnProperty.call(mapa, animalId)) return;
             const valorRaw = camposValor
               .map((campo) => registro?.[campo])
@@ -288,7 +299,7 @@ export default function Plantel() {
             }
           });
 
-          if (ativo) setUltimaProducao(mapa);
+          if (ativo) setUltimaProducaoMap(mapa);
           return;
         }
 
@@ -298,7 +309,7 @@ export default function Plantel() {
         }
       }
 
-      if (ativo) setUltimaProducao({});
+      if (ativo) setUltimaProducaoMap({});
     }
 
     carregarUltimaProducao();
@@ -416,7 +427,7 @@ export default function Plantel() {
       {erro && <div className="st-alert st-alert--danger">{erro}</div>}
       {loteAviso && <div className="st-alert st-alert--warning">{loteAviso}</div>}
 
-      <div className="overflow-x-auto">
+      <div className="st-table-container">
         <div className="st-table-wrap">
           <table
             className="st-table st-table--plantel"
@@ -428,7 +439,7 @@ export default function Plantel() {
             <thead>
               <tr>
                 <th
-                  className="col-animal"
+                  className="col-animal st-col-animal"
                   onMouseEnter={() => handleColEnter("animal")}
                 >
                   Animal
@@ -449,7 +460,7 @@ export default function Plantel() {
                   className="st-td-center col-producao"
                   onMouseEnter={() => handleColEnter("producao")}
                 >
-                  Produção
+                  Última produção
                 </th>
                 <th
                   className="st-td-center col-sitreprod"
@@ -496,8 +507,8 @@ export default function Plantel() {
                 const sitProd = a.situacao_produtiva || "—";
                 const sitReprod = a.situacao_reprodutiva || "—";
                 const del = delFromParto(a.ultimo_parto);
-                const isLact = String(sitProd || "").toLowerCase().includes("lact");
-                const producaoValor = isLact ? ultimaProducao[a.id] : null;
+                const isLact = /lact|lac/i.test(String(sitProd || ""));
+                const producaoValor = isLact ? ultimaProducaoMap[a.id] : null;
                 const producaoTexto = isLact ? formatProducao(producaoValor) : "—";
 
                 const prodClass =
@@ -517,7 +528,7 @@ export default function Plantel() {
                   <tr key={rowId} className={rowHover ? "st-row-hover" : ""}>
                     {/* ANIMAL (duas linhas, mas com respiro) */}
                     <td
-                      className={`col-animal ${
+                      className={`col-animal st-col-animal ${
                         hoveredColKey === "animal" ? "st-col-hover" : ""
                       } ${rowHover ? "st-row-hover" : ""} ${
                         rowHover && hoveredColKey === "animal" ? "st-cell-hover" : ""
