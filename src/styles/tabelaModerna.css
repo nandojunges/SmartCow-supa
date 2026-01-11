@@ -33,7 +33,7 @@
 /* wrapper geral */
 .st-table-wrap {
   width: 100%;
-  overflow: hidden;
+  overflow: visible !important;
   border-radius: var(--st-radius);
   background: var(--st-bg);
   border: 1px solid var(--st-line);
@@ -43,7 +43,7 @@
 /* área rolável (para telas menores) */
 .st-scroll {
   width: 100%;
-  overflow-x: auto;
+  overflow: visible !important;
 }
 
 /* tabela base */
@@ -158,28 +158,44 @@
 
 /* larguras específicas do plantel */
 .st-table--plantel .col-animal {
-  min-width: 320px;
+  width: 28%;
 }
 
 .st-table--plantel .col-lote {
-  min-width: 180px;
+  width: 14%;
 }
 
 .st-table--plantel .col-sitprod,
 .st-table--plantel .col-sitreprod {
-  min-width: 200px;
+  width: 14%;
 }
 
 .st-table--plantel .col-producao {
-  min-width: 120px;
+  width: 8%;
 }
 
 .st-table--plantel .col-del {
-  min-width: 90px;
+  width: 5%;
 }
 
 .st-table--plantel .col-acoes {
-  min-width: 110px;
+  width: 8%;
+}
+
+.st-table--plantel .col-origem {
+  width: 9%;
+}
+
+.st-table-wrap,
+.st-table-card,
+.st-table-container {
+  overflow: visible !important;
+}
+
+.st-col-animal {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
 }
 
 /* linha vazia */
@@ -290,22 +306,19 @@
 .st-animal-title {
   font-weight: 900;
   color: var(--st-text);
-  line-height: 1.1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.15;
+  white-space: normal;
 }
 
 .st-animal-sub {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   color: var(--st-muted);
   font-size: 12px;
   font-weight: 700;
   line-height: 1.1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .st-subitem {
