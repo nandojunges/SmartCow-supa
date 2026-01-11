@@ -90,6 +90,7 @@ export default function Plantel() {
   const [hoveredRowId, setHoveredRowId] = useState(null);
   const [hoveredColKey, setHoveredColKey] = useState(null);
   const [ultProducao, setUltProducao] = useState({});
+  const [editingLoteId, setEditingLoteId] = useState(null);
 
   const thBlueStyle = useMemo(
     () => ({
@@ -334,44 +335,50 @@ export default function Plantel() {
 
   const linhas = useMemo(() => (Array.isArray(animais) ? animais : []), [animais]);
 
-  const selectStyles = useMemo(
+  const selectStylesCompact = useMemo(
     () => ({
+      container: (base) => ({
+        ...base,
+        width: "100%",
+      }),
       control: (base, state) => ({
         ...base,
-        minHeight: 32,
-        height: 32,
-        borderRadius: 8,
-        borderColor: state.isFocused ? "#1e3a8a" : "#cbd5f5",
+        minHeight: 34,
+        height: 34,
+        borderRadius: 10,
+        fontWeight: 700,
+        borderColor: state.isFocused
+          ? "rgba(37,99,235,0.55)"
+          : "rgba(37,99,235,0.25)",
         boxShadow: "none",
-        fontSize: "0.85rem",
         backgroundColor: "#fff",
         cursor: "pointer",
+        ":hover": {
+          borderColor: "rgba(37,99,235,0.55)",
+        },
       }),
       valueContainer: (base) => ({
         ...base,
-        padding: "0 8px",
+        padding: "0 10px",
       }),
       input: (base) => ({
         ...base,
         margin: 0,
         padding: 0,
       }),
+      singleValue: (base) => ({
+        ...base,
+        maxWidth: "100%",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+      }),
       indicatorsContainer: (base) => ({
         ...base,
-        height: 32,
-      }),
-      dropdownIndicator: (base) => ({
-        ...base,
-        padding: 4,
-      }),
-      clearIndicator: (base) => ({
-        ...base,
-        padding: 4,
+        height: 34,
       }),
       menu: (base) => ({
         ...base,
         zIndex: 20,
-        fontSize: "0.85rem",
       }),
       menuPortal: (base) => ({
         ...base,
@@ -381,36 +388,9 @@ export default function Plantel() {
     []
   );
 
-  const handleLoteChange = useCallback(
-    async (animal, option) => {
-      if (!animal?.id || !loteField) return;
-      const isIdField = loteField.endsWith("_id");
-      const valorNovo = isIdField ? option?.value ?? null : option?.label ?? null;
-      const valorAnterior = animal[loteField] ?? null;
-
-      setAnimais((prev) =>
-        prev.map((item) =>
-          item.id === animal.id ? { ...item, [loteField]: valorNovo } : item
-        )
-      );
-      setLoteAviso("");
-
-      const { error: updateErr } = await supabase
-        .from("animais")
-        .update({ [loteField]: valorNovo })
-        .eq("id", animal.id);
-
-      if (updateErr) {
-        setAnimais((prev) =>
-          prev.map((item) =>
-            item.id === animal.id ? { ...item, [loteField]: valorAnterior } : item
-          )
-        );
-        setLoteAviso("Não foi possível atualizar o lote. Tente novamente.");
-      }
-    },
-    [loteField]
-  );
+  const closeLoteEdit = useCallback(() => {
+    setEditingLoteId(null);
+  }, []);
 
   const resolveSelectedLote = useCallback(
     (animal) => {
@@ -423,6 +403,95 @@ export default function Plantel() {
       return loteOptions.find((opt) => opt.label === valorAtual) || null;
     },
     [loteField, loteOptions]
+  );
+
+  const resolveLoteLabel = useCallback(
+    (animal) => {
+      if (!animal) return "Sem lote";
+      if (animal.lote_nome) return animal.lote_nome;
+      if (!loteField) return "Sem lote";
+      const valorAtual = animal[loteField];
+      if (valorAtual == null || valorAtual === "") return "Sem lote";
+      if (loteField.endsWith("_id")) {
+        return resolveSelectedLote(animal)?.label || "Sem lote";
+      }
+      return valorAtual;
+    },
+    [loteField, resolveSelectedLote]
+  );
+
+  const handleRemoveLote = useCallback(
+    async (animal) => {
+      if (!animal?.id || !loteField) return;
+      const valorAnterior = animal[loteField] ?? null;
+
+      setAnimais((prev) =>
+        prev.map((item) =>
+          item.id === animal.id
+            ? { ...item, [loteField]: null, lote_nome: null }
+            : item
+        )
+      );
+      setLoteAviso("");
+
+      const { error: updateErr } = await supabase
+        .from("animais")
+        .update({ [loteField]: null })
+        .eq("id", animal.id);
+
+      if (updateErr) {
+        setAnimais((prev) =>
+          prev.map((item) =>
+            item.id === animal.id
+              ? { ...item, [loteField]: valorAnterior }
+              : item
+          )
+        );
+        setLoteAviso("Não foi possível atualizar o lote. Tente novamente.");
+      }
+
+      closeLoteEdit();
+    },
+    [closeLoteEdit, loteField]
+  );
+
+  const handleSetLote = useCallback(
+    async (animal, option) => {
+      if (!animal?.id || !loteField) return;
+      const isIdField = loteField.endsWith("_id");
+      const loteId = option?.value ?? null;
+      const loteNome = option?.label ?? null;
+      const valorNovo = isIdField ? loteId : loteNome;
+      const valorAnterior = animal[loteField] ?? null;
+
+      setAnimais((prev) =>
+        prev.map((item) =>
+          item.id === animal.id
+            ? { ...item, [loteField]: valorNovo, lote_nome: loteNome }
+            : item
+        )
+      );
+      setLoteAviso("");
+
+      const { error: updateErr } = await supabase
+        .from("animais")
+        .update({ [loteField]: valorNovo })
+        .eq("id", animal.id);
+
+      if (updateErr) {
+        setAnimais((prev) =>
+          prev.map((item) =>
+            item.id === animal.id
+              ? { ...item, [loteField]: valorAnterior }
+              : item
+          )
+        );
+        setLoteAviso("Não foi possível atualizar o lote. Tente novamente.");
+      }
+
+      closeLoteEdit();
+    },
+    [closeLoteEdit, loteField]
   );
 
   const handleColEnter = useCallback((colKey) => {
@@ -597,17 +666,79 @@ export default function Plantel() {
                       }`}
                       onMouseEnter={() => handleCellEnter(rowId, "lote")}
                     >
-                      <Select
-                        classNamePrefix="st-select"
-                        styles={selectStyles}
-                        options={loteOptions}
-                        value={resolveSelectedLote(a)}
-                        onChange={(option) => handleLoteChange(a, option)}
-                        isClearable
-                        placeholder="Selecione"
-                        menuPortalTarget={document.body}
-                        menuPosition="fixed"
-                      />
+                      {editingLoteId === a.id ? (
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            justifyContent: "center",
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") closeLoteEdit();
+                          }}
+                        >
+                          <button
+                            type="button"
+                            title="Remover lote"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => handleRemoveLote(a)}
+                            style={{
+                              height: 34,
+                              width: 34,
+                              borderRadius: 10,
+                              border: "1px solid rgba(15,23,42,0.12)",
+                              background: "#f8fafc",
+                              cursor: "pointer",
+                              fontWeight: 900,
+                            }}
+                          >
+                            ×
+                          </button>
+
+                          <div style={{ minWidth: 180 }}>
+                            <Select
+                              autoFocus
+                              menuIsOpen
+                              menuPortalTarget={document.body}
+                              styles={selectStylesCompact}
+                              options={loteOptions}
+                              value={resolveSelectedLote(a)}
+                              placeholder="Selecionar lote…"
+                              onChange={(option) => handleSetLote(a, option)}
+                              onBlur={closeLoteEdit}
+                              isClearable={false}
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setEditingLoteId(a.id)}
+                          title="Clique para alterar o lote"
+                          style={{
+                            maxWidth: 220,
+                            width: "100%",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: 8,
+                            height: 30,
+                            padding: "0 12px",
+                            borderRadius: 999,
+                            border: "1px solid rgba(15,23,42,0.10)",
+                            background: resolveSelectedLote(a) ? "#eef6ff" : "#f1f5f9",
+                            color: "#0b2a66",
+                            fontWeight: 800,
+                            cursor: "pointer",
+                            overflow: "hidden",
+                            whiteSpace: "nowrap",
+                            textOverflow: "ellipsis",
+                          }}
+                        >
+                          {resolveLoteLabel(a)}
+                        </button>
+                      )}
                     </td>
 
                     {/* PROD */}
