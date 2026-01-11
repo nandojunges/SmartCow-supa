@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import Select from "react-select";
 import { supabase } from "../../lib/supabaseClient";
-import "../styles/tabelaModerna.css";
+import "../../styles/tabelaModerna.css";
 import FichaAnimal from "./FichaAnimal/FichaAnimal";
 
 /* ========= helpers de data ========= */
