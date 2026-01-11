@@ -94,7 +94,7 @@ export default function Plantel() {
   const thBlueStyle = useMemo(
     () => ({
       background:
-        "linear-gradient(180deg, #0b2a66 0%, #123a7a 88%, rgba(255,255,255,0.08) 100%)",
+        "linear-gradient(180deg, #0b2a66 0%, #0b2a66 70%, rgba(255,255,255,0.14) 100%)",
       color: "#f8fafc",
       borderBottom: "1px solid rgba(15,23,42,0.2)",
     }),
@@ -450,13 +450,13 @@ export default function Plantel() {
             }}
           >
             <colgroup>
-              <col style={{ width: "24%" }} />
-              <col style={{ width: "13%" }} />
-              <col style={{ width: "15%" }} />
-              <col style={{ width: "15%" }} />
+              <col style={{ width: "20%" }} />
               <col style={{ width: "10%" }} />
+              <col style={{ width: "16%" }} />
+              <col style={{ width: "16%" }} />
+              <col style={{ width: "14%" }} />
               <col style={{ width: "6%" }} />
-              <col style={{ width: "9%" }} />
+              <col style={{ width: "10%" }} />
               <col style={{ width: "8%" }} />
             </colgroup>
             <thead>
@@ -649,7 +649,7 @@ export default function Plantel() {
                       } ${rowHover ? "st-row-hover" : ""} ${
                         rowHover && hoveredColKey === "producao" ? "st-cell-hover" : ""
                       }`}
-                      style={{ overflow: "visible", textOverflow: "clip", whiteSpace: "nowrap" }}
+                      style={{ textOverflow: "clip" }}
                       onMouseEnter={() => handleCellEnter(rowId, "producao")}
                     >
                       <span className="st-num">{producaoTexto}</span>
