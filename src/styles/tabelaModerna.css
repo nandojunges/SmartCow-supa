@@ -59,12 +59,12 @@
 /* cabeçalho */
 .st-table thead th,
 .st-table thead th.st-th {
-  background: linear-gradient(180deg, var(--st-head-bg), #ffffff);
-  color: var(--st-head-text);
+  background: linear-gradient(180deg, #0b2a55 0%, #0a2347 100%);
+  color: #fff;
   font-weight: 800;
   letter-spacing: 0.2px;
   padding: 14px 16px;
-  border-bottom: 1px solid var(--st-line);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
   position: sticky;
   top: 0;
   z-index: 3;
@@ -84,22 +84,11 @@
 
 /* zebra */
 .st-table tbody tr:nth-child(odd) {
-  background: var(--st-row-odd);
+  background: #ffffff;
 }
 
 .st-table tbody tr:nth-child(even) {
-  background: var(--st-row-even);
-}
-
-/* hover de linha */
-.st-table tbody tr:hover,
-.st-row:hover {
-  background: var(--st-row-hover);
-}
-
-/* evita que o hover fique “amontoado” visualmente */
-.st-table tbody tr:hover td {
-  border-bottom-color: #dbeafe;
+  background: #f1f7ff;
 }
 
 /* linha base */
@@ -118,11 +107,11 @@
 }
 
 .st-table thead th:first-child {
-  border-top-left-radius: var(--st-radius);
+  border-top-left-radius: 12px;
 }
 
 .st-table thead th:last-child {
-  border-top-right-radius: var(--st-radius);
+  border-top-right-radius: 12px;
 }
 
 /* alinhamentos utilitários */
@@ -142,22 +131,55 @@
 }
 
 /* coluna/linha hover - apenas no corpo */
-.st-table tbody td.st-col-hover,
-.st-table tbody tr.st-row-hover td,
-.st-table tbody td.st-row-hover,
-.st-table tbody td.st-cell-hover,
-.st-table tbody td.coluna-hover {
-  background: rgba(37, 99, 235, 0.08);
+.st-table tbody tr.st-row-hover {
+  background: #dbeafe !important;
 }
 
-/* cabeçalho não recebe overlay, só feedback sutil */
-.st-table thead th.st-col-hover {
-  box-shadow: inset 0 -2px 0 rgba(37, 99, 235, 0.55);
+.st-table tbody td.st-col-hover {
+  background: rgba(59, 130, 246, 0.1) !important;
+}
+
+.st-table tbody td.st-cell-hover {
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.25);
+}
+
+/* cabeçalho não recebe overlay */
+.st-table thead th.st-col-hover,
+.st-table thead th.is-col-hover,
+.st-table thead th.col-hover {
+  background: linear-gradient(180deg, #0b2a55 0%, #0a2347 100%) !important;
+  color: #fff !important;
 }
 
 .st-table thead th::before,
 .st-table thead th::after {
   content: none !important;
+}
+
+/* larguras específicas do plantel */
+.st-table--plantel .col-animal {
+  min-width: 320px;
+}
+
+.st-table--plantel .col-lote {
+  min-width: 180px;
+}
+
+.st-table--plantel .col-sitprod,
+.st-table--plantel .col-sitreprod {
+  min-width: 200px;
+}
+
+.st-table--plantel .col-producao {
+  min-width: 120px;
+}
+
+.st-table--plantel .col-del {
+  min-width: 90px;
+}
+
+.st-table--plantel .col-acoes {
+  min-width: 110px;
 }
 
 /* linha vazia */

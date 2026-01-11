@@ -74,6 +74,11 @@ function delFromParto(partoStr, secagemOpcional) {
   return String(Math.max(0, dias));
 }
 
+function formatProducao(valor) {
+  if (!Number.isFinite(valor)) return "—";
+  return valor.toFixed(1).replace(".", ",");
+}
+
 export default function Plantel() {
   const [animais, setAnimais] = useState([]);
   const [racaMap, setRacaMap] = useState({});
@@ -84,6 +89,7 @@ export default function Plantel() {
   const [loteAviso, setLoteAviso] = useState("");
   const [hoveredRowId, setHoveredRowId] = useState(null);
   const [hoveredColKey, setHoveredColKey] = useState(null);
+  const [ultimaProducao, setUltimaProducao] = useState({});
 
   // ficha
   const [animalSelecionado, setAnimalSelecionado] = useState(null);
@@ -221,6 +227,87 @@ export default function Plantel() {
     };
   }, []);
 
+  useEffect(() => {
+    let ativo = true;
+
+    async function carregarUltimaProducao() {
+      if (!Array.isArray(animais) || animais.length === 0) {
+        if (ativo) setUltimaProducao({});
+        return;
+      }
+
+      const ids = animais.map((animal) => animal.id).filter(Boolean);
+      if (ids.length === 0) {
+        if (ativo) setUltimaProducao({});
+        return;
+      }
+
+      const tabelasLeite = ["medicoes_leite", "leite_registros", "producoes_leite", "leite"];
+      const camposData = ["data", "created_at"];
+      const camposValor = ["litros", "producao", "volume"];
+
+      for (const tabela of tabelasLeite) {
+        let dados = null;
+        let erroFinal = null;
+
+        for (const campoData of camposData) {
+          const { data, error } = await supabase
+            .from(tabela)
+            .select("*")
+            .in("animal_id", ids)
+            .order(campoData, { ascending: false })
+            .limit(200);
+
+          if (!error) {
+            dados = data;
+            erroFinal = null;
+            break;
+          }
+
+          const msg = error.message || "";
+          if (/column .* does not exist/i.test(msg)) {
+            erroFinal = error;
+            continue;
+          }
+
+          erroFinal = error;
+          break;
+        }
+
+        if (Array.isArray(dados)) {
+          const mapa = {};
+          dados.forEach((registro) => {
+            const animalId = registro?.animal_id;
+            if (!animalId || Object.prototype.hasOwnProperty.call(mapa, animalId)) return;
+            const valorRaw = camposValor
+              .map((campo) => registro?.[campo])
+              .find((valor) => valor != null && valor !== "");
+            const valor = Number(valorRaw);
+            if (Number.isFinite(valor)) {
+              mapa[animalId] = valor;
+            }
+          });
+
+          if (ativo) setUltimaProducao(mapa);
+          return;
+        }
+
+        const msg = erroFinal?.message || "";
+        if (/relation .* does not exist/i.test(msg)) {
+          continue;
+        }
+      }
+
+      if (ativo) setUltimaProducao({});
+    }
+
+    carregarUltimaProducao();
+
+    return () => {
+      ativo = false;
+    };
+  }, [animais]);
+
   const linhas = useMemo(() => (Array.isArray(animais) ? animais : []), [animais]);
 
   const selectStyles = useMemo(
@@ -341,49 +428,49 @@ export default function Plantel() {
             <thead>
               <tr>
                 <th
-                  className={`col-animal ${hoveredColKey === "animal" ? "st-col-hover" : ""}`}
+                  className="col-animal"
                   onMouseEnter={() => handleColEnter("animal")}
                 >
                   Animal
                 </th>
                 <th
-                  className={`col-lote ${hoveredColKey === "lote" ? "st-col-hover" : ""}`}
+                  className="col-lote"
                   onMouseEnter={() => handleColEnter("lote")}
                 >
                   Lote
                 </th>
                 <th
-                  className={`st-td-center col-sitprod ${
-                    hoveredColKey === "sitprod" ? "st-col-hover" : ""
-                  }`}
+                  className="st-td-center col-sitprod"
                   onMouseEnter={() => handleColEnter("sitprod")}
                 >
                   Situação produtiva
                 </th>
                 <th
-                  className={`st-td-center col-sitreprod ${
-                    hoveredColKey === "sitreprod" ? "st-col-hover" : ""
-                  }`}
+                  className="st-td-center col-producao"
+                  onMouseEnter={() => handleColEnter("producao")}
+                >
+                  Produção
+                </th>
+                <th
+                  className="st-td-center col-sitreprod"
                   onMouseEnter={() => handleColEnter("sitreprod")}
                 >
                   Situação reprodutiva
                 </th>
                 <th
-                  className={`st-td-center col-del ${hoveredColKey === "del" ? "st-col-hover" : ""}`}
+                  className="st-td-center col-del"
                   onMouseEnter={() => handleColEnter("del")}
                 >
                   DEL
                 </th>
                 <th
-                  className={`col-origem ${hoveredColKey === "origem" ? "st-col-hover" : ""}`}
+                  className="col-origem"
                   onMouseEnter={() => handleColEnter("origem")}
                 >
                   Origem
                 </th>
                 <th
-                  className={`st-td-center col-acoes ${
-                    hoveredColKey === "acoes" ? "st-col-hover" : ""
-                  }`}
+                  className="st-td-center col-acoes"
                   onMouseEnter={() => handleColEnter("acoes")}
                 >
                   Ações
@@ -394,7 +481,7 @@ export default function Plantel() {
             <tbody>
               {linhas.length === 0 && !carregando && (
                 <tr>
-                  <td colSpan={7} style={{ padding: 18, color: "#64748b", fontWeight: 700 }}>
+                  <td colSpan={8} style={{ padding: 18, color: "#64748b", fontWeight: 700 }}>
                     Nenhum animal cadastrado ainda.
                   </td>
                 </tr>
@@ -409,6 +496,9 @@ export default function Plantel() {
                 const sitProd = a.situacao_produtiva || "—";
                 const sitReprod = a.situacao_reprodutiva || "—";
                 const del = delFromParto(a.ultimo_parto);
+                const isLact = String(sitProd || "").toLowerCase().includes("lact");
+                const producaoValor = isLact ? ultimaProducao[a.id] : null;
+                const producaoTexto = isLact ? formatProducao(producaoValor) : "—";
 
                 const prodClass =
                   String(sitProd).toLowerCase().includes("lact") ? "st-pill st-pill--ok" :
@@ -491,6 +581,18 @@ export default function Plantel() {
                           {sitProd === "lactante" ? "LAC" : sitProd}
                         </span>
                       )}
+                    </td>
+
+                    {/* PRODUÇÃO */}
+                    <td
+                      className={`st-td-center col-producao ${
+                        hoveredColKey === "producao" ? "st-col-hover" : ""
+                      } ${rowHover ? "st-row-hover" : ""} ${
+                        rowHover && hoveredColKey === "producao" ? "st-cell-hover" : ""
+                      }`}
+                      onMouseEnter={() => handleCellEnter(rowId, "producao")}
+                    >
+                      {producaoTexto}
                     </td>
 
                     {/* REPROD */}
