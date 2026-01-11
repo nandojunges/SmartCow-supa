@@ -89,7 +89,17 @@ export default function Plantel() {
   const [loteAviso, setLoteAviso] = useState("");
   const [hoveredRowId, setHoveredRowId] = useState(null);
   const [hoveredColKey, setHoveredColKey] = useState(null);
-  const [ultimaProducaoMap, setUltimaProducaoMap] = useState({});
+  const [ultProducao, setUltProducao] = useState({});
+
+  const thBlueStyle = useMemo(
+    () => ({
+      background:
+        "linear-gradient(180deg, #0b2a66 0%, #123a7a 70%, rgba(255,255,255,0.16) 100%)",
+      color: "#f8fafc",
+      borderBottom: "1px solid rgba(15,23,42,0.2)",
+    }),
+    []
+  );
 
   // ficha
   const [animalSelecionado, setAnimalSelecionado] = useState(null);
@@ -232,13 +242,16 @@ export default function Plantel() {
 
     async function carregarUltimaProducao() {
       if (!Array.isArray(animais) || animais.length === 0) {
-        if (ativo) setUltimaProducaoMap({});
+        if (ativo) setUltProducao({});
         return;
       }
 
-      const ids = animais.map((animal) => animal.id).filter(Boolean);
+      const ids = animais
+        .filter((animal) => /lact|lac/i.test(String(animal?.situacao_produtiva || "")))
+        .map((animal) => animal.id)
+        .filter(Boolean);
       if (ids.length === 0) {
-        if (ativo) setUltimaProducaoMap({});
+        if (ativo) setUltProducao({});
         return;
       }
 
@@ -299,7 +312,7 @@ export default function Plantel() {
             }
           });
 
-          if (ativo) setUltimaProducaoMap(mapa);
+          if (ativo) setUltProducao(mapa);
           return;
         }
 
@@ -309,7 +322,7 @@ export default function Plantel() {
         }
       }
 
-      if (ativo) setUltimaProducaoMap({});
+      if (ativo) setUltProducao({});
     }
 
     carregarUltimaProducao();
@@ -430,58 +443,76 @@ export default function Plantel() {
       <div className="st-table-container">
         <div className="st-table-wrap">
           <table
-            className="st-table st-table--plantel"
+            className="st-table"
             onMouseLeave={() => {
               setHoveredRowId(null);
               setHoveredColKey(null);
             }}
           >
+            <colgroup>
+              <col style={{ width: "26%" }} />
+              <col style={{ width: "14%" }} />
+              <col style={{ width: "16%" }} />
+              <col style={{ width: "16%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "6%" }} />
+              <col style={{ width: "12%" }} />
+              <col style={{ width: "8%" }} />
+            </colgroup>
             <thead>
               <tr>
                 <th
                   className="col-animal st-col-animal"
+                  style={thBlueStyle}
                   onMouseEnter={() => handleColEnter("animal")}
                 >
                   Animal
                 </th>
                 <th
                   className="col-lote"
+                  style={thBlueStyle}
                   onMouseEnter={() => handleColEnter("lote")}
                 >
                   Lote
                 </th>
                 <th
                   className="st-td-center col-sitprod"
+                  style={thBlueStyle}
                   onMouseEnter={() => handleColEnter("sitprod")}
                 >
                   Situação produtiva
                 </th>
                 <th
-                  className="st-td-center col-producao"
-                  onMouseEnter={() => handleColEnter("producao")}
-                >
-                  Última produção
-                </th>
-                <th
                   className="st-td-center col-sitreprod"
+                  style={thBlueStyle}
                   onMouseEnter={() => handleColEnter("sitreprod")}
                 >
                   Situação reprodutiva
                 </th>
                 <th
+                  className="st-td-center col-producao"
+                  style={thBlueStyle}
+                  onMouseEnter={() => handleColEnter("producao")}
+                >
+                  Última produção
+                </th>
+                <th
                   className="st-td-center col-del"
+                  style={thBlueStyle}
                   onMouseEnter={() => handleColEnter("del")}
                 >
                   DEL
                 </th>
                 <th
                   className="col-origem"
+                  style={thBlueStyle}
                   onMouseEnter={() => handleColEnter("origem")}
                 >
                   Origem
                 </th>
                 <th
                   className="st-td-center col-acoes"
+                  style={thBlueStyle}
                   onMouseEnter={() => handleColEnter("acoes")}
                 >
                   Ações
@@ -508,8 +539,9 @@ export default function Plantel() {
                 const sitReprod = a.situacao_reprodutiva || "—";
                 const del = delFromParto(a.ultimo_parto);
                 const isLact = /lact|lac/i.test(String(sitProd || ""));
-                const producaoValor = isLact ? ultimaProducaoMap[a.id] : null;
-                const producaoTexto = isLact ? formatProducao(producaoValor) : "—";
+                const litros = isLact ? ultProducao[a.id] : null;
+                const producaoTexto =
+                  isLact && Number.isFinite(litros) ? formatProducao(litros) : "—";
 
                 const prodClass =
                   String(sitProd).toLowerCase().includes("lact") ? "st-pill st-pill--ok" :
@@ -594,18 +626,6 @@ export default function Plantel() {
                       )}
                     </td>
 
-                    {/* PRODUÇÃO */}
-                    <td
-                      className={`st-td-center col-producao ${
-                        hoveredColKey === "producao" ? "st-col-hover" : ""
-                      } ${rowHover ? "st-row-hover" : ""} ${
-                        rowHover && hoveredColKey === "producao" ? "st-cell-hover" : ""
-                      }`}
-                      onMouseEnter={() => handleCellEnter(rowId, "producao")}
-                    >
-                      {producaoTexto}
-                    </td>
-
                     {/* REPROD */}
                     <td
                       className={`st-td-center col-sitreprod ${
@@ -620,6 +640,18 @@ export default function Plantel() {
                           {String(sitReprod).toUpperCase().slice(0, 3)}
                         </span>
                       )}
+                    </td>
+
+                    {/* PRODUÇÃO */}
+                    <td
+                      className={`st-td-right col-producao ${
+                        hoveredColKey === "producao" ? "st-col-hover" : ""
+                      } ${rowHover ? "st-row-hover" : ""} ${
+                        rowHover && hoveredColKey === "producao" ? "st-cell-hover" : ""
+                      }`}
+                      onMouseEnter={() => handleCellEnter(rowId, "producao")}
+                    >
+                      <span className="st-num">{producaoTexto}</span>
                     </td>
 
                     {/* DEL */}

@@ -59,12 +59,12 @@
 /* cabeçalho */
 .st-table thead th,
 .st-table thead th.st-th {
-  background: linear-gradient(180deg, #0b2a55 0%, #0a2347 100%);
-  color: #fff;
+  background: linear-gradient(180deg, var(--st-head-bg), #ffffff);
+  color: var(--st-head-text);
   font-weight: 800;
   letter-spacing: 0.2px;
   padding: 14px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+  border-bottom: 1px solid var(--st-line);
   position: sticky;
   top: 0;
   z-index: 3;
@@ -145,45 +145,14 @@
 
 /* cabeçalho não recebe overlay */
 .st-table thead th.st-col-hover,
-.st-table thead th.is-col-hover,
-.st-table thead th.col-hover {
-  background: linear-gradient(180deg, #0b2a55 0%, #0a2347 100%) !important;
-  color: #fff !important;
+.st-table thead th.st-cell-hover,
+.st-table thead th.st-row-hover {
+  background: inherit !important;
 }
 
 .st-table thead th::before,
 .st-table thead th::after {
   content: none !important;
-}
-
-/* larguras específicas do plantel */
-.st-table--plantel .col-animal {
-  width: 28%;
-}
-
-.st-table--plantel .col-lote {
-  width: 14%;
-}
-
-.st-table--plantel .col-sitprod,
-.st-table--plantel .col-sitreprod {
-  width: 14%;
-}
-
-.st-table--plantel .col-producao {
-  width: 8%;
-}
-
-.st-table--plantel .col-del {
-  width: 5%;
-}
-
-.st-table--plantel .col-acoes {
-  width: 8%;
-}
-
-.st-table--plantel .col-origem {
-  width: 9%;
 }
 
 .st-table-wrap,
@@ -417,42 +386,4 @@
 .st-text {
   color: var(--st-text);
   font-weight: 700;
-}
-
-/* =========================
-   Column sizing (evitar cortes)
-   Ajuste global por tipo de coluna
-   ========================= */
-.st-table--entity th.animal,
-.st-table--entity td.animal {
-  width: 44%;
-}
-
-.st-table--entity th.prod,
-.st-table--entity td.prod {
-  width: 9%;
-}
-
-.st-table--entity th.reprod,
-.st-table--entity td.reprod {
-  width: 10%;
-}
-
-.st-table--entity th.del,
-.st-table--entity td.del {
-  width: 7%;
-  text-align: right;
-}
-
-.st-table--entity th.origem,
-.st-table--entity td.origem {
-  width: 16%;
-}
-
-.st-table--entity th.acoes,
-.st-table--entity td.acoes {
-  width: 14%;
-  text-align: right;
-  white-space: nowrap;
-  overflow: visible;
 }
