@@ -1,7 +1,8 @@
 // src/pages/Animais/Plantel.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
+import Select from "react-select";
 import { supabase } from "../../lib/supabaseClient";
-import "../../styles/tabelaModerna.css";
+import "../styles/tabelaModerna.css";
 import FichaAnimal from "./FichaAnimal/FichaAnimal";
 
 /* ========= helpers de data ========= */
@@ -78,11 +79,46 @@ export default function Plantel() {
   const [racaMap, setRacaMap] = useState({});
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
+  const [lotes, setLotes] = useState([]);
+  const [loteMeta, setLoteMeta] = useState({ table: "", idKey: "id", labelKey: "nome" });
+  const [loteAviso, setLoteAviso] = useState("");
+  const [hoveredRowId, setHoveredRowId] = useState(null);
+  const [hoveredColKey, setHoveredColKey] = useState(null);
 
   // ficha
   const [animalSelecionado, setAnimalSelecionado] = useState(null);
   const abrirFichaAnimal = (animal) => setAnimalSelecionado(animal);
   const fecharFichaAnimal = () => setAnimalSelecionado(null);
+
+  const detectLoteField = useCallback((lista) => {
+    const campos = ["lote_id", "grupo_id", "lote", "grupo"];
+    const sample = Array.isArray(lista) ? lista.find(Boolean) : null;
+    if (!sample) return "lote_id";
+    const found = campos.find((campo) =>
+      Object.prototype.hasOwnProperty.call(sample, campo)
+    );
+    return found || "lote_id";
+  }, []);
+
+  const loteField = useMemo(() => detectLoteField(animais), [animais, detectLoteField]);
+
+  const loteOptions = useMemo(() => {
+    const idKey = loteMeta.idKey || "id";
+    const labelKey = loteMeta.labelKey || "nome";
+    return (lotes || []).map((lote) => {
+      const label =
+        lote[labelKey] ??
+        lote.nome ??
+        lote.descricao ??
+        lote.titulo ??
+        lote.label ??
+        String(lote[idKey] ?? "—");
+      return {
+        value: lote[idKey],
+        label,
+      };
+    });
+  }, [lotes, loteMeta]);
 
   useEffect(() => {
     let ativo = true;
@@ -90,6 +126,7 @@ export default function Plantel() {
     async function carregarDados() {
       setCarregando(true);
       setErro("");
+      setLoteAviso("");
 
       try {
         const {
@@ -101,21 +138,7 @@ export default function Plantel() {
 
         const { data: animaisData, error: animaisErr } = await supabase
           .from("animais")
-          .select(
-            [
-              "id",
-              "numero",
-              "brinco",
-              "nascimento",
-              "sexo",
-              "categoria",
-              "origem",
-              "situacao_produtiva",
-              "situacao_reprodutiva",
-              "ultimo_parto",
-              "raca_id",
-            ].join(", ")
-          )
+          .select("*")
           .eq("user_id", user.id)
           .eq("ativo", true)
           .order("numero", { ascending: true });
@@ -136,8 +159,53 @@ export default function Plantel() {
           map[r.id] = r.nome;
         });
 
+        const lotesTabelas = [
+          "lotes",
+          "grupos",
+          "grupos_animais",
+          "grupo_animais",
+          "lotes_animais",
+        ];
+
+        let lotesEncontrados = [];
+        let loteMetaLocal = { table: "", idKey: "id", labelKey: "nome" };
+
+        for (const tabela of lotesTabelas) {
+          let lotesQuery = supabase.from(tabela).select("*").order("id", { ascending: true });
+          let { data: lotesData, error: lotesErr } = await lotesQuery.eq("user_id", user.id);
+
+          if (lotesErr && /column .*user_id.* does not exist/i.test(lotesErr.message || "")) {
+            const retry = await supabase.from(tabela).select("*").order("id", { ascending: true });
+            lotesData = retry.data;
+            lotesErr = retry.error;
+          }
+
+          if (!lotesErr && Array.isArray(lotesData)) {
+            const sample = lotesData.find(Boolean);
+            const idKey = sample && Object.prototype.hasOwnProperty.call(sample, "id")
+              ? "id"
+              : sample && Object.prototype.hasOwnProperty.call(sample, "uuid")
+              ? "uuid"
+              : "id";
+            const labelKey = sample && Object.prototype.hasOwnProperty.call(sample, "nome")
+              ? "nome"
+              : sample && Object.prototype.hasOwnProperty.call(sample, "descricao")
+              ? "descricao"
+              : sample && Object.prototype.hasOwnProperty.call(sample, "titulo")
+              ? "titulo"
+              : sample && Object.prototype.hasOwnProperty.call(sample, "label")
+              ? "label"
+              : "nome";
+            lotesEncontrados = lotesData;
+            loteMetaLocal = { table: tabela, idKey, labelKey };
+            break;
+          }
+        }
+
         setRacaMap(map);
         setAnimais(Array.isArray(animaisData) ? animaisData : []);
+        setLotes(lotesEncontrados);
+        setLoteMeta(loteMetaLocal);
       } catch (e) {
         console.error("Erro ao carregar plantel:", e);
         if (!ativo) return;
@@ -155,32 +223,178 @@ export default function Plantel() {
 
   const linhas = useMemo(() => (Array.isArray(animais) ? animais : []), [animais]);
 
+  const selectStyles = useMemo(
+    () => ({
+      control: (base, state) => ({
+        ...base,
+        minHeight: 32,
+        height: 32,
+        borderRadius: 8,
+        borderColor: state.isFocused ? "#1e3a8a" : "#cbd5f5",
+        boxShadow: "none",
+        fontSize: "0.85rem",
+        backgroundColor: "#fff",
+        cursor: "pointer",
+      }),
+      valueContainer: (base) => ({
+        ...base,
+        padding: "0 8px",
+      }),
+      input: (base) => ({
+        ...base,
+        margin: 0,
+        padding: 0,
+      }),
+      indicatorsContainer: (base) => ({
+        ...base,
+        height: 32,
+      }),
+      dropdownIndicator: (base) => ({
+        ...base,
+        padding: 4,
+      }),
+      clearIndicator: (base) => ({
+        ...base,
+        padding: 4,
+      }),
+      menu: (base) => ({
+        ...base,
+        zIndex: 20,
+        fontSize: "0.85rem",
+      }),
+      menuPortal: (base) => ({
+        ...base,
+        zIndex: 9999,
+      }),
+    }),
+    []
+  );
+
+  const handleLoteChange = useCallback(
+    async (animal, option) => {
+      if (!animal?.id || !loteField) return;
+      const isIdField = loteField.endsWith("_id");
+      const valorNovo = isIdField ? option?.value ?? null : option?.label ?? null;
+      const valorAnterior = animal[loteField] ?? null;
+
+      setAnimais((prev) =>
+        prev.map((item) =>
+          item.id === animal.id ? { ...item, [loteField]: valorNovo } : item
+        )
+      );
+      setLoteAviso("");
+
+      const { error: updateErr } = await supabase
+        .from("animais")
+        .update({ [loteField]: valorNovo })
+        .eq("id", animal.id);
+
+      if (updateErr) {
+        setAnimais((prev) =>
+          prev.map((item) =>
+            item.id === animal.id ? { ...item, [loteField]: valorAnterior } : item
+          )
+        );
+        setLoteAviso("Não foi possível atualizar o lote. Tente novamente.");
+      }
+    },
+    [loteField]
+  );
+
+  const resolveSelectedLote = useCallback(
+    (animal) => {
+      if (!loteField) return null;
+      const valorAtual = animal?.[loteField];
+      if (valorAtual == null) return null;
+      if (loteField.endsWith("_id")) {
+        return loteOptions.find((opt) => opt.value === valorAtual) || null;
+      }
+      return loteOptions.find((opt) => opt.label === valorAtual) || null;
+    },
+    [loteField, loteOptions]
+  );
+
+  const handleColEnter = useCallback((colKey) => {
+    setHoveredColKey(colKey);
+    setHoveredRowId(null);
+  }, []);
+
+  const handleCellEnter = useCallback((rowId, colKey) => {
+    setHoveredRowId(rowId);
+    setHoveredColKey(colKey);
+  }, []);
+
   return (
     <section className="w-full">
-      {erro && (
-        <div className="st-alert st-alert--danger">
-          {erro}
-        </div>
-      )}
+      {erro && <div className="st-alert st-alert--danger">{erro}</div>}
+      {loteAviso && <div className="st-alert st-alert--warning">{loteAviso}</div>}
 
       <div className="overflow-x-auto">
         <div className="st-table-wrap">
-          <table className="st-table">
+          <table
+            className="st-table st-table--plantel"
+            onMouseLeave={() => {
+              setHoveredRowId(null);
+              setHoveredColKey(null);
+            }}
+          >
             <thead>
               <tr>
-                <th style={{ width: "46%" }}>Animal</th>
-                <th className="st-td-center" style={{ width: "12%" }}>Prod.</th>
-                <th className="st-td-center" style={{ width: "12%" }}>Reprod.</th>
-                <th className="st-td-center" style={{ width: "10%" }}>DEL</th>
-                <th style={{ width: "12%" }}>Origem</th>
-                <th className="st-td-center" style={{ width: "8%" }}>Ações</th>
+                <th
+                  className={`col-animal ${hoveredColKey === "animal" ? "st-col-hover" : ""}`}
+                  onMouseEnter={() => handleColEnter("animal")}
+                >
+                  Animal
+                </th>
+                <th
+                  className={`col-lote ${hoveredColKey === "lote" ? "st-col-hover" : ""}`}
+                  onMouseEnter={() => handleColEnter("lote")}
+                >
+                  Lote
+                </th>
+                <th
+                  className={`st-td-center col-sitprod ${
+                    hoveredColKey === "sitprod" ? "st-col-hover" : ""
+                  }`}
+                  onMouseEnter={() => handleColEnter("sitprod")}
+                >
+                  Situação produtiva
+                </th>
+                <th
+                  className={`st-td-center col-sitreprod ${
+                    hoveredColKey === "sitreprod" ? "st-col-hover" : ""
+                  }`}
+                  onMouseEnter={() => handleColEnter("sitreprod")}
+                >
+                  Situação reprodutiva
+                </th>
+                <th
+                  className={`st-td-center col-del ${hoveredColKey === "del" ? "st-col-hover" : ""}`}
+                  onMouseEnter={() => handleColEnter("del")}
+                >
+                  DEL
+                </th>
+                <th
+                  className={`col-origem ${hoveredColKey === "origem" ? "st-col-hover" : ""}`}
+                  onMouseEnter={() => handleColEnter("origem")}
+                >
+                  Origem
+                </th>
+                <th
+                  className={`st-td-center col-acoes ${
+                    hoveredColKey === "acoes" ? "st-col-hover" : ""
+                  }`}
+                  onMouseEnter={() => handleColEnter("acoes")}
+                >
+                  Ações
+                </th>
               </tr>
             </thead>
 
             <tbody>
               {linhas.length === 0 && !carregando && (
                 <tr>
-                  <td colSpan={6} style={{ padding: 18, color: "#64748b", fontWeight: 700 }}>
+                  <td colSpan={7} style={{ padding: 18, color: "#64748b", fontWeight: 700 }}>
                     Nenhum animal cadastrado ainda.
                   </td>
                 </tr>
@@ -206,10 +420,20 @@ export default function Plantel() {
                   String(sitReprod).toLowerCase().includes("vaz") ? "st-pill st-pill--mute" :
                   "st-pill st-pill--info";
 
+                const rowId = a.id ?? a.numero ?? a.brinco ?? idx;
+                const rowHover = hoveredRowId === rowId;
+
                 return (
-                  <tr key={a.id ?? a.numero ?? a.brinco ?? idx}>
+                  <tr key={rowId} className={rowHover ? "st-row-hover" : ""}>
                     {/* ANIMAL (duas linhas, mas com respiro) */}
-                    <td>
+                    <td
+                      className={`col-animal ${
+                        hoveredColKey === "animal" ? "st-col-hover" : ""
+                      } ${rowHover ? "st-row-hover" : ""} ${
+                        rowHover && hoveredColKey === "animal" ? "st-cell-hover" : ""
+                      }`}
+                      onMouseEnter={() => handleCellEnter(rowId, "animal")}
+                    >
                       <div className="st-animal">
                         <span
                           className="st-animal-num"
@@ -231,8 +455,37 @@ export default function Plantel() {
                       </div>
                     </td>
 
+                    {/* LOTE */}
+                    <td
+                      className={`col-lote ${
+                        hoveredColKey === "lote" ? "st-col-hover" : ""
+                      } ${rowHover ? "st-row-hover" : ""} ${
+                        rowHover && hoveredColKey === "lote" ? "st-cell-hover" : ""
+                      }`}
+                      onMouseEnter={() => handleCellEnter(rowId, "lote")}
+                    >
+                      <Select
+                        classNamePrefix="st-select"
+                        styles={selectStyles}
+                        options={loteOptions}
+                        value={resolveSelectedLote(a)}
+                        onChange={(option) => handleLoteChange(a, option)}
+                        isClearable
+                        placeholder="Selecione"
+                        menuPortalTarget={document.body}
+                        menuPosition="fixed"
+                      />
+                    </td>
+
                     {/* PROD */}
-                    <td className="st-td-center">
+                    <td
+                      className={`st-td-center col-sitprod ${
+                        hoveredColKey === "sitprod" ? "st-col-hover" : ""
+                      } ${rowHover ? "st-row-hover" : ""} ${
+                        rowHover && hoveredColKey === "sitprod" ? "st-cell-hover" : ""
+                      }`}
+                      onMouseEnter={() => handleCellEnter(rowId, "sitprod")}
+                    >
                       {sitProd === "—" ? "—" : (
                         <span className={prodClass}>
                           {sitProd === "lactante" ? "LAC" : sitProd}
@@ -241,7 +494,14 @@ export default function Plantel() {
                     </td>
 
                     {/* REPROD */}
-                    <td className="st-td-center">
+                    <td
+                      className={`st-td-center col-sitreprod ${
+                        hoveredColKey === "sitreprod" ? "st-col-hover" : ""
+                      } ${rowHover ? "st-row-hover" : ""} ${
+                        rowHover && hoveredColKey === "sitreprod" ? "st-cell-hover" : ""
+                      }`}
+                      onMouseEnter={() => handleCellEnter(rowId, "sitreprod")}
+                    >
                       {sitReprod === "—" ? "—" : (
                         <span className={reprClass}>
                           {String(sitReprod).toUpperCase().slice(0, 3)}
@@ -250,17 +510,40 @@ export default function Plantel() {
                     </td>
 
                     {/* DEL */}
-                    <td className="st-td-center" style={{ fontWeight: 900 }}>
+                    <td
+                      className={`st-td-center col-del ${
+                        hoveredColKey === "del" ? "st-col-hover" : ""
+                      } ${rowHover ? "st-row-hover" : ""} ${
+                        rowHover && hoveredColKey === "del" ? "st-cell-hover" : ""
+                      }`}
+                      style={{ fontWeight: 900 }}
+                      onMouseEnter={() => handleCellEnter(rowId, "del")}
+                    >
                       {del}
                     </td>
 
                     {/* ORIGEM */}
-                    <td style={{ fontWeight: 700 }}>
+                    <td
+                      className={`col-origem ${
+                        hoveredColKey === "origem" ? "st-col-hover" : ""
+                      } ${rowHover ? "st-row-hover" : ""} ${
+                        rowHover && hoveredColKey === "origem" ? "st-cell-hover" : ""
+                      }`}
+                      style={{ fontWeight: 700 }}
+                      onMouseEnter={() => handleCellEnter(rowId, "origem")}
+                    >
                       {a.origem || "—"}
                     </td>
 
                     {/* AÇÕES */}
-                    <td className="st-td-center">
+                    <td
+                      className={`st-td-center col-acoes ${
+                        hoveredColKey === "acoes" ? "st-col-hover" : ""
+                      } ${rowHover ? "st-row-hover" : ""} ${
+                        rowHover && hoveredColKey === "acoes" ? "st-cell-hover" : ""
+                      }`}
+                      onMouseEnter={() => handleCellEnter(rowId, "acoes")}
+                    >
                       <button onClick={() => abrirFichaAnimal(a)} className="st-btn">
                         Ficha
                       </button>
