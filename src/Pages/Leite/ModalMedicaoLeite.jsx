@@ -135,17 +135,38 @@ function TabelaMedicaoLeite({
   inputRefs,
   bloquearLote = false,
 }) {
-  const [colunaHover, setColunaHover] = useState(null);
+  const [hoveredRowId, setHoveredRowId] = useState(null);
+  const [hoveredColKey, setHoveredColKey] = useState(null);
+  const [openPopoverKey, setOpenPopoverKey] = useState(null);
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
+  const [filtroLote, setFiltroLote] = useState("__ALL__");
+  const popoverRef = useRef(null);
+  const triggerRefs = useRef({});
+  const [popoverStyle, setPopoverStyle] = useState({
+    left: "50%",
+    transform: "translateX(-50%)",
+  });
 
-  const titulos = [
-    "Número",
-    "Brinco",
-    "DEL",
-    ...(tipoLancamento !== "total" ? ["Manhã", "Tarde"] : []),
-    ...(tipoLancamento === "3" ? ["3ª"] : []),
-    "Total",
-    "Lote",
-  ];
+  const colunas = useMemo(() => {
+    const base = [
+      { key: "numero", label: "Número", sortable: true, align: "center" },
+      { key: "brinco", label: "Brinco" },
+      { key: "del", label: "DEL", sortable: true, align: "center" },
+    ];
+    const med = [];
+    if (tipoLancamento !== "total") {
+      med.push(
+        { key: "manha", label: "Manhã", align: "right" },
+        { key: "tarde", label: "Tarde", align: "right" }
+      );
+    }
+    if (tipoLancamento === "3") {
+      med.push({ key: "terceira", label: "3ª", align: "right" });
+    }
+    med.push({ key: "total", label: "Total", sortable: true, align: "right" });
+    med.push({ key: "lote", label: "Lote", filterable: true });
+    return [...base, ...med];
+  }, [tipoLancamento]);
 
   const getLoteValue = (dados) => {
     const id = dados?.lote_id || null;
@@ -153,146 +174,400 @@ function TabelaMedicaoLeite({
     return lotesOptions.find((o) => o.value === id) || null;
   };
 
+  const lotesFiltroOptions = useMemo(() => {
+    const base = (lotesOptions || []).map((opt) => ({
+      value: opt.value,
+      label: opt.label,
+    }));
+    return [
+      { value: "__ALL__", label: "Todos" },
+      { value: "__SEM_LOTE__", label: "Sem lote" },
+      ...base,
+    ];
+  }, [lotesOptions]);
+
+  const resolveOption = useCallback((options, value) => {
+    const found = options.find((opt) => String(opt.value) === String(value));
+    return found || options[0] || null;
+  }, []);
+
+  const handleColEnter = useCallback((colKey) => {
+    setHoveredColKey(colKey);
+    setHoveredRowId(null);
+  }, []);
+
+  const handleCellEnter = useCallback((rowId, colKey) => {
+    setHoveredRowId(rowId);
+    setHoveredColKey(colKey);
+  }, []);
+
+  const toggleSort = useCallback((key) => {
+    setSortConfig((prev) => {
+      if (prev.key !== key) return { key, direction: "asc" };
+      if (prev.direction === "asc") return { key, direction: "desc" };
+      if (prev.direction === "desc") return { key: null, direction: null };
+      return { key, direction: "asc" };
+    });
+  }, []);
+
+  const handleTogglePopover = useCallback((key) => {
+    setOpenPopoverKey((prev) => (prev === key ? null : key));
+  }, []);
+
+  const linhasFiltradas = useMemo(() => {
+    return vacas.filter((vaca) => {
+      const numeroStr = String(vaca.numero ?? "");
+      const dados = medicoes[numeroStr] || {};
+      const loteId = dados?.lote_id || null;
+
+      if (filtroLote !== "__ALL__") {
+        if (filtroLote === "__SEM_LOTE__") {
+          if (loteId != null && loteId !== "") return false;
+        } else if (String(loteId ?? "") !== String(filtroLote)) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [filtroLote, medicoes, vacas]);
+
+  const linhasOrdenadas = useMemo(() => {
+    if (!sortConfig.key || !sortConfig.direction) return linhasFiltradas;
+    const sorted = [...linhasFiltradas];
+    const factor = sortConfig.direction === "asc" ? 1 : -1;
+
+    const compareNumber = (a, b) => {
+      if (!Number.isFinite(a) && !Number.isFinite(b)) return 0;
+      if (!Number.isFinite(a)) return 1;
+      if (!Number.isFinite(b)) return -1;
+      return a - b;
+    };
+
+    sorted.sort((a, b) => {
+      if (sortConfig.key === "numero") {
+        const aNum = Number(a?.numero);
+        const bNum = Number(b?.numero);
+        if (Number.isFinite(aNum) && Number.isFinite(bNum)) {
+          return (aNum - bNum) * factor;
+        }
+        const aStr = String(a?.numero || "");
+        const bStr = String(b?.numero || "");
+        return aStr.localeCompare(bStr) * factor;
+      }
+      if (sortConfig.key === "del") {
+        const aDel = calcularDEL(getUltimoPartoBR(a));
+        const bDel = calcularDEL(getUltimoPartoBR(b));
+        return compareNumber(aDel, bDel) * factor;
+      }
+      if (sortConfig.key === "total") {
+        const aDados = medicoes[String(a?.numero ?? "")] || {};
+        const bDados = medicoes[String(b?.numero ?? "")] || {};
+        const aTotal = toNum(aDados.total);
+        const bTotal = toNum(bDados.total);
+        return compareNumber(aTotal, bTotal) * factor;
+      }
+      return 0;
+    });
+    return sorted;
+  }, [linhasFiltradas, medicoes, sortConfig]);
+
+  useEffect(() => {
+    if (!openPopoverKey) return;
+    setPopoverStyle({ left: "50%", transform: "translateX(-50%)" });
+
+    const updatePosition = () => {
+      const triggerEl = triggerRefs.current?.[openPopoverKey];
+      const popoverEl = popoverRef.current;
+      if (!triggerEl || !popoverEl) return;
+
+      const thRect = triggerEl.getBoundingClientRect();
+      const popRect = popoverEl.getBoundingClientRect();
+      let left = (thRect.width - popRect.width) / 2;
+      const desiredLeft = thRect.left + left;
+      const desiredRight = desiredLeft + popRect.width;
+
+      if (desiredRight > window.innerWidth - 8) {
+        left = window.innerWidth - 8 - popRect.width - thRect.left;
+      }
+      if (desiredLeft < 8) {
+        left = 8 - thRect.left;
+      }
+
+      setPopoverStyle({ left: `${left}px`, transform: "translateX(0)" });
+    };
+
+    const raf = requestAnimationFrame(updatePosition);
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [openPopoverKey]);
+
+  useEffect(() => {
+    if (!openPopoverKey) return;
+
+    const handleClickOutside = (event) => {
+      const target = event.target;
+      if (popoverRef.current?.contains(target)) return;
+      if (target?.closest?.("[data-filter-trigger='true']")) return;
+      setOpenPopoverKey(null);
+    };
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") setOpenPopoverKey(null);
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [openPopoverKey]);
+
   return (
-    <div className="st-table-wrap">
-      <div className="st-scroll" style={{ overflowX: "auto" }}>
-        <table
-          className="st-table st-table--darkhead"
-          onMouseLeave={() => setColunaHover(null)}
-        >
-          <thead>
-            <tr>
-              {titulos.map((titulo, index) => (
-                <th
-                  key={titulo}
-                  onMouseEnter={() => setColunaHover(index)}
-                  onMouseLeave={() => setColunaHover(null)}
-                  className={colunaHover === index ? "st-col-hover" : ""}
-                >
-                  {titulo}
-                </th>
-              ))}
-            </tr>
-          </thead>
-
-          <tbody>
-            {vacas.length === 0 ? (
-              <tr className="st-empty">
-                <td colSpan={titulos.length} className="st-td-center">
-                  Nenhuma vaca em lactação encontrada.
-                </td>
-              </tr>
-            ) : (
-              vacas.map((vaca, rowIndex) => {
-                const numeroStr = String(vaca.numero ?? "");
-                const dados = medicoes[numeroStr] || {};
-                const del = calcularDEL(getUltimoPartoBR(vaca));
-
-                const inputs = [];
-
-                if (tipoLancamento !== "total") {
-                  inputs.push(
-                    <input
-                      key="manha"
-                      ref={(el) => (inputRefs.current[`${rowIndex}-manha`] = el)}
-                      type="number"
-                      inputMode="decimal"
-                      className="input-medir"
-                      style={inputMedirBase}
-                      value={dados.manha ?? ""}
-                      onChange={(e) => onChange(numeroStr, "manha", e.target.value)}
-                      onKeyDown={(e) => onKeyDownCampo(e, rowIndex, "manha")}
-                    />,
-                    <input
-                      key="tarde"
-                      ref={(el) => (inputRefs.current[`${rowIndex}-tarde`] = el)}
-                      type="number"
-                      inputMode="decimal"
-                      className="input-medir"
-                      style={inputMedirBase}
-                      value={dados.tarde ?? ""}
-                      onChange={(e) => onChange(numeroStr, "tarde", e.target.value)}
-                      onKeyDown={(e) => onKeyDownCampo(e, rowIndex, "tarde")}
-                    />
-                  );
-                }
-
-                if (tipoLancamento === "3") {
-                  inputs.push(
-                    <input
-                      key="terceira"
-                      ref={(el) => (inputRefs.current[`${rowIndex}-terceira`] = el)}
-                      type="number"
-                      inputMode="decimal"
-                      className="input-medir"
-                      style={inputMedirBase}
-                      value={dados.terceira ?? ""}
-                      onChange={(e) => onChange(numeroStr, "terceira", e.target.value)}
-                      onKeyDown={(e) => onKeyDownCampo(e, rowIndex, "terceira")}
-                    />
-                  );
-                }
-
-                const totalReadOnly = tipoLancamento !== "total";
-                inputs.push(
-                  <input
-                    key="total"
-                    ref={(el) => (inputRefs.current[`${rowIndex}-total`] = el)}
-                    type="number"
-                    inputMode="decimal"
-                    className="input-medir"
-                    style={{
-                      ...inputMedirBase,
-                      backgroundColor: totalReadOnly ? "#e5edff" : "#ffffff",
-                      cursor: totalReadOnly ? "not-allowed" : "auto",
-                      fontWeight: totalReadOnly ? 600 : 500,
-                    }}
-                    value={dados.total ?? ""}
-                    readOnly={totalReadOnly}
-                    onChange={(e) => !totalReadOnly && onChange(numeroStr, "total", e.target.value)}
-                  />
-                );
-
-                return (
-                  <tr key={vaca.id ?? vaca.numero ?? rowIndex}>
-                    <td className={`${colunaHover === 0 ? "st-col-hover" : ""} st-num st-td-center`}>
-                      {vaca.numero ?? "—"}
-                    </td>
-                    <td className={colunaHover === 1 ? "st-col-hover" : ""}>{vaca.brinco ?? "—"}</td>
-                    <td className={`${colunaHover === 2 ? "st-col-hover" : ""} st-num st-td-center`}>
-                      {String(del)}
-                    </td>
-
-                    {inputs.map((inputEl, idx) => (
-                      <td key={idx} className={colunaHover === 3 + idx ? "st-col-hover" : ""}>
-                        {inputEl}
-                      </td>
-                    ))}
-
-                    <td className={colunaHover === titulos.length - 1 ? "st-col-hover" : ""}>
-                      <div style={{ minWidth: 210 }}>
-                        <Select
-                          value={getLoteValue(dados)}
-                          onChange={(opt) => {
-                            const loteId = opt?.value || "";
-                            onChange(numeroStr, "lote_id", loteId);
+    <div>
+      <div className="st-filter-hint">
+        Dica: clique no título das colunas habilitadas para ordenar ou filtrar. Clique novamente para fechar.
+      </div>
+      <div className="st-table-container">
+        <div className="st-table-wrap">
+          <div className="st-scroll" style={{ overflowX: "auto" }}>
+            <table
+              className="st-table st-table--darkhead"
+              onMouseLeave={() => {
+                setHoveredRowId(null);
+                setHoveredColKey(null);
+              }}
+            >
+              <thead>
+                <tr>
+                  {colunas.map((coluna) => (
+                    <th
+                      key={coluna.key}
+                      onMouseEnter={() => handleColEnter(coluna.key)}
+                      ref={(el) => {
+                        triggerRefs.current[coluna.key] = el;
+                      }}
+                      style={{ position: coluna.filterable ? "relative" : undefined }}
+                      className={hoveredColKey === coluna.key ? "st-col-hover" : ""}
+                    >
+                      {coluna.sortable || coluna.filterable ? (
+                        <button
+                          type="button"
+                          data-filter-trigger={coluna.filterable ? "true" : undefined}
+                          onClick={() => {
+                            if (coluna.sortable) toggleSort(coluna.key);
+                            if (coluna.filterable) handleTogglePopover(coluna.key);
                           }}
-                          options={lotesOptions}
-                          styles={selectLoteStyles}
-                          isClearable
-                          placeholder="—"
-                          menuPortalTarget={document.body}
-                          menuPosition="fixed"
-                          isDisabled={bloquearLote}
-                        />
-                      </div>
+                          style={{
+                            background: "transparent",
+                            border: "none",
+                            padding: 0,
+                            margin: 0,
+                            font: "inherit",
+                            color: "inherit",
+                            cursor: "pointer",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 6,
+                          }}
+                        >
+                          <span className="st-th-label">{coluna.label}</span>
+                          {sortConfig.key === coluna.key && sortConfig.direction && (
+                            <span style={{ fontSize: 12, opacity: 0.7 }}>
+                              {sortConfig.direction === "asc" ? "▲" : "▼"}
+                            </span>
+                          )}
+                        </button>
+                      ) : (
+                        <span className="st-th-label">{coluna.label}</span>
+                      )}
+                      {openPopoverKey === coluna.key && coluna.filterable && (
+                        <div
+                          ref={popoverRef}
+                          className="st-filter-popover"
+                          style={popoverStyle}
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <label className="st-filter__label">
+                            Lote
+                            <Select
+                              className="st-select--compact"
+                              classNamePrefix="st-select"
+                              menuPortalTarget={document.body}
+                              menuPosition="fixed"
+                              menuShouldBlockScroll
+                              styles={selectLoteStyles}
+                              options={lotesFiltroOptions}
+                              value={resolveOption(lotesFiltroOptions, filtroLote)}
+                              onChange={(option) => setFiltroLote(option?.value ?? "__ALL__")}
+                            />
+                          </label>
+                        </div>
+                      )}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+
+              <tbody>
+                {linhasOrdenadas.length === 0 ? (
+                  <tr className="st-empty">
+                    <td colSpan={colunas.length} className="st-td-center">
+                      Nenhuma vaca em lactação encontrada.
                     </td>
                   </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+                ) : (
+                  linhasOrdenadas.map((vaca, rowIndex) => {
+                    const numeroStr = String(vaca.numero ?? "");
+                    const dados = medicoes[numeroStr] || {};
+                    const del = calcularDEL(getUltimoPartoBR(vaca));
+                    const rowId = vaca.id ?? vaca.numero ?? rowIndex;
+                    const rowHover = hoveredRowId === rowId;
+
+                    const inputs = [];
+
+                    if (tipoLancamento !== "total") {
+                      inputs.push(
+                        <input
+                          key="manha"
+                          ref={(el) => (inputRefs.current[`${rowIndex}-manha`] = el)}
+                          type="number"
+                          inputMode="decimal"
+                          className="input-medir"
+                          style={inputMedirBase}
+                          value={dados.manha ?? ""}
+                          onChange={(e) => onChange(numeroStr, "manha", e.target.value)}
+                          onKeyDown={(e) => onKeyDownCampo(e, rowIndex, "manha")}
+                        />,
+                        <input
+                          key="tarde"
+                          ref={(el) => (inputRefs.current[`${rowIndex}-tarde`] = el)}
+                          type="number"
+                          inputMode="decimal"
+                          className="input-medir"
+                          style={inputMedirBase}
+                          value={dados.tarde ?? ""}
+                          onChange={(e) => onChange(numeroStr, "tarde", e.target.value)}
+                          onKeyDown={(e) => onKeyDownCampo(e, rowIndex, "tarde")}
+                        />
+                      );
+                    }
+
+                    if (tipoLancamento === "3") {
+                      inputs.push(
+                        <input
+                          key="terceira"
+                          ref={(el) => (inputRefs.current[`${rowIndex}-terceira`] = el)}
+                          type="number"
+                          inputMode="decimal"
+                          className="input-medir"
+                          style={inputMedirBase}
+                          value={dados.terceira ?? ""}
+                          onChange={(e) => onChange(numeroStr, "terceira", e.target.value)}
+                          onKeyDown={(e) => onKeyDownCampo(e, rowIndex, "terceira")}
+                        />
+                      );
+                    }
+
+                    const totalReadOnly = tipoLancamento !== "total";
+                    inputs.push(
+                      <input
+                        key="total"
+                        ref={(el) => (inputRefs.current[`${rowIndex}-total`] = el)}
+                        type="number"
+                        inputMode="decimal"
+                        className="input-medir"
+                        style={{
+                          ...inputMedirBase,
+                          backgroundColor: totalReadOnly ? "#e5edff" : "#ffffff",
+                          cursor: totalReadOnly ? "not-allowed" : "auto",
+                          fontWeight: totalReadOnly ? 600 : 500,
+                        }}
+                        value={dados.total ?? ""}
+                        readOnly={totalReadOnly}
+                        onChange={(e) => !totalReadOnly && onChange(numeroStr, "total", e.target.value)}
+                      />
+                    );
+
+                    return (
+                      <tr key={rowId} className={rowHover ? "st-row-hover" : ""}>
+                        <td
+                          className={`${hoveredColKey === "numero" ? "st-col-hover" : ""} ${
+                            rowHover ? "st-row-hover" : ""
+                          } ${rowHover && hoveredColKey === "numero" ? "st-cell-hover" : ""} st-num st-td-center`}
+                          onMouseEnter={() => handleCellEnter(rowId, "numero")}
+                        >
+                          {vaca.numero ?? "—"}
+                        </td>
+                        <td
+                          className={`${hoveredColKey === "brinco" ? "st-col-hover" : ""} ${
+                            rowHover ? "st-row-hover" : ""
+                          } ${rowHover && hoveredColKey === "brinco" ? "st-cell-hover" : ""}`}
+                          onMouseEnter={() => handleCellEnter(rowId, "brinco")}
+                        >
+                          {vaca.brinco ?? "—"}
+                        </td>
+                        <td
+                          className={`${hoveredColKey === "del" ? "st-col-hover" : ""} ${
+                            rowHover ? "st-row-hover" : ""
+                          } ${rowHover && hoveredColKey === "del" ? "st-cell-hover" : ""} st-num st-td-center`}
+                          onMouseEnter={() => handleCellEnter(rowId, "del")}
+                        >
+                          {String(del)}
+                        </td>
+
+                        {inputs.map((inputEl, idx) => {
+                          const colKey = colunas[3 + idx]?.key || `input-${idx}`;
+                          return (
+                            <td
+                              key={colKey}
+                              className={`${hoveredColKey === colKey ? "st-col-hover" : ""} ${
+                                rowHover ? "st-row-hover" : ""
+                              } ${rowHover && hoveredColKey === colKey ? "st-cell-hover" : ""}`}
+                              onMouseEnter={() => handleCellEnter(rowId, colKey)}
+                            >
+                              {inputEl}
+                            </td>
+                          );
+                        })}
+
+                        <td
+                          className={`${hoveredColKey === "lote" ? "st-col-hover" : ""} ${
+                            rowHover ? "st-row-hover" : ""
+                          } ${rowHover && hoveredColKey === "lote" ? "st-cell-hover" : ""}`}
+                          onMouseEnter={() => handleCellEnter(rowId, "lote")}
+                        >
+                          <div style={{ minWidth: 210 }}>
+                            <Select
+                              value={getLoteValue(dados)}
+                              onChange={(opt) => {
+                                const loteId = opt?.value || "";
+                                onChange(numeroStr, "lote_id", loteId);
+                              }}
+                              options={lotesOptions}
+                              styles={selectLoteStyles}
+                              isClearable
+                              placeholder="—"
+                              menuPortalTarget={document.body}
+                              menuPosition="fixed"
+                              isDisabled={bloquearLote}
+                            />
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   );

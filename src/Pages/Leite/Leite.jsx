@@ -136,20 +136,213 @@ function TabelaResumoDia({
   modoEdicaoPassado,
   toggleModoEdicaoPassado,
 }) {
-  const [colunaHover, setColunaHover] = useState(null);
+  const [hoveredRowId, setHoveredRowId] = useState(null);
+  const [hoveredColKey, setHoveredColKey] = useState(null);
+  const [openPopoverKey, setOpenPopoverKey] = useState(null);
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
+  const [filtroLote, setFiltroLote] = useState("__ALL__");
+  const popoverRef = useRef(null);
+  const triggerRefs = useRef({});
+  const [popoverStyle, setPopoverStyle] = useState({
+    left: "50%",
+    transform: "translateX(-50%)",
+  });
 
-  const titulos = useMemo(
-    () => ["Número", "Brinco", "DEL", "Manhã", "Tarde", "3ª", "Total", "Última Medição", "Lote", "Ações"],
+  const toNum = (v) => parseFloat(String(v ?? "0").replace(",", ".")) || 0;
+
+  const colunas = useMemo(
+    () => [
+      { key: "numero", label: "Número", sortable: true, align: "center", width: 70 },
+      { key: "brinco", label: "Brinco", width: 80 },
+      { key: "del", label: "DEL", sortable: true, align: "center", width: 60 },
+      { key: "manha", label: "Manhã", align: "right", width: 70 },
+      { key: "tarde", label: "Tarde", align: "right", width: 70 },
+      { key: "terceira", label: "3ª", align: "right", width: 55 },
+      { key: "total", label: "Total", sortable: true, align: "right", width: 75 },
+      { key: "ultima", label: "Última Medição", width: 130 },
+      { key: "lote", label: "Lote", filterable: true, width: 220 },
+      { key: "acoes", label: "Ações", align: "center", width: 170 },
+    ],
     []
   );
 
-  const toNum = (v) => parseFloat(String(v ?? "0").replace(",", ".")) || 0;
+  const colunasExibidas = useMemo(
+    () => colunas,
+    [colunas]
+  );
 
   const getLoteValue = (numeroStr) => {
     const loteId = loteEditPorNumero[numeroStr] ?? loteEfetivoPorNumero[numeroStr] ?? null;
     if (!loteId) return null;
     return lotesOptions.find((o) => o.value === loteId) || null;
   };
+
+  const lotesFiltroOptions = useMemo(() => {
+    const base = (lotesOptions || []).map((opt) => ({
+      value: opt.value,
+      label: opt.label,
+    }));
+    return [
+      { value: "__ALL__", label: "Todos" },
+      { value: "__SEM_LOTE__", label: "Sem lote" },
+      ...base,
+    ];
+  }, [lotesOptions]);
+
+  const resolveOption = useCallback((options, value) => {
+    const found = options.find((opt) => String(opt.value) === String(value));
+    return found || options[0] || null;
+  }, []);
+
+  const handleColEnter = useCallback((colKey) => {
+    setHoveredColKey(colKey);
+    setHoveredRowId(null);
+  }, []);
+
+  const handleCellEnter = useCallback((rowId, colKey) => {
+    setHoveredRowId(rowId);
+    setHoveredColKey(colKey);
+  }, []);
+
+  const toggleSort = useCallback((key) => {
+    setSortConfig((prev) => {
+      if (prev.key !== key) return { key, direction: "asc" };
+      if (prev.direction === "asc") return { key, direction: "desc" };
+      if (prev.direction === "desc") return { key: null, direction: null };
+      return { key, direction: "asc" };
+    });
+  }, []);
+
+  const handleTogglePopover = useCallback((key) => {
+    setOpenPopoverKey((prev) => (prev === key ? null : key));
+  }, []);
+
+  const linhasFiltradas = useMemo(() => {
+    return vacas.filter((vaca) => {
+      const numeroStr = String(vaca.numero ?? "");
+      const loteId = loteEditPorNumero[numeroStr] ?? loteEfetivoPorNumero[numeroStr] ?? null;
+
+      if (filtroLote !== "__ALL__") {
+        if (filtroLote === "__SEM_LOTE__") {
+          if (loteId != null && loteId !== "") return false;
+        } else if (String(loteId ?? "") !== String(filtroLote)) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [filtroLote, loteEditPorNumero, loteEfetivoPorNumero, vacas]);
+
+  const linhasOrdenadas = useMemo(() => {
+    if (!sortConfig.key || !sortConfig.direction) return linhasFiltradas;
+    const sorted = [...linhasFiltradas];
+    const factor = sortConfig.direction === "asc" ? 1 : -1;
+
+    const compareNumber = (a, b) => {
+      if (!Number.isFinite(a) && !Number.isFinite(b)) return 0;
+      if (!Number.isFinite(a)) return 1;
+      if (!Number.isFinite(b)) return -1;
+      return a - b;
+    };
+
+    sorted.sort((a, b) => {
+      if (sortConfig.key === "numero") {
+        const aNum = Number(a?.numero);
+        const bNum = Number(b?.numero);
+        if (Number.isFinite(aNum) && Number.isFinite(bNum)) {
+          return (aNum - bNum) * factor;
+        }
+        const aStr = String(a?.numero || "");
+        const bStr = String(b?.numero || "");
+        return aStr.localeCompare(bStr) * factor;
+      }
+      if (sortConfig.key === "del") {
+        const aDel = calcularDEL(getUltimoPartoBR(a));
+        const bDel = calcularDEL(getUltimoPartoBR(b));
+        return compareNumber(aDel, bDel) * factor;
+      }
+      if (sortConfig.key === "total") {
+        const aDados = medicoes[String(a?.numero ?? "")] || {};
+        const bDados = medicoes[String(b?.numero ?? "")] || {};
+        const aTotal =
+          aDados.total !== undefined && aDados.total !== ""
+            ? toNum(aDados.total)
+            : toNum(aDados.manha) + toNum(aDados.tarde) + toNum(aDados.terceira);
+        const bTotal =
+          bDados.total !== undefined && bDados.total !== ""
+            ? toNum(bDados.total)
+            : toNum(bDados.manha) + toNum(bDados.tarde) + toNum(bDados.terceira);
+        return compareNumber(aTotal, bTotal) * factor;
+      }
+      return 0;
+    });
+    return sorted;
+  }, [linhasFiltradas, medicoes, sortConfig]);
+
+  const resumoTabela = useMemo(() => {
+    const total = linhasOrdenadas.length;
+    const delSoma = linhasOrdenadas.reduce((acc, vaca) => acc + calcularDEL(getUltimoPartoBR(vaca)), 0);
+    const mediaDel = total > 0 ? delSoma / total : null;
+    return { total, mediaDel };
+  }, [linhasOrdenadas]);
+
+  useEffect(() => {
+    if (!openPopoverKey) return;
+    setPopoverStyle({ left: "50%", transform: "translateX(-50%)" });
+
+    const updatePosition = () => {
+      const triggerEl = triggerRefs.current?.[openPopoverKey];
+      const popoverEl = popoverRef.current;
+      if (!triggerEl || !popoverEl) return;
+
+      const thRect = triggerEl.getBoundingClientRect();
+      const popRect = popoverEl.getBoundingClientRect();
+      let left = (thRect.width - popRect.width) / 2;
+      const desiredLeft = thRect.left + left;
+      const desiredRight = desiredLeft + popRect.width;
+
+      if (desiredRight > window.innerWidth - 8) {
+        left = window.innerWidth - 8 - popRect.width - thRect.left;
+      }
+      if (desiredLeft < 8) {
+        left = 8 - thRect.left;
+      }
+
+      setPopoverStyle({ left: `${left}px`, transform: "translateX(0)" });
+    };
+
+    const raf = requestAnimationFrame(updatePosition);
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [openPopoverKey]);
+
+  useEffect(() => {
+    if (!openPopoverKey) return;
+
+    const handleClickOutside = (event) => {
+      const target = event.target;
+      if (popoverRef.current?.contains(target)) return;
+      if (target?.closest?.("[data-filter-trigger='true']")) return;
+      setOpenPopoverKey(null);
+    };
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") setOpenPopoverKey(null);
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [openPopoverKey]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -186,48 +379,104 @@ function TabelaResumoDia({
         </div>
       </div>
 
-      <div className="st-table-wrap">
+      <div className="st-filter-hint">
+        Dica: clique no título das colunas habilitadas para ordenar ou filtrar. Clique novamente para fechar.
+      </div>
+      <div className="st-table-container">
+        <div className="st-table-wrap">
         <table
           className="st-table st-table--darkhead"
-          onMouseLeave={() => setColunaHover(null)}
+          onMouseLeave={() => {
+            setHoveredRowId(null);
+            setHoveredColKey(null);
+          }}
         >
           <colgroup>
-            <col style={{ width: 70 }} /> {/* Número */}
-            <col style={{ width: 80 }} /> {/* Brinco */}
-            <col style={{ width: 60 }} /> {/* DEL */}
-            <col style={{ width: 70 }} /> {/* Manhã */}
-            <col style={{ width: 70 }} /> {/* Tarde */}
-            <col style={{ width: 55 }} /> {/* 3ª */}
-            <col style={{ width: 75 }} /> {/* Total */}
-            <col style={{ width: 130 }} /> {/* Última Medição */}
-            <col style={{ width: 220 }} /> {/* Lote */}
-            <col style={{ width: 170 }} /> {/* Ações */}
+            {colunasExibidas.map((coluna) => (
+              <col key={coluna.key} style={{ width: coluna.width }} />
+            ))}
           </colgroup>
 
           <thead>
             <tr>
-              {titulos.map((titulo, index) => (
+              {colunasExibidas.map((coluna) => (
                 <th
-                  key={titulo}
-                  onMouseEnter={() => setColunaHover(index)}
-                  onMouseLeave={() => setColunaHover(null)}
-                  className={colunaHover === index ? "st-col-hover" : ""}
+                  key={coluna.key}
+                  onMouseEnter={() => handleColEnter(coluna.key)}
+                  ref={(el) => {
+                    triggerRefs.current[coluna.key] = el;
+                  }}
+                  style={{ position: coluna.filterable ? "relative" : undefined }}
+                  className={hoveredColKey === coluna.key ? "st-col-hover" : ""}
                 >
-                  {titulo}
+                  {coluna.sortable || coluna.filterable ? (
+                    <button
+                      type="button"
+                      data-filter-trigger={coluna.filterable ? "true" : undefined}
+                      onClick={() => {
+                        if (coluna.sortable) toggleSort(coluna.key);
+                        if (coluna.filterable) handleTogglePopover(coluna.key);
+                      }}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        padding: 0,
+                        margin: 0,
+                        font: "inherit",
+                        color: "inherit",
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <span className="st-th-label">{coluna.label}</span>
+                      {sortConfig.key === coluna.key && sortConfig.direction && (
+                        <span style={{ fontSize: 12, opacity: 0.7 }}>
+                          {sortConfig.direction === "asc" ? "▲" : "▼"}
+                        </span>
+                      )}
+                    </button>
+                  ) : (
+                    <span className="st-th-label">{coluna.label}</span>
+                  )}
+                  {openPopoverKey === coluna.key && coluna.filterable && (
+                    <div
+                      ref={popoverRef}
+                      className="st-filter-popover"
+                      style={popoverStyle}
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <label className="st-filter__label">
+                        Lote
+                        <Select
+                          className="st-select--compact"
+                          classNamePrefix="st-select"
+                          menuPortalTarget={document.body}
+                          menuPosition="fixed"
+                          menuShouldBlockScroll
+                          styles={selectLoteStyles}
+                          options={lotesFiltroOptions}
+                          value={resolveOption(lotesFiltroOptions, filtroLote)}
+                          onChange={(option) => setFiltroLote(option?.value ?? "__ALL__")}
+                        />
+                      </label>
+                    </div>
+                  )}
                 </th>
               ))}
             </tr>
           </thead>
 
           <tbody>
-            {vacas.length === 0 ? (
+            {linhasOrdenadas.length === 0 ? (
               <tr className="st-empty">
-                <td colSpan={titulos.length} className="st-td-center">
+                <td colSpan={colunasExibidas.length} className="st-td-center">
                   Nenhuma vaca em lactação encontrada.
                 </td>
               </tr>
             ) : (
-              vacas.map((vaca, rowIndex) => {
+              linhasOrdenadas.map((vaca, rowIndex) => {
                 const numeroStr = String(vaca.numero ?? "");
                 const dados = medicoes[numeroStr] || {};
 
@@ -236,32 +485,44 @@ function TabelaResumoDia({
                 const del = calcularDEL(getUltimoPartoBR(vaca));
 
                 const ultimaMed = dados.total ? String(dataTabela || "").split("-").reverse().join("/") : "—";
+                const rowId = vaca.id ?? vaca.numero ?? rowIndex;
+                const rowHover = hoveredRowId === rowId;
 
                 const colunas = [
-                  { value: vaca.numero ?? "—", className: "st-num st-td-center" },
-                  { value: vaca.brinco ?? "—" },
-                  { value: String(del), className: "st-num st-td-center" },
-                  { value: dados.manha ?? "—", className: "st-num st-td-right" },
-                  { value: dados.tarde ?? "—", className: "st-num st-td-right" },
-                  { value: dados.terceira ?? "—", className: "st-num st-td-right" },
-                  { value: dados.total ?? totalCalc ?? "—", className: "st-num st-td-right" },
-                  { value: ultimaMed },
+                  { key: "numero", value: vaca.numero ?? "—", className: "st-num st-td-center" },
+                  { key: "brinco", value: vaca.brinco ?? "—" },
+                  { key: "del", value: String(del), className: "st-num st-td-center" },
+                  { key: "manha", value: dados.manha ?? "—", className: "st-num st-td-right" },
+                  { key: "tarde", value: dados.tarde ?? "—", className: "st-num st-td-right" },
+                  { key: "terceira", value: dados.terceira ?? "—", className: "st-num st-td-right" },
+                  { key: "total", value: dados.total ?? totalCalc ?? "—", className: "st-num st-td-right" },
+                  { key: "ultima", value: ultimaMed },
                 ];
 
                 return (
-                  <tr key={vaca.id ?? vaca.numero ?? rowIndex}>
-                    {colunas.map((coluna, colIndex) => (
+                  <tr key={rowId} className={rowHover ? "st-row-hover" : ""}>
+                    {colunas.map((coluna) => (
                       <td
-                        key={colIndex}
-                        className={`${colunaHover === colIndex ? "st-col-hover" : ""} ${coluna.className || ""}`}
-                        title={colIndex <= 1 ? String(coluna.value) : undefined}
+                        key={coluna.key}
+                        className={`${hoveredColKey === coluna.key ? "st-col-hover" : ""} ${
+                          rowHover ? "st-row-hover" : ""
+                        } ${rowHover && hoveredColKey === coluna.key ? "st-cell-hover" : ""} ${
+                          coluna.className || ""
+                        }`}
+                        title={coluna.key === "numero" || coluna.key === "brinco" ? String(coluna.value) : undefined}
+                        onMouseEnter={() => handleCellEnter(rowId, coluna.key)}
                       >
                         {coluna.value}
                       </td>
                     ))}
 
                     {/* Lote (vigente) — editável só quando permitido */}
-                    <td className={colunaHover === 8 ? "st-col-hover" : ""}>
+                    <td
+                      className={`${hoveredColKey === "lote" ? "st-col-hover" : ""} ${
+                        rowHover ? "st-row-hover" : ""
+                      } ${rowHover && hoveredColKey === "lote" ? "st-cell-hover" : ""}`}
+                      onMouseEnter={() => handleCellEnter(rowId, "lote")}
+                    >
                       <div style={{ width: "100%", minWidth: 0 }}>
                         <Select
                           value={getLoteValue(numeroStr)}
@@ -278,7 +539,12 @@ function TabelaResumoDia({
                     </td>
 
                     {/* Ações */}
-                    <td className={`st-td-center ${colunaHover === 9 ? "st-col-hover" : ""}`}>
+                    <td
+                      className={`st-td-center ${hoveredColKey === "acoes" ? "st-col-hover" : ""} ${
+                        rowHover ? "st-row-hover" : ""
+                      } ${rowHover && hoveredColKey === "acoes" ? "st-cell-hover" : ""}`}
+                      onMouseEnter={() => handleCellEnter(rowId, "acoes")}
+                    >
                       <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
                         <button type="button" className="st-btn" onClick={() => onClickFicha?.(vaca)}>
                           Ficha
@@ -294,7 +560,23 @@ function TabelaResumoDia({
               })
             )}
           </tbody>
+          <tfoot>
+            <tr className="st-summary-row">
+              <td colSpan={colunasExibidas.length}>
+                <div className="st-summary-row__content">
+                  <span>Total de vacas exibidas: {resumoTabela.total}</span>
+                  <span>
+                    Média DEL (vacas exibidas):{" "}
+                    {Number.isFinite(resumoTabela.mediaDel)
+                      ? Math.round(resumoTabela.mediaDel)
+                      : "—"}
+                  </span>
+                </div>
+              </td>
+            </tr>
+          </tfoot>
         </table>
+        </div>
       </div>
     </div>
   );
