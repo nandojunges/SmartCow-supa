@@ -1123,9 +1123,7 @@ export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }
                         {colunasTabela.map((coluna) => (
                           <th
                             key={coluna.key}
-                            className={`${coluna.className || ""} ${
-                              hoveredColKey === coluna.key ? "st-col-hover" : ""
-                            }`}
+                            className={coluna.className || ""}
                             onMouseEnter={() => handleColEnter(coluna.key)}
                           >
                             <span className="st-th-label">{coluna.label}</span>
