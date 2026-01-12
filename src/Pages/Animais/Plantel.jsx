@@ -975,15 +975,15 @@ export default function Plantel() {
             }}
           >
             <colgroup>
-              <col style={{ width: "20%" }} />
-              <col style={{ width: "14%" }} />
-              <col style={{ width: "14%" }} />
-              <col style={{ width: "14%" }} />
-              <col style={{ width: "10%" }} />
-              <col style={{ width: "6%" }} />
-              <col style={{ width: "12%" }} />
-              <col style={{ width: "10%" }} />
-            </colgroup>
+  {/* Animal */}              <col style={{ width: "19%" }} />
+  {/* Lote */}                <col style={{ width: "14%" }} />
+  {/* Situação produtiva */}  <col style={{ width: "14%" }} />
+  {/* Situação reprodutiva */}<col style={{ width: "14%" }} />
+  {/* Última produção */}     <col style={{ width: "12%" }} />
+  {/* DEL */}                 <col style={{ width: "6%" }} />
+  {/* Origem */}              <col style={{ width: "11%" }} />
+  {/* Ações */}               <col style={{ width: "10%" }} />
+</colgroup>
             <thead>
               <tr>
                 <th
