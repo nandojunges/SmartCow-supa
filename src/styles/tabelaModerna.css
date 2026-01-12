@@ -63,12 +63,22 @@
   color: var(--st-head-text);
   font-weight: 800;
   letter-spacing: 0.2px;
-  padding: 14px 16px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--st-line);
   position: sticky;
   top: 0;
   z-index: 3;
   white-space: nowrap;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.st-th-label {
+  display: block;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* tema de cabeçalho escuro */
