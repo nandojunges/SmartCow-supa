@@ -37,9 +37,9 @@ export default function SubAbasAnimais({ animais = [], onRefresh }) {
         style={{
           display: "flex",
           gap: 20,
-          padding: "6px 6px 0",
+          padding: "4px 6px 0",
           borderBottom: "1px solid #e5e7eb",
-          marginBottom: 14,
+          marginBottom: 8,
         }}
       >
         {TABS.map((t) => {
@@ -130,7 +130,7 @@ export default function SubAbasAnimais({ animais = [], onRefresh }) {
       </div>
 
       {/* ===== CONTEÚDO ===== */}
-      <div style={{ paddingTop: 6 }}>
+      <div style={{ paddingTop: 2 }}>
         {tab === "plantel" && (
           <Plantel
             animais={animais}
