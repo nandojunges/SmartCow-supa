@@ -5,6 +5,7 @@ import { supabase } from "../../lib/supabaseClient";
 import ModalMedicaoLeite from "./ModalMedicaoLeite";
 import FichaLeiteira from "./FichaLeiteira";
 import ResumoLeiteDia from "./ResumoLeiteDia";
+import "../../styles/tabelaModerna.css";
 
 /* ===== helpers de data / DEL ===== */
 function parseBR(str) {
@@ -150,10 +151,6 @@ function TabelaResumoDia({
     return lotesOptions.find((o) => o.value === loteId) || null;
   };
 
-  // ↓↓↓ ajustes finos de densidade/armonia
-  const thStyle = { padding: "10px 10px", whiteSpace: "nowrap" };
-  const tdStyle = { padding: "10px 10px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" };
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {/* barra de lote (salvar / editar passado) */}
@@ -189,114 +186,116 @@ function TabelaResumoDia({
         </div>
       </div>
 
-      {/* ✅ tabela com colgroup para “redistribuir espaço” e não cortar lote */}
-      <table className="tabela-padrao" style={{ width: "100%", tableLayout: "fixed" }}>
-        <colgroup>
-  <col style={{ width: 70 }} />   {/* Número */}
-  <col style={{ width: 80 }} />   {/* Brinco */}
-  <col style={{ width: 60 }} />   {/* DEL */}
-  <col style={{ width: 70 }} />   {/* Manhã */}
-  <col style={{ width: 70 }} />   {/* Tarde */}
-  <col style={{ width: 55 }} />   {/* 3ª */}
-  <col style={{ width: 75 }} />   {/* Total */}
-  <col style={{ width: 130 }} />  {/* Última Medição (um pouco maior) */}
-  <col style={{ width: 220 }} />  {/* ✅ Lote (bem mais curto) */}
-  <col style={{ width: 170 }} />  {/* ✅ Ações (um pouco maior) */}
-</colgroup>
+      <div className="st-table-wrap">
+        <table
+          className="st-table st-table--darkhead"
+          onMouseLeave={() => setColunaHover(null)}
+        >
+          <colgroup>
+            <col style={{ width: 70 }} /> {/* Número */}
+            <col style={{ width: 80 }} /> {/* Brinco */}
+            <col style={{ width: 60 }} /> {/* DEL */}
+            <col style={{ width: 70 }} /> {/* Manhã */}
+            <col style={{ width: 70 }} /> {/* Tarde */}
+            <col style={{ width: 55 }} /> {/* 3ª */}
+            <col style={{ width: 75 }} /> {/* Total */}
+            <col style={{ width: 130 }} /> {/* Última Medição */}
+            <col style={{ width: 220 }} /> {/* Lote */}
+            <col style={{ width: 170 }} /> {/* Ações */}
+          </colgroup>
 
-        <thead>
-          <tr>
-            {titulos.map((titulo, index) => (
-              <th
-                key={titulo}
-                onMouseEnter={() => setColunaHover(index)}
-                onMouseLeave={() => setColunaHover(null)}
-                className={colunaHover === index ? "coluna-hover" : ""}
-                style={thStyle}
-              >
-                {titulo}
-              </th>
-            ))}
-          </tr>
-        </thead>
-
-        <tbody>
-          {vacas.length === 0 ? (
+          <thead>
             <tr>
-              <td colSpan={titulos.length} style={{ textAlign: "center", padding: "1rem" }}>
-                Nenhuma vaca em lactação encontrada.
-              </td>
+              {titulos.map((titulo, index) => (
+                <th
+                  key={titulo}
+                  onMouseEnter={() => setColunaHover(index)}
+                  onMouseLeave={() => setColunaHover(null)}
+                  className={colunaHover === index ? "st-col-hover" : ""}
+                >
+                  {titulo}
+                </th>
+              ))}
             </tr>
-          ) : (
-            vacas.map((vaca, rowIndex) => {
-              const numeroStr = String(vaca.numero ?? "");
-              const dados = medicoes[numeroStr] || {};
+          </thead>
 
-              const totalCalc = (toNum(dados.manha) + toNum(dados.tarde) + toNum(dados.terceira)).toFixed(1);
+          <tbody>
+            {vacas.length === 0 ? (
+              <tr className="st-empty">
+                <td colSpan={titulos.length} className="st-td-center">
+                  Nenhuma vaca em lactação encontrada.
+                </td>
+              </tr>
+            ) : (
+              vacas.map((vaca, rowIndex) => {
+                const numeroStr = String(vaca.numero ?? "");
+                const dados = medicoes[numeroStr] || {};
 
-              const del = calcularDEL(getUltimoPartoBR(vaca));
+                const totalCalc = (toNum(dados.manha) + toNum(dados.tarde) + toNum(dados.terceira)).toFixed(1);
 
-              const ultimaMed = dados.total ? String(dataTabela || "").split("-").reverse().join("/") : "—";
+                const del = calcularDEL(getUltimoPartoBR(vaca));
 
-              const colunas = [
-                vaca.numero ?? "—",
-                vaca.brinco ?? "—",
-                String(del),
-                dados.manha ?? "—",
-                dados.tarde ?? "—",
-                dados.terceira ?? "—",
-                dados.total ?? totalCalc ?? "—",
-                ultimaMed,
-              ];
+                const ultimaMed = dados.total ? String(dataTabela || "").split("-").reverse().join("/") : "—";
 
-              return (
-                <tr key={vaca.id ?? vaca.numero ?? rowIndex}>
-                  {colunas.map((conteudo, colIndex) => (
-                    <td
-                      key={colIndex}
-                      className={colunaHover === colIndex ? "coluna-hover" : ""}
-                      title={colIndex <= 1 ? String(conteudo) : undefined}
-                      style={tdStyle}
-                    >
-                      {conteudo}
+                const colunas = [
+                  { value: vaca.numero ?? "—", className: "st-num st-td-center" },
+                  { value: vaca.brinco ?? "—" },
+                  { value: String(del), className: "st-num st-td-center" },
+                  { value: dados.manha ?? "—", className: "st-num st-td-right" },
+                  { value: dados.tarde ?? "—", className: "st-num st-td-right" },
+                  { value: dados.terceira ?? "—", className: "st-num st-td-right" },
+                  { value: dados.total ?? totalCalc ?? "—", className: "st-num st-td-right" },
+                  { value: ultimaMed },
+                ];
+
+                return (
+                  <tr key={vaca.id ?? vaca.numero ?? rowIndex}>
+                    {colunas.map((coluna, colIndex) => (
+                      <td
+                        key={colIndex}
+                        className={`${colunaHover === colIndex ? "st-col-hover" : ""} ${coluna.className || ""}`}
+                        title={colIndex <= 1 ? String(coluna.value) : undefined}
+                      >
+                        {coluna.value}
+                      </td>
+                    ))}
+
+                    {/* Lote (vigente) — editável só quando permitido */}
+                    <td className={colunaHover === 8 ? "st-col-hover" : ""}>
+                      <div style={{ width: "100%", minWidth: 0 }}>
+                        <Select
+                          value={getLoteValue(numeroStr)}
+                          onChange={(opt) => onChangeLote(numeroStr, opt?.value || null)}
+                          options={lotesOptions}
+                          styles={selectLoteStyles}
+                          isClearable
+                          placeholder="—"
+                          menuPortalTarget={document.body}
+                          menuPosition="fixed"
+                          isDisabled={!podeEditarLote || salvandoLotes}
+                        />
+                      </div>
                     </td>
-                  ))}
 
-                  {/* Lote (vigente) — editável só quando permitido */}
-                  <td className={colunaHover === 8 ? "coluna-hover" : ""} style={{ ...tdStyle, padding: "6px 8px" }}>
-                    <div style={{ width: "100%", minWidth: 0 }}>
-                      <Select
-                        value={getLoteValue(numeroStr)}
-                        onChange={(opt) => onChangeLote(numeroStr, opt?.value || null)}
-                        options={lotesOptions}
-                        styles={selectLoteStyles}
-                        isClearable
-                        placeholder="—"
-                        menuPortalTarget={document.body}
-                        menuPosition="fixed"
-                        isDisabled={!podeEditarLote || salvandoLotes}
-                      />
-                    </div>
-                  </td>
+                    {/* Ações */}
+                    <td className={`st-td-center ${colunaHover === 9 ? "st-col-hover" : ""}`}>
+                      <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+                        <button type="button" className="st-btn" onClick={() => onClickFicha?.(vaca)}>
+                          Ficha
+                        </button>
 
-                  {/* Ações */}
-                  <td className={`coluna-acoes ${colunaHover === 9 ? "coluna-hover" : ""}`} style={{ ...tdStyle }}>
-                    <div className="botoes-tabela" style={{ gap: 8 }}>
-                      <button type="button" className="botao-editar" onClick={() => onClickFicha?.(vaca)}>
-                        Ficha
-                      </button>
-
-                      <button type="button" className="btn-registrar" onClick={() => onClickRegistrar?.(vaca)}>
-                        Registrar
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })
-          )}
-        </tbody>
-      </table>
+                        <button type="button" className="st-btn" onClick={() => onClickRegistrar?.(vaca)}>
+                          Registrar
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -341,15 +340,6 @@ export default function Leite() {
     }));
   }, [lotesLeite]);
 
-  const nomeDoLote = useCallback(
-    (loteId) => {
-      if (!loteId) return "";
-      const l = (lotesLeite || []).find((x) => x.id === loteId);
-      return l?.nome || "";
-    },
-    [lotesLeite]
-  );
-
   // ✅ controle de edição retroativa
   const hojeISO = useMemo(() => ymdHoje(), []);
   const dataEhPassada = useMemo(() => {
@@ -366,7 +356,16 @@ export default function Leite() {
     return !dataEhPassada || modoEdicaoPassado;
   }, [dataEhPassada, modoEdicaoPassado]);
 
-  const [loteEfetivoPorNumero, setLoteEfetivoPorNumero] = useState({});
+  const loteEfetivoPorNumero = useMemo(() => {
+    const mapNumeroToLoteId = {};
+    vacasLactacao.forEach((v) => {
+      const numeroStr = String(v.numero ?? "");
+      if (v?.lote_id) {
+        mapNumeroToLoteId[numeroStr] = v.lote_id;
+      }
+    });
+    return mapNumeroToLoteId;
+  }, [vacasLactacao]);
   const [loteEditPorNumero, setLoteEditPorNumero] = useState({});
   const [salvandoLotes, setSalvandoLotes] = useState(false);
 
@@ -407,38 +406,38 @@ export default function Leite() {
     };
   }, [vacasLactacao, medicoesDoDiaTabela]);
 
+  const carregarVacas = useCallback(async () => {
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) {
+        console.error("Erro ao obter usuário:", userError);
+        return;
+      }
+      if (!user) return;
+
+      const { data, error } = await supabase.from("animais").select("*").eq("user_id", user.id);
+
+      if (error) {
+        console.error("Erro ao buscar animais:", error);
+        setVacas([]);
+        return;
+      }
+
+      setVacas(data || []);
+    } catch (e) {
+      console.error("Erro inesperado ao carregar vacas:", e);
+      setVacas([]);
+    }
+  }, []);
+
   /* ===== Carregar vacas do plantel (Supabase) ===== */
   useEffect(() => {
-    async function carregarVacas() {
-      try {
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser();
-
-        if (userError) {
-          console.error("Erro ao obter usuário:", userError);
-          return;
-        }
-        if (!user) return;
-
-        const { data, error } = await supabase.from("animais").select("*").eq("user_id", user.id);
-
-        if (error) {
-          console.error("Erro ao buscar animais:", error);
-          setVacas([]);
-          return;
-        }
-
-        setVacas(data || []);
-      } catch (e) {
-        console.error("Erro inesperado ao carregar vacas:", e);
-        setVacas([]);
-      }
-    }
-
     carregarVacas();
-  }, []);
+  }, [carregarVacas]);
 
   /* ===== Carregar lotes Lactação (para selects) ===== */
   useEffect(() => {
@@ -538,7 +537,7 @@ export default function Leite() {
 
         const { data, error } = await supabase
           .from("medicoes_leite")
-          .select("id, animal_id, data_medicao, tipo_lancamento, litros_manha, litros_tarde, litros_terceira, litros_total, lote")
+          .select("id, animal_id, data_medicao, tipo_lancamento, litros_manha, litros_tarde, litros_terceira, litros_total")
           .eq("user_id", user.id)
           .eq("data_medicao", dataTabela);
 
@@ -561,7 +560,6 @@ export default function Leite() {
             terceira:
               linha.litros_terceira !== null && linha.litros_terceira !== undefined ? String(linha.litros_terceira) : "",
             total: linha.litros_total !== null && linha.litros_total !== undefined ? String(linha.litros_total) : "",
-            lote: linha.lote || "",
           };
         });
 
@@ -576,77 +574,6 @@ export default function Leite() {
 
     carregarMedicoesDiaTabela();
   }, [dataTabela, vacas]);
-
-  /* ===== ✅ LOTE VIGENTE NA DATA DA TABELA (persiste ao avançar) ===== */
-  useEffect(() => {
-    async function carregarLoteVigenteDaTabela() {
-      try {
-        if (!dataTabela) return;
-        if (vacasLactacao.length === 0) {
-          setLoteEfetivoPorNumero({});
-          setLoteEditPorNumero({});
-          return;
-        }
-
-        const { data: authData, error: authError } = await supabase.auth.getUser();
-        const user = authData?.user;
-        if (authError || !user) return;
-
-        const ids = vacasLactacao.map((v) => v.id).filter(Boolean);
-        if (ids.length === 0) return;
-
-        const desde = addDaysISO(dataTabela, -400);
-
-        const { data: rows, error } = await supabase
-          .from("medicoes_leite")
-          .select("animal_id,data_medicao,lote")
-          .eq("user_id", user.id)
-          .in("animal_id", ids)
-          .lte("data_medicao", dataTabela)
-          .gte("data_medicao", desde)
-          .not("lote", "is", null)
-          .order("data_medicao", { ascending: false });
-
-        if (error) {
-          console.error("Erro ao buscar lote vigente até a data:", error);
-          return;
-        }
-
-        const mapAnimalIdToNome = {};
-        for (const r of rows || []) {
-          if (!mapAnimalIdToNome[r.animal_id]) {
-            const nome = String(r.lote || "").trim();
-            if (nome) mapAnimalIdToNome[r.animal_id] = nome;
-          }
-        }
-
-        const mapNumeroToLoteId = {};
-        vacasLactacao.forEach((v) => {
-          const numeroStr = String(v.numero ?? "");
-          const nome = mapAnimalIdToNome[v.id];
-
-          if (nome) {
-            const match = (lotesLeite || []).find((l) => String(l.nome || "").trim() === String(nome).trim());
-            if (match?.id) {
-              mapNumeroToLoteId[numeroStr] = match.id;
-              return;
-            }
-          }
-
-          if (v?.lote_id) {
-            mapNumeroToLoteId[numeroStr] = v.lote_id;
-          }
-        });
-
-        setLoteEfetivoPorNumero(mapNumeroToLoteId);
-        setLoteEditPorNumero({});
-      } catch (e) {
-        console.error("Erro inesperado ao carregar lote vigente:", e);
-      }
-    }
-
-    carregarLoteVigenteDaTabela();
-  }, [dataTabela, vacasLactacao, lotesLeite]);
 
   // ✅ navegação (setas) muda tabela E calendário juntos
   const irParaAnterior = () => {
@@ -679,7 +606,7 @@ export default function Leite() {
   };
 
   // ✅ SALVAR medições: tabela vai para o dia salvo; calendário volta para HOJE
-  const handleSalvarMedicoes = ({ data, medicoes }) => {
+  const handleSalvarMedicoes = async ({ data, medicoes }) => {
     setMedicoesPorDia((prev) => {
       const existentes = prev[data] || {};
       const mescladas = mergeMedicoesDia(existentes, medicoes);
@@ -688,6 +615,7 @@ export default function Leite() {
 
     setDataTabela(data);
     setDataAtual(ymdHoje());
+    await carregarVacas();
   };
 
   // Abre a ficha leiteira
@@ -716,8 +644,7 @@ export default function Leite() {
       setSalvandoLotes(true);
 
       const { data: authData, error: authError } = await supabase.auth.getUser();
-      const user = authData?.user;
-      if (authError || !user) {
+      if (authError || !authData?.user) {
         setSalvandoLotes(false);
         return;
       }
@@ -729,39 +656,15 @@ export default function Leite() {
       }
 
       const updatesAnimais = [];
-      const payloadMedicoes = [];
 
       alteradas.forEach(([numeroStr, loteId]) => {
         const vaca = vacasLactacao.find((v) => String(v.numero ?? "") === String(numeroStr));
         if (!vaca?.id) return;
 
-        if (loteId && String(vaca.lote_id || "") !== String(loteId || "")) {
-          updatesAnimais.push({ animal_id: vaca.id, lote_id: loteId });
+        if (String(vaca.lote_id ?? "") !== String(loteId ?? "")) {
+          updatesAnimais.push({ animal_id: vaca.id, lote_id: loteId ?? null });
         }
-
-        const nome = loteId ? nomeDoLote(loteId) : "";
-
-        payloadMedicoes.push({
-          user_id: user.id,
-          animal_id: vaca.id,
-          data_medicao: dataTabela,
-          tipo_lancamento: "2",
-          lote: nome || null,
-        });
       });
-
-      if (payloadMedicoes.length > 0) {
-        const { error } = await supabase
-          .from("medicoes_leite")
-          .upsert(payloadMedicoes, { onConflict: "user_id,animal_id,data_medicao" });
-
-        if (error) {
-          console.error("Erro ao salvar lote do dia em medicoes_leite:", error);
-          alert("Erro ao salvar lote do dia. Veja o console.");
-          setSalvandoLotes(false);
-          return;
-        }
-      }
 
       if (updatesAnimais.length > 0) {
         const results = await Promise.all(
@@ -774,15 +677,16 @@ export default function Leite() {
         }
       }
 
-      setLoteEfetivoPorNumero((prev) => {
-        const novo = { ...prev };
-        alteradas.forEach(([numeroStr, loteId]) => {
-          novo[String(numeroStr)] = loteId || null;
-        });
-        return novo;
-      });
+      setVacas((prev) =>
+        (prev || []).map((v) => {
+          const numeroStr = String(v.numero ?? "");
+          if (!(numeroStr in loteEditPorNumero)) return v;
+          return { ...v, lote_id: loteEditPorNumero[numeroStr] ?? null };
+        })
+      );
       setLoteEditPorNumero({});
 
+      await carregarVacas();
       setSalvandoLotes(false);
     } catch (e) {
       console.error("Erro inesperado ao salvar lotes:", e);

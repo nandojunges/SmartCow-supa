@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import Select from "react-select";
+import "../../styles/tabelaModerna.css";
 import {
   ResponsiveContainer,
   LineChart,
@@ -1080,71 +1081,69 @@ export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }
           {testesDoDia.length === 0 ? (
             <div style={{ color: "#6b7280" }}>Nenhum CMT registrado neste dia.</div>
           ) : (
-            <div style={{ width: "100%", overflowX: "auto" }}>
-              <table style={table}>
-                <thead>
-                  <tr>
-                    <th style={th}>Dia</th>
-                    <th style={th}>Data/Hora</th>
-                    <th style={th}>Ordenha</th>
-                    <th style={thCenter}>TE</th>
-                    <th style={thCenter}>TD</th>
-                    <th style={thCenter}>PE</th>
-                    <th style={thCenter}>PD</th>
-                    <th style={th}>Responsável</th>
-                    <th style={thRight}>Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {testesDoDia.map((t) => (
-                    <tr key={t.id}>
-                      <td style={td}>{getDiaDoTeste(t)}</td>
-                      <td style={td}>{formatBRDateTime(t.momento)}</td>
-                      <td style={td}>{t.ordenha ? labelOrdenha(Number(t.ordenha)) : "—"}</td>
-
-                      {["TE", "TD", "PE", "PD"].map((q) => {
-                        const r = t.cmt?.[q]?.resultado || "";
-                        return (
-                          <td key={q} style={tdCenter}>
-                            <span
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                minWidth: 44,
-                                padding: "0.15rem 0.55rem",
-                                borderRadius: 999,
-                                border: "1px solid #e5e7eb",
-                                background: r ? CORES_RESULTADO[r] || "#e5e7eb" : "#f3f4f6",
-                                color: "#111827",
-                                fontWeight: 800,
-                              }}
-                              title={t.cmt?.[q]?.observacao || ""}
-                            >
-                              {r || "—"}
-                            </span>
-                          </td>
-                        );
-                      })}
-
-                      <td style={td}>{t.operador || "—"}</td>
-
-                      <td style={tdRight}>
-                        <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
-                          <button
-                            type="button"
-                            onClick={() => deletarTeste(t.id)}
-                            style={{ ...btnSmall, borderColor: "#fecaca" }}
-                            title="Excluir"
-                          >
-                            🗑️
-                          </button>
-                        </div>
-                      </td>
+            <div className="st-table-wrap">
+              <div className="st-scroll" style={{ overflowX: "auto" }}>
+                <table className="st-table st-table--darkhead">
+                  <thead>
+                    <tr>
+                      <th>Dia</th>
+                      <th>Data/Hora</th>
+                      <th>Ordenha</th>
+                      <th className="st-td-center">TE</th>
+                      <th className="st-td-center">TD</th>
+                      <th className="st-td-center">PE</th>
+                      <th className="st-td-center">PD</th>
+                      <th>Responsável</th>
+                      <th className="st-td-right">Ações</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {testesDoDia.map((t) => (
+                      <tr key={t.id}>
+                        <td>{getDiaDoTeste(t)}</td>
+                        <td>{formatBRDateTime(t.momento)}</td>
+                        <td>{t.ordenha ? labelOrdenha(Number(t.ordenha)) : "—"}</td>
+
+                        {["TE", "TD", "PE", "PD"].map((q) => {
+                          const r = t.cmt?.[q]?.resultado || "";
+                          return (
+                            <td key={q} className="st-td-center">
+                              <span
+                                className="st-pill"
+                                style={{
+                                  minWidth: 44,
+                                  justifyContent: "center",
+                                  background: r ? CORES_RESULTADO[r] || "#e5e7eb" : "#f3f4f6",
+                                  color: "#111827",
+                                }}
+                                title={t.cmt?.[q]?.observacao || ""}
+                              >
+                                {r || "—"}
+                              </span>
+                            </td>
+                          );
+                        })}
+
+                        <td>{t.operador || "—"}</td>
+
+                        <td className="st-td-right">
+                          <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+                            <button
+                              type="button"
+                              onClick={() => deletarTeste(t.id)}
+                              className="st-btn"
+                              style={{ borderColor: "#fecaca", background: "#fee2e2", color: "#991b1b" }}
+                              title="Excluir"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
@@ -1289,45 +1288,6 @@ const grid2 = {
   gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
   gap: "1rem",
   marginTop: "1rem",
-};
-
-const table = {
-  width: "100%",
-  borderCollapse: "separate",
-  borderSpacing: 0,
-  fontSize: "0.9rem",
-};
-
-const th = {
-  textAlign: "left",
-  padding: "0.75rem 0.6rem",
-  borderBottom: "1px solid #e5e7eb",
-  whiteSpace: "nowrap",
-  color: "#374151",
-  fontWeight: 900,
-  fontSize: "0.85rem",
-};
-
-const thCenter = { ...th, textAlign: "center" };
-const thRight = { ...th, textAlign: "right" };
-
-const td = {
-  padding: "0.65rem 0.6rem",
-  borderBottom: "1px solid #f3f4f6",
-  verticalAlign: "middle",
-  whiteSpace: "nowrap",
-};
-
-const tdCenter = { ...td, textAlign: "center" };
-const tdRight = { ...td, textAlign: "right" };
-
-const btnSmall = {
-  background: "#fff",
-  border: "1px solid #e5e7eb",
-  borderRadius: 10,
-  padding: "0.35rem 0.6rem",
-  cursor: "pointer",
-  fontWeight: 800,
 };
 
 const erroBox = {
