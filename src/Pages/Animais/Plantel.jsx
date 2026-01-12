@@ -974,6 +974,16 @@ export default function Plantel() {
               setHoveredColKey(null);
             }}
           >
+            <colgroup>
+              <col style={{ width: "20%" }} />
+              <col style={{ width: "14%" }} />
+              <col style={{ width: "14%" }} />
+              <col style={{ width: "14%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "6%" }} />
+              <col style={{ width: "12%" }} />
+              <col style={{ width: "10%" }} />
+            </colgroup>
             <thead>
               <tr>
                 <th
@@ -982,7 +992,7 @@ export default function Plantel() {
                   ref={(el) => {
                     triggerRefs.current.animal = el;
                   }}
-                  style={{ position: "relative", width: "28%" }}
+                  style={{ position: "relative" }}
                 >
                   <button
                     type="button"
@@ -1246,7 +1256,6 @@ export default function Plantel() {
                 <th
                   className="st-td-right col-producao"
                   onMouseEnter={() => handleColEnter("producao")}
-                  style={{ width: "140px" }}
                 >
                   <button
                     type="button"
@@ -1264,7 +1273,7 @@ export default function Plantel() {
                       gap: 6,
                     }}
                   >
-                    <span className="st-th-label">Última prod.</span>
+                    <span className="st-th-label">Última produção</span>
                     {sortConfig.key === "producao" && sortConfig.direction && (
                       <span style={{ fontSize: 12, opacity: 0.7 }}>
                         {sortConfig.direction === "asc" ? "▲" : "▼"}
@@ -1306,7 +1315,7 @@ export default function Plantel() {
                   ref={(el) => {
                     triggerRefs.current.origem = el;
                   }}
-                  style={{ position: "relative", width: "120px" }}
+                  style={{ position: "relative" }}
                 >
                   <button
                     type="button"
@@ -1356,7 +1365,6 @@ export default function Plantel() {
                 <th
                   className="st-td-center col-acoes"
                   onMouseEnter={() => handleColEnter("acoes")}
-                  style={{ width: "110px", whiteSpace: "nowrap" }}
                 >
                   <span className="st-th-label">Ações</span>
                 </th>
@@ -1411,7 +1419,6 @@ export default function Plantel() {
                       } ${rowHover ? "st-row-hover" : ""} ${
                         rowHover && hoveredColKey === "animal" ? "st-cell-hover" : ""
                       }`}
-                      style={{ width: "28%" }}
                       onMouseEnter={() => handleCellEnter(rowId, "animal")}
                     >
                       <div className="st-animal">
@@ -1422,8 +1429,8 @@ export default function Plantel() {
                           {a.numero ?? "—"}
                         </span>
 
-                        <div className="st-animal-main" style={{ minWidth: 0 }}>
-                          <div className="st-animal-title st-truncate">
+                        <div className="st-animal-main">
+                          <div className="st-animal-title">
                             {racaNome} <span className="st-dot">•</span> {sexoLabel}
                           </div>
                           <div className="st-animal-sub">
@@ -1442,12 +1449,7 @@ export default function Plantel() {
                       } ${rowHover ? "st-row-hover" : ""} ${
                         rowHover && hoveredColKey === "lote" ? "st-cell-hover" : ""
                       }`}
-                      style={{
-                        overflow: "visible",
-                        paddingLeft: 12,
-                        paddingRight: 12,
-                        minWidth: 0,
-                      }}
+                      style={{ overflow: "visible", paddingLeft: 12, paddingRight: 12 }}
                       onMouseEnter={() => handleCellEnter(rowId, "lote")}
                     >
                       {editingLoteId === a.id ? (
@@ -1488,7 +1490,6 @@ export default function Plantel() {
                           }`}
                           style={{
                             width: "100%",
-                            maxWidth: "100%",
                             display: "inline-flex",
                             alignItems: "center",
                             justifyContent: "center",
@@ -1547,7 +1548,7 @@ export default function Plantel() {
                       } ${rowHover ? "st-row-hover" : ""} ${
                         rowHover && hoveredColKey === "producao" ? "st-cell-hover" : ""
                       }`}
-                      style={{ textOverflow: "clip", width: "140px" }}
+                      style={{ textOverflow: "clip" }}
                       onMouseEnter={() => handleCellEnter(rowId, "producao")}
                     >
                       {producaoTexto}
@@ -1568,12 +1569,12 @@ export default function Plantel() {
 
                     {/* ORIGEM */}
                     <td
-                      className={`col-origem ${
+                      className={`col-origem st-td-wrap ${
                         hoveredColKey === "origem" ? "st-col-hover" : ""
                       } ${rowHover ? "st-row-hover" : ""} ${
                         rowHover && hoveredColKey === "origem" ? "st-cell-hover" : ""
                       }`}
-                      style={{ fontWeight: 700, width: "120px", minWidth: 0 }}
+                      style={{ fontWeight: 700 }}
                       onMouseEnter={() => handleCellEnter(rowId, "origem")}
                     >
                       {a.origem || "—"}
@@ -1586,7 +1587,6 @@ export default function Plantel() {
                       } ${rowHover ? "st-row-hover" : ""} ${
                         rowHover && hoveredColKey === "acoes" ? "st-cell-hover" : ""
                       }`}
-                      style={{ width: "110px", minWidth: "92px", whiteSpace: "nowrap" }}
                       onMouseEnter={() => handleCellEnter(rowId, "acoes")}
                     >
                       <button onClick={() => abrirFichaAnimal(a)} className="st-btn">
