@@ -109,14 +109,19 @@ export default function Plantel() {
   const [editingLoteId, setEditingLoteId] = useState(null);
   const [openPopoverKey, setOpenPopoverKey] = useState(null);
   const popoverRef = useRef(null);
+  const triggerRefs = useRef({});
+  const [popoverStyle, setPopoverStyle] = useState({
+    left: "50%",
+    transform: "translateX(-50%)",
+  });
   const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
   const [filtros, setFiltros] = useState({
-    lote: "all",
-    situacaoProdutiva: "all",
-    situacaoReprodutiva: "all",
-    origem: "all",
-    animalRaca: "all",
-    animalSexo: "all",
+    lote: "__ALL__",
+    situacaoProdutiva: "__ALL__",
+    situacaoReprodutiva: "__ALL__",
+    origem: "__ALL__",
+    animalRaca: "__ALL__",
+    animalSexo: "__ALL__",
     animalBusca: "",
   });
 
@@ -366,6 +371,9 @@ export default function Plantel() {
     return Array.from(valores).sort((a, b) => a.localeCompare(b));
   }, [linhas]);
 
+  const allValue = "__ALL__";
+  const semLoteValue = "__SEM_LOTE__";
+
   const origensDisponiveis = useMemo(() => {
     const valores = new Set();
     linhas.forEach((animal) => {
@@ -397,18 +405,104 @@ export default function Plantel() {
     return Array.from(valores).sort((a, b) => a.localeCompare(b));
   }, [linhas]);
 
+  const situacaoProdutivaOptions = useMemo(
+    () => [
+      { value: allValue, label: "Todos" },
+      { value: "lac", label: "LAC" },
+      { value: "nao_lactante", label: "Não lactante" },
+      ...situacoesProdutivas
+        .filter((valor) => !/lact|lac/i.test(valor))
+        .map((valor) => ({ value: valor, label: valor })),
+    ],
+    [allValue, situacoesProdutivas]
+  );
+
+  const situacaoReprodutivaOptions = useMemo(
+    () => [
+      { value: allValue, label: "Todos" },
+      ...situacoesReprodutivas.map((valor) => ({
+        value: valor,
+        label: valor,
+      })),
+    ],
+    [allValue, situacoesReprodutivas]
+  );
+
+  const origemOptions = useMemo(
+    () => [
+      { value: allValue, label: "Todos" },
+      ...origensDisponiveis.map((valor) => ({
+        value: valor,
+        label: valor,
+      })),
+    ],
+    [allValue, origensDisponiveis]
+  );
+
+  const racaOptions = useMemo(
+    () => [
+      { value: allValue, label: "Todas" },
+      ...racasDisponiveis.map((raca) => ({
+        value: raca.id,
+        label: raca.nome,
+      })),
+    ],
+    [allValue, racasDisponiveis]
+  );
+
+  const sexoOptions = useMemo(
+    () => [
+      { value: allValue, label: "Todos" },
+      ...sexosDisponiveis.map((sexo) => ({
+        value: sexo,
+        label:
+          sexo === "macho" ? "Macho" : sexo === "femea" ? "Fêmea" : sexo,
+      })),
+    ],
+    [allValue, sexosDisponiveis]
+  );
+
+  const loteOptionsFiltro = useMemo(
+    () => [
+      { value: allValue, label: "Todos" },
+      { value: semLoteValue, label: "Sem lote" },
+      ...(lotes || []).map((lote) => {
+        const label =
+          lote.nome ??
+          lote.descricao ??
+          lote.titulo ??
+          lote.label ??
+          String(lote.id ?? "—");
+        return {
+          value: lote.id,
+          label,
+        };
+      }),
+    ],
+    [allValue, lotes, semLoteValue]
+  );
+
+  const resolveOption = useCallback((options, value) => {
+    const found = options.find(
+      (option) => String(option.value) === String(value)
+    );
+    return found || options[0] || null;
+  }, []);
+
   const selectStylesCompact = useMemo(
     () => ({
       container: (base) => ({
         ...base,
         width: "100%",
+        fontSize: 13,
       }),
       control: (base, state) => ({
         ...base,
         minHeight: 34,
         height: "auto",
         borderRadius: 10,
-        fontWeight: 800,
+        fontWeight: 700,
+        fontSize: 13,
         borderColor: state.isFocused
           ? "rgba(37,99,235,0.55)"
           : "rgba(37,99,235,0.25)",
@@ -421,7 +515,7 @@ export default function Plantel() {
       }),
       valueContainer: (base) => ({
         ...base,
-        padding: "0 10px",
+        padding: "0 8px",
       }),
       input: (base) => ({
         ...base,
@@ -433,10 +527,19 @@ export default function Plantel() {
         maxWidth: "100%",
         overflow: "hidden",
         textOverflow: "ellipsis",
+        fontSize: 13,
+      }),
+      placeholder: (base) => ({
+        ...base,
+        fontSize: 13,
       }),
       indicatorsContainer: (base) => ({
         ...base,
         height: 34,
+      }),
+      option: (base) => ({
+        ...base,
+        fontSize: 13,
       }),
       menu: (base) => ({
         ...base,
@@ -449,6 +552,44 @@ export default function Plantel() {
     }),
     []
   );
+
+  const portalTarget = typeof document !== "undefined" ? document.body : null;
+
+  useEffect(() => {
+    if (!openPopoverKey) return;
+    setPopoverStyle({ left: "50%", transform: "translateX(-50%)" });
+
+    const updatePosition = () => {
+      const triggerEl = triggerRefs.current?.[openPopoverKey];
+      const popoverEl = popoverRef.current;
+      if (!triggerEl || !popoverEl) return;
+
+      const thRect = triggerEl.getBoundingClientRect();
+      const popRect = popoverEl.getBoundingClientRect();
+      let left = (thRect.width - popRect.width) / 2;
+      const desiredLeft = thRect.left + left;
+      const desiredRight = desiredLeft + popRect.width;
+
+      if (desiredRight > window.innerWidth - 8) {
+        left = window.innerWidth - 8 - popRect.width - thRect.left;
+      }
+      if (desiredLeft < 8) {
+        left = 8 - thRect.left;
+      }
+
+      setPopoverStyle({ left: `${left}px`, transform: "translateX(0)" });
+    };
+
+    const raf = requestAnimationFrame(updatePosition);
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [openPopoverKey]);
 
   const closeLoteEdit = useCallback(() => {
     setEditingLoteId(null);
@@ -572,14 +713,14 @@ export default function Plantel() {
 
   const filtrosAtivos = useMemo(() => {
     const chips = [];
-    if (filtros.lote !== "all") {
+    if (filtros.lote !== allValue) {
       const label =
-        filtros.lote === "sem"
+        filtros.lote === semLoteValue
           ? "Sem lote"
           : lotesById[filtros.lote] || "Lote";
       chips.push({ key: "lote", label: `Lote: ${label}` });
     }
-    if (filtros.situacaoProdutiva !== "all") {
+    if (filtros.situacaoProdutiva !== allValue) {
       const label =
         filtros.situacaoProdutiva === "lac"
           ? "LAC"
@@ -588,21 +729,21 @@ export default function Plantel() {
             : filtros.situacaoProdutiva;
       chips.push({ key: "situacaoProdutiva", label: `Produtiva: ${label}` });
     }
-    if (filtros.situacaoReprodutiva !== "all") {
+    if (filtros.situacaoReprodutiva !== allValue) {
       chips.push({
         key: "situacaoReprodutiva",
         label: `Reprodutiva: ${filtros.situacaoReprodutiva}`,
       });
     }
-    if (filtros.origem !== "all") {
+    if (filtros.origem !== allValue) {
       chips.push({ key: "origem", label: `Origem: ${filtros.origem}` });
     }
-    if (filtros.animalRaca !== "all") {
+    if (filtros.animalRaca !== allValue) {
       const racaLabel =
         racaMap[filtros.animalRaca] || "Raça";
       chips.push({ key: "animalRaca", label: `Raça: ${racaLabel}` });
     }
-    if (filtros.animalSexo !== "all") {
+    if (filtros.animalSexo !== allValue) {
       const sexoLabel =
         filtros.animalSexo === "macho"
           ? "Macho"
@@ -615,45 +756,45 @@ export default function Plantel() {
       chips.push({ key: "animalBusca", label: `Busca: ${filtros.animalBusca.trim()}` });
     }
     return chips;
-  }, [filtros, lotesById, racaMap]);
+  }, [allValue, filtros, lotesById, racaMap, semLoteValue]);
 
   const limparFiltro = useCallback((key) => {
     setFiltros((prev) => {
       if (key === "animalBusca") return { ...prev, animalBusca: "" };
-      if (key === "animalRaca") return { ...prev, animalRaca: "all" };
-      if (key === "animalSexo") return { ...prev, animalSexo: "all" };
-      if (key === "lote") return { ...prev, lote: "all" };
-      if (key === "situacaoProdutiva") return { ...prev, situacaoProdutiva: "all" };
-      if (key === "situacaoReprodutiva") return { ...prev, situacaoReprodutiva: "all" };
-      if (key === "origem") return { ...prev, origem: "all" };
+      if (key === "animalRaca") return { ...prev, animalRaca: allValue };
+      if (key === "animalSexo") return { ...prev, animalSexo: allValue };
+      if (key === "lote") return { ...prev, lote: allValue };
+      if (key === "situacaoProdutiva") return { ...prev, situacaoProdutiva: allValue };
+      if (key === "situacaoReprodutiva") return { ...prev, situacaoReprodutiva: allValue };
+      if (key === "origem") return { ...prev, origem: allValue };
       return prev;
     });
-  }, []);
+  }, [allValue]);
 
   const limparFiltros = useCallback(() => {
     setFiltros({
-      lote: "all",
-      situacaoProdutiva: "all",
-      situacaoReprodutiva: "all",
-      origem: "all",
-      animalRaca: "all",
-      animalSexo: "all",
+      lote: allValue,
+      situacaoProdutiva: allValue,
+      situacaoReprodutiva: allValue,
+      origem: allValue,
+      animalRaca: allValue,
+      animalSexo: allValue,
       animalBusca: "",
     });
-  }, []);
+  }, [allValue]);
 
   const linhasFiltradas = useMemo(() => {
     const busca = filtros.animalBusca.trim().toLowerCase();
     return linhas.filter((animal) => {
-      if (filtros.lote !== "all") {
-        if (filtros.lote === "sem") {
+      if (filtros.lote !== allValue) {
+        if (filtros.lote === semLoteValue) {
           if (animal?.[LOTE_FIELD] != null && animal?.[LOTE_FIELD] !== "") return false;
         } else if (String(animal?.[LOTE_FIELD]) !== String(filtros.lote)) {
           return false;
         }
       }
 
-      if (filtros.situacaoProdutiva !== "all") {
+      if (filtros.situacaoProdutiva !== allValue) {
         const sitProd = String(animal?.situacao_produtiva || "");
         const isLact = /lact|lac/i.test(sitProd);
         if (filtros.situacaoProdutiva === "lac" && !isLact) return false;
@@ -667,21 +808,21 @@ export default function Plantel() {
         }
       }
 
-      if (filtros.situacaoReprodutiva !== "all") {
+      if (filtros.situacaoReprodutiva !== allValue) {
         const sitReprod = String(animal?.situacao_reprodutiva || "");
         if (sitReprod !== filtros.situacaoReprodutiva) return false;
       }
 
-      if (filtros.origem !== "all") {
+      if (filtros.origem !== allValue) {
         const origem = String(animal?.origem || "");
         if (origem !== filtros.origem) return false;
       }
 
-      if (filtros.animalRaca !== "all") {
+      if (filtros.animalRaca !== allValue) {
         if (String(animal?.raca_id) !== String(filtros.animalRaca)) return false;
       }
 
-      if (filtros.animalSexo !== "all") {
+      if (filtros.animalSexo !== allValue) {
         const sexo = String(animal?.sexo || "");
         if (sexo !== filtros.animalSexo) return false;
       }
@@ -697,7 +838,7 @@ export default function Plantel() {
 
       return true;
     });
-  }, [filtros, linhas, LOTE_FIELD]);
+  }, [allValue, filtros, linhas, LOTE_FIELD, semLoteValue]);
 
   const linhasOrdenadas = useMemo(() => {
     if (!sortConfig.key || !sortConfig.direction) return linhasFiltradas;
@@ -758,7 +899,22 @@ export default function Plantel() {
       { soma: 0, qtd: 0 }
     );
     const media = somas.qtd > 0 ? somas.soma / somas.qtd : null;
-    return { total, media };
+    const delSomas = linhasOrdenadas.reduce(
+      (acc, animal) => {
+        const sitProd = String(animal?.situacao_produtiva || "");
+        const isLact = /lact|lac/i.test(sitProd);
+        if (!isLact) return acc;
+        const delValor = delNumeroFromParto(animal?.ultimo_parto);
+        if (!Number.isFinite(delValor)) return acc;
+        return {
+          soma: acc.soma + delValor,
+          qtd: acc.qtd + 1,
+        };
+      },
+      { soma: 0, qtd: 0 }
+    );
+    const mediaDel = delSomas.qtd > 0 ? delSomas.soma / delSomas.qtd : null;
+    return { total, media, mediaDel };
   }, [linhasOrdenadas, ultProducao]);
 
   return (
@@ -806,6 +962,9 @@ export default function Plantel() {
         </div>
       )}
 
+      <div className="st-filter-hint">
+        Dica: clique no título da coluna para filtrar. Clique novamente para fechar.
+      </div>
       <div className="st-table-container">
         <div className="st-table-wrap">
           <table
@@ -830,6 +989,9 @@ export default function Plantel() {
                 <th
                   className="col-animal st-col-animal"
                   onMouseEnter={() => handleColEnter("animal")}
+                  ref={(el) => {
+                    triggerRefs.current.animal = el;
+                  }}
                   style={{ position: "relative" }}
                 >
                   <button
@@ -862,82 +1024,52 @@ export default function Plantel() {
                   {openPopoverKey === "animal" && (
                     <div
                       ref={popoverRef}
-                      style={{
-                        position: "absolute",
-                        top: "calc(100% + 8px)",
-                        left: 0,
-                        zIndex: 50,
-                        background: "#fff",
-                        border: "1px solid rgba(15, 23, 42, 0.12)",
-                        borderRadius: 12,
-                        padding: 12,
-                        minWidth: 240,
-                        boxShadow: "0 12px 24px rgba(15, 23, 42, 0.12)",
-                      }}
+                      className="st-filter-popover"
+                      style={popoverStyle}
                       onClick={(event) => event.stopPropagation()}
                     >
-                      <div style={{ display: "grid", gap: 10 }}>
-                        <label style={{ fontSize: 12, fontWeight: 800 }}>
+                      <div className="st-filter">
+                        <label className="st-filter__label">
                           Raça
-                          <select
-                            value={filtros.animalRaca}
-                            onChange={(event) =>
+                          <Select
+                            className="st-select--compact"
+                            classNamePrefix="st-select"
+                            menuPortalTarget={portalTarget}
+                            menuPosition="fixed"
+                            menuShouldBlockScroll
+                            styles={selectStylesCompact}
+                            options={racaOptions}
+                            value={resolveOption(racaOptions, filtros.animalRaca)}
+                            onChange={(option) =>
                               setFiltros((prev) => ({
                                 ...prev,
-                                animalRaca: event.target.value,
+                                animalRaca: option?.value ?? allValue,
                               }))
                             }
-                            style={{
-                              width: "100%",
-                              marginTop: 6,
-                              padding: "6px 10px",
-                              borderRadius: 10,
-                              border: "1px solid rgba(15,23,42,0.2)",
-                              fontWeight: 700,
-                            }}
-                          >
-                            <option value="all">Todas</option>
-                            {racasDisponiveis.map((raca) => (
-                              <option key={raca.id} value={raca.id}>
-                                {raca.nome}
-                              </option>
-                            ))}
-                          </select>
+                          />
                         </label>
 
-                        <label style={{ fontSize: 12, fontWeight: 800 }}>
+                        <label className="st-filter__label">
                           Sexo
-                          <select
-                            value={filtros.animalSexo}
-                            onChange={(event) =>
+                          <Select
+                            className="st-select--compact"
+                            classNamePrefix="st-select"
+                            menuPortalTarget={portalTarget}
+                            menuPosition="fixed"
+                            menuShouldBlockScroll
+                            styles={selectStylesCompact}
+                            options={sexoOptions}
+                            value={resolveOption(sexoOptions, filtros.animalSexo)}
+                            onChange={(option) =>
                               setFiltros((prev) => ({
                                 ...prev,
-                                animalSexo: event.target.value,
+                                animalSexo: option?.value ?? allValue,
                               }))
                             }
-                            style={{
-                              width: "100%",
-                              marginTop: 6,
-                              padding: "6px 10px",
-                              borderRadius: 10,
-                              border: "1px solid rgba(15,23,42,0.2)",
-                              fontWeight: 700,
-                            }}
-                          >
-                            <option value="all">Todos</option>
-                            {sexosDisponiveis.map((sexo) => (
-                              <option key={sexo} value={sexo}>
-                                {sexo === "macho"
-                                  ? "Macho"
-                                  : sexo === "femea"
-                                    ? "Fêmea"
-                                    : sexo}
-                              </option>
-                            ))}
-                          </select>
+                          />
                         </label>
 
-                        <label style={{ fontSize: 12, fontWeight: 800 }}>
+                        <label className="st-filter__label">
                           Buscar (nº, brinco, nome)
                           <input
                             type="text"
@@ -949,14 +1081,7 @@ export default function Plantel() {
                               }))
                             }
                             placeholder="Digite para filtrar"
-                            style={{
-                              width: "100%",
-                              marginTop: 6,
-                              padding: "6px 10px",
-                              borderRadius: 10,
-                              border: "1px solid rgba(15,23,42,0.2)",
-                              fontWeight: 700,
-                            }}
+                            className="st-filter-input"
                           />
                         </label>
                       </div>
@@ -966,6 +1091,9 @@ export default function Plantel() {
                 <th
                   className="col-lote"
                   onMouseEnter={() => handleColEnter("lote")}
+                  ref={(el) => {
+                    triggerRefs.current.lote = el;
+                  }}
                   style={{ position: "relative" }}
                 >
                   <button
@@ -987,55 +1115,28 @@ export default function Plantel() {
                   {openPopoverKey === "lote" && (
                     <div
                       ref={popoverRef}
-                      style={{
-                        position: "absolute",
-                        top: "calc(100% + 8px)",
-                        left: 0,
-                        zIndex: 50,
-                        background: "#fff",
-                        border: "1px solid rgba(15, 23, 42, 0.12)",
-                        borderRadius: 12,
-                        padding: 12,
-                        minWidth: 200,
-                        boxShadow: "0 12px 24px rgba(15, 23, 42, 0.12)",
-                      }}
+                      className="st-filter-popover"
+                      style={popoverStyle}
                       onClick={(event) => event.stopPropagation()}
                     >
-                      <label style={{ fontSize: 12, fontWeight: 800 }}>
+                      <label className="st-filter__label">
                         Lote
-                        <select
-                          value={filtros.lote}
-                          onChange={(event) =>
+                        <Select
+                          className="st-select--compact"
+                          classNamePrefix="st-select"
+                          menuPortalTarget={portalTarget}
+                          menuPosition="fixed"
+                          menuShouldBlockScroll
+                          styles={selectStylesCompact}
+                          options={loteOptionsFiltro}
+                          value={resolveOption(loteOptionsFiltro, filtros.lote)}
+                          onChange={(option) =>
                             setFiltros((prev) => ({
                               ...prev,
-                              lote: event.target.value,
+                              lote: option?.value ?? allValue,
                             }))
                           }
-                          style={{
-                            width: "100%",
-                            marginTop: 6,
-                            padding: "6px 10px",
-                            borderRadius: 10,
-                            border: "1px solid rgba(15,23,42,0.2)",
-                            fontWeight: 700,
-                          }}
-                        >
-                          <option value="all">Todos</option>
-                          <option value="sem">Sem lote</option>
-                          {(lotes || []).map((lote) => {
-                            const label =
-                              lote.nome ??
-                              lote.descricao ??
-                              lote.titulo ??
-                              lote.label ??
-                              String(lote.id ?? "—");
-                            return (
-                              <option key={lote.id ?? label} value={lote.id}>
-                                {label}
-                              </option>
-                            );
-                          })}
-                        </select>
+                        />
                       </label>
                     </div>
                   )}
@@ -1043,6 +1144,9 @@ export default function Plantel() {
                 <th
                   className="st-td-center col-sitprod"
                   onMouseEnter={() => handleColEnter("sitprod")}
+                  ref={(el) => {
+                    triggerRefs.current.sitprod = el;
+                  }}
                   style={{ position: "relative" }}
                 >
                   <button
@@ -1064,50 +1168,31 @@ export default function Plantel() {
                   {openPopoverKey === "sitprod" && (
                     <div
                       ref={popoverRef}
-                      style={{
-                        position: "absolute",
-                        top: "calc(100% + 8px)",
-                        left: 0,
-                        zIndex: 50,
-                        background: "#fff",
-                        border: "1px solid rgba(15, 23, 42, 0.12)",
-                        borderRadius: 12,
-                        padding: 12,
-                        minWidth: 220,
-                        boxShadow: "0 12px 24px rgba(15, 23, 42, 0.12)",
-                      }}
+                      className="st-filter-popover"
+                      style={popoverStyle}
                       onClick={(event) => event.stopPropagation()}
                     >
-                      <label style={{ fontSize: 12, fontWeight: 800 }}>
+                      <label className="st-filter__label">
                         Situação produtiva
-                        <select
-                          value={filtros.situacaoProdutiva}
-                          onChange={(event) =>
+                        <Select
+                          className="st-select--compact"
+                          classNamePrefix="st-select"
+                          menuPortalTarget={portalTarget}
+                          menuPosition="fixed"
+                          menuShouldBlockScroll
+                          styles={selectStylesCompact}
+                          options={situacaoProdutivaOptions}
+                          value={resolveOption(
+                            situacaoProdutivaOptions,
+                            filtros.situacaoProdutiva
+                          )}
+                          onChange={(option) =>
                             setFiltros((prev) => ({
                               ...prev,
-                              situacaoProdutiva: event.target.value,
+                              situacaoProdutiva: option?.value ?? allValue,
                             }))
                           }
-                          style={{
-                            width: "100%",
-                            marginTop: 6,
-                            padding: "6px 10px",
-                            borderRadius: 10,
-                            border: "1px solid rgba(15,23,42,0.2)",
-                            fontWeight: 700,
-                          }}
-                        >
-                          <option value="all">Todos</option>
-                          <option value="lac">LAC</option>
-                          <option value="nao_lactante">Não lactante</option>
-                          {situacoesProdutivas
-                            .filter((valor) => !/lact|lac/i.test(valor))
-                            .map((valor) => (
-                              <option key={valor} value={valor}>
-                                {valor}
-                              </option>
-                            ))}
-                        </select>
+                        />
                       </label>
                     </div>
                   )}
@@ -1115,6 +1200,9 @@ export default function Plantel() {
                 <th
                   className="st-td-center col-sitreprod"
                   onMouseEnter={() => handleColEnter("sitreprod")}
+                  ref={(el) => {
+                    triggerRefs.current.sitreprod = el;
+                  }}
                   style={{ position: "relative" }}
                 >
                   <button
@@ -1136,46 +1224,31 @@ export default function Plantel() {
                   {openPopoverKey === "sitreprod" && (
                     <div
                       ref={popoverRef}
-                      style={{
-                        position: "absolute",
-                        top: "calc(100% + 8px)",
-                        left: 0,
-                        zIndex: 50,
-                        background: "#fff",
-                        border: "1px solid rgba(15, 23, 42, 0.12)",
-                        borderRadius: 12,
-                        padding: 12,
-                        minWidth: 220,
-                        boxShadow: "0 12px 24px rgba(15, 23, 42, 0.12)",
-                      }}
+                      className="st-filter-popover"
+                      style={popoverStyle}
                       onClick={(event) => event.stopPropagation()}
                     >
-                      <label style={{ fontSize: 12, fontWeight: 800 }}>
+                      <label className="st-filter__label">
                         Situação reprodutiva
-                        <select
-                          value={filtros.situacaoReprodutiva}
-                          onChange={(event) =>
+                        <Select
+                          className="st-select--compact"
+                          classNamePrefix="st-select"
+                          menuPortalTarget={portalTarget}
+                          menuPosition="fixed"
+                          menuShouldBlockScroll
+                          styles={selectStylesCompact}
+                          options={situacaoReprodutivaOptions}
+                          value={resolveOption(
+                            situacaoReprodutivaOptions,
+                            filtros.situacaoReprodutiva
+                          )}
+                          onChange={(option) =>
                             setFiltros((prev) => ({
                               ...prev,
-                              situacaoReprodutiva: event.target.value,
+                              situacaoReprodutiva: option?.value ?? allValue,
                             }))
                           }
-                          style={{
-                            width: "100%",
-                            marginTop: 6,
-                            padding: "6px 10px",
-                            borderRadius: 10,
-                            border: "1px solid rgba(15,23,42,0.2)",
-                            fontWeight: 700,
-                          }}
-                        >
-                          <option value="all">Todos</option>
-                          {situacoesReprodutivas.map((valor) => (
-                            <option key={valor} value={valor}>
-                              {valor}
-                            </option>
-                          ))}
-                        </select>
+                        />
                       </label>
                     </div>
                   )}
@@ -1239,6 +1312,9 @@ export default function Plantel() {
                 <th
                   className="col-origem"
                   onMouseEnter={() => handleColEnter("origem")}
+                  ref={(el) => {
+                    triggerRefs.current.origem = el;
+                  }}
                   style={{ position: "relative" }}
                 >
                   <button
@@ -1260,46 +1336,28 @@ export default function Plantel() {
                   {openPopoverKey === "origem" && (
                     <div
                       ref={popoverRef}
-                      style={{
-                        position: "absolute",
-                        top: "calc(100% + 8px)",
-                        left: 0,
-                        zIndex: 50,
-                        background: "#fff",
-                        border: "1px solid rgba(15, 23, 42, 0.12)",
-                        borderRadius: 12,
-                        padding: 12,
-                        minWidth: 200,
-                        boxShadow: "0 12px 24px rgba(15, 23, 42, 0.12)",
-                      }}
+                      className="st-filter-popover"
+                      style={popoverStyle}
                       onClick={(event) => event.stopPropagation()}
                     >
-                      <label style={{ fontSize: 12, fontWeight: 800 }}>
+                      <label className="st-filter__label">
                         Origem
-                        <select
-                          value={filtros.origem}
-                          onChange={(event) =>
+                        <Select
+                          className="st-select--compact"
+                          classNamePrefix="st-select"
+                          menuPortalTarget={portalTarget}
+                          menuPosition="fixed"
+                          menuShouldBlockScroll
+                          styles={selectStylesCompact}
+                          options={origemOptions}
+                          value={resolveOption(origemOptions, filtros.origem)}
+                          onChange={(option) =>
                             setFiltros((prev) => ({
                               ...prev,
-                              origem: event.target.value,
+                              origem: option?.value ?? allValue,
                             }))
                           }
-                          style={{
-                            width: "100%",
-                            marginTop: 6,
-                            padding: "6px 10px",
-                            borderRadius: 10,
-                            border: "1px solid rgba(15,23,42,0.2)",
-                            fontWeight: 700,
-                          }}
-                        >
-                          <option value="all">Todos</option>
-                          {origensDisponiveis.map((valor) => (
-                            <option key={valor} value={valor}>
-                              {valor}
-                            </option>
-                          ))}
-                        </select>
+                        />
                       </label>
                     </div>
                   )}
@@ -1540,20 +1598,19 @@ export default function Plantel() {
               })}
             </tbody>
             <tfoot>
-              <tr>
-                <td colSpan={8} style={{ padding: "12px 18px", fontWeight: 800 }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: 12,
-                    }}
-                  >
+              <tr className="st-summary-row">
+                <td colSpan={8}>
+                  <div className="st-summary-row__content">
                     <span>Total de animais exibidos: {resumo.total}</span>
                     <span>
                       Média Última produção (LAC):{" "}
                       {Number.isFinite(resumo.media) ? formatProducao(resumo.media) : "—"}
+                    </span>
+                    <span>
+                      Média DEL (LAC):{" "}
+                      {Number.isFinite(resumo.mediaDel)
+                        ? Math.round(resumo.mediaDel)
+                        : "—"}
                     </span>
                   </div>
                 </td>
