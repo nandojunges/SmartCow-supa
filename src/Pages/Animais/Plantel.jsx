@@ -92,16 +92,6 @@ export default function Plantel() {
   const [ultProducao, setUltProducao] = useState({});
   const [editingLoteId, setEditingLoteId] = useState(null);
 
-  const thBlueStyle = useMemo(
-    () => ({
-      background:
-        "linear-gradient(180deg, #0b2a66 0%, #0b2a66 70%, rgba(255,255,255,0.14) 100%)",
-      color: "#f8fafc",
-      borderBottom: "1px solid rgba(15,23,42,0.2)",
-    }),
-    []
-  );
-
   // ficha
   const [animalSelecionado, setAnimalSelecionado] = useState(null);
   const abrirFichaAnimal = (animal) => setAnimalSelecionado(animal);
@@ -122,7 +112,7 @@ export default function Plantel() {
   const loteOptions = useMemo(() => {
     const idKey = loteMeta.idKey || "id";
     const labelKey = loteMeta.labelKey || "nome";
-    return (lotes || []).map((lote) => {
+    const baseOptions = (lotes || []).map((lote) => {
       const label =
         lote[labelKey] ??
         lote.nome ??
@@ -135,6 +125,7 @@ export default function Plantel() {
         label,
       };
     });
+    return [{ value: null, label: "Sem lote" }, ...baseOptions];
   }, [lotes, loteMeta]);
 
   useEffect(() => {
@@ -344,9 +335,9 @@ export default function Plantel() {
       control: (base, state) => ({
         ...base,
         minHeight: 34,
-        height: 34,
+        height: "auto",
         borderRadius: 10,
-        fontWeight: 700,
+        fontWeight: 800,
         borderColor: state.isFocused
           ? "rgba(37,99,235,0.55)"
           : "rgba(37,99,235,0.25)",
@@ -392,11 +383,19 @@ export default function Plantel() {
     setEditingLoteId(null);
   }, []);
 
+  const handleLoteBlur = useCallback(() => {
+    setTimeout(() => {
+      setEditingLoteId(null);
+    }, 150);
+  }, []);
+
   const resolveSelectedLote = useCallback(
     (animal) => {
       if (!loteField) return null;
       const valorAtual = animal?.[loteField];
-      if (valorAtual == null) return null;
+      if (valorAtual == null) {
+        return loteOptions.find((opt) => opt.value === null) || null;
+      }
       if (loteField.endsWith("_id")) {
         return loteOptions.find((opt) => opt.value === valorAtual) || null;
       }
@@ -420,47 +419,12 @@ export default function Plantel() {
     [loteField, resolveSelectedLote]
   );
 
-  const handleRemoveLote = useCallback(
-    async (animal) => {
-      if (!animal?.id || !loteField) return;
-      const valorAnterior = animal[loteField] ?? null;
-
-      setAnimais((prev) =>
-        prev.map((item) =>
-          item.id === animal.id
-            ? { ...item, [loteField]: null, lote_nome: null }
-            : item
-        )
-      );
-      setLoteAviso("");
-
-      const { error: updateErr } = await supabase
-        .from("animais")
-        .update({ [loteField]: null })
-        .eq("id", animal.id);
-
-      if (updateErr) {
-        setAnimais((prev) =>
-          prev.map((item) =>
-            item.id === animal.id
-              ? { ...item, [loteField]: valorAnterior }
-              : item
-          )
-        );
-        setLoteAviso("Não foi possível atualizar o lote. Tente novamente.");
-      }
-
-      closeLoteEdit();
-    },
-    [closeLoteEdit, loteField]
-  );
-
   const handleSetLote = useCallback(
     async (animal, option) => {
       if (!animal?.id || !loteField) return;
       const isIdField = loteField.endsWith("_id");
       const loteId = option?.value ?? null;
-      const loteNome = option?.label ?? null;
+      const loteNome = loteId == null ? null : option?.label ?? null;
       const valorNovo = isIdField ? loteId : loteNome;
       const valorAnterior = animal[loteField] ?? null;
 
@@ -512,76 +476,68 @@ export default function Plantel() {
       <div className="st-table-container">
         <div className="st-table-wrap">
           <table
-            className="st-table"
+            className="st-table st-table--darkhead"
             onMouseLeave={() => {
               setHoveredRowId(null);
               setHoveredColKey(null);
             }}
           >
             <colgroup>
-              <col style={{ width: "20%" }} />
-              <col style={{ width: "10%" }} />
-              <col style={{ width: "16%" }} />
-              <col style={{ width: "16%" }} />
+              <col style={{ width: "26%" }} />
+              <col style={{ width: "13%" }} />
               <col style={{ width: "14%" }} />
+              <col style={{ width: "14%" }} />
+              <col style={{ width: "11%" }} />
               <col style={{ width: "6%" }} />
-              <col style={{ width: "10%" }} />
+              <col style={{ width: "8%" }} />
               <col style={{ width: "8%" }} />
             </colgroup>
             <thead>
               <tr>
                 <th
                   className="col-animal st-col-animal"
-                  style={thBlueStyle}
                   onMouseEnter={() => handleColEnter("animal")}
                 >
                   Animal
                 </th>
                 <th
                   className="col-lote"
-                  style={thBlueStyle}
                   onMouseEnter={() => handleColEnter("lote")}
                 >
                   Lote
                 </th>
                 <th
                   className="st-td-center col-sitprod"
-                  style={thBlueStyle}
                   onMouseEnter={() => handleColEnter("sitprod")}
                 >
                   Situação produtiva
                 </th>
                 <th
                   className="st-td-center col-sitreprod"
-                  style={thBlueStyle}
                   onMouseEnter={() => handleColEnter("sitreprod")}
                 >
                   Situação reprodutiva
                 </th>
                 <th
                   className="st-td-center col-producao"
-                  style={thBlueStyle}
                   onMouseEnter={() => handleColEnter("producao")}
                 >
                   Última produção
                 </th>
                 <th
                   className="st-td-center col-del"
-                  style={thBlueStyle}
                   onMouseEnter={() => handleColEnter("del")}
                 >
                   DEL
                 </th>
                 <th
                   className="col-origem"
-                  style={thBlueStyle}
                   onMouseEnter={() => handleColEnter("origem")}
                 >
                   Origem
                 </th>
                 <th
                   className="st-td-center col-acoes"
-                  style={thBlueStyle}
                   onMouseEnter={() => handleColEnter("acoes")}
                 >
                   Ações
@@ -611,6 +567,9 @@ export default function Plantel() {
                 const litros = isLact ? ultProducao[a.id] : null;
                 const producaoTexto =
                   isLact && Number.isFinite(litros) ? formatProducao(litros) : "—";
+                const loteSelecionado = resolveSelectedLote(a);
+                const isSemLote = !loteSelecionado || loteSelecionado.value == null;
+                const loteLabel = resolveLoteLabel(a);
 
                 const prodClass =
                   String(sitProd).toLowerCase().includes("lact") ? "st-pill st-pill--ok" :
@@ -664,6 +623,7 @@ export default function Plantel() {
                       } ${rowHover ? "st-row-hover" : ""} ${
                         rowHover && hoveredColKey === "lote" ? "st-cell-hover" : ""
                       }`}
+                      style={{ overflow: "visible" }}
                       onMouseEnter={() => handleCellEnter(rowId, "lote")}
                     >
                       {editingLoteId === a.id ? (
@@ -671,53 +631,38 @@ export default function Plantel() {
                           style={{
                             display: "flex",
                             alignItems: "center",
-                            gap: 8,
-                            justifyContent: "center",
+                            width: "100%",
                           }}
                           onKeyDown={(e) => {
                             if (e.key === "Escape") closeLoteEdit();
                           }}
                         >
-                          <button
-                            type="button"
-                            title="Remover lote"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => handleRemoveLote(a)}
-                            style={{
-                              height: 34,
-                              width: 34,
-                              borderRadius: 10,
-                              border: "1px solid rgba(15,23,42,0.12)",
-                              background: "#f8fafc",
-                              cursor: "pointer",
-                              fontWeight: 900,
-                            }}
-                          >
-                            ×
-                          </button>
-
-                          <div style={{ minWidth: 180 }}>
-                            <Select
-                              autoFocus
-                              menuIsOpen
-                              menuPortalTarget={document.body}
-                              styles={selectStylesCompact}
-                              options={loteOptions}
-                              value={resolveSelectedLote(a)}
-                              placeholder="Selecionar lote…"
-                              onChange={(option) => handleSetLote(a, option)}
-                              onBlur={closeLoteEdit}
-                              isClearable={false}
-                            />
-                          </div>
+                          <Select
+                            autoFocus
+                            menuIsOpen
+                            menuPortalTarget={
+                              typeof document !== "undefined" ? document.body : null
+                            }
+                            menuPosition="fixed"
+                            menuShouldBlockScroll
+                            styles={selectStylesCompact}
+                            options={loteOptions}
+                            value={resolveSelectedLote(a)}
+                            placeholder="Selecionar lote…"
+                            onChange={(option) => handleSetLote(a, option)}
+                            onBlur={handleLoteBlur}
+                            isClearable
+                          />
                         </div>
                       ) : (
                         <button
                           type="button"
                           onClick={() => setEditingLoteId(a.id)}
                           title="Clique para alterar o lote"
+                          className={`st-pill ${
+                            isSemLote ? "st-pill--mute" : "st-pill--info"
+                          }`}
                           style={{
-                            maxWidth: 220,
                             width: "100%",
                             display: "inline-flex",
                             alignItems: "center",
@@ -725,18 +670,13 @@ export default function Plantel() {
                             gap: 8,
                             height: 30,
                             padding: "0 12px",
-                            borderRadius: 999,
-                            border: "1px solid rgba(15,23,42,0.10)",
-                            background: resolveSelectedLote(a) ? "#eef6ff" : "#f1f5f9",
-                            color: "#0b2a66",
-                            fontWeight: 800,
                             cursor: "pointer",
                             overflow: "hidden",
                             whiteSpace: "nowrap",
                             textOverflow: "ellipsis",
                           }}
                         >
-                          {resolveLoteLabel(a)}
+                          {loteLabel}
                         </button>
                       )}
                     </td>
@@ -775,7 +715,7 @@ export default function Plantel() {
 
                     {/* PRODUÇÃO */}
                     <td
-                      className={`st-td-right col-producao ${
+                      className={`st-td-right st-num col-producao ${
                         hoveredColKey === "producao" ? "st-col-hover" : ""
                       } ${rowHover ? "st-row-hover" : ""} ${
                         rowHover && hoveredColKey === "producao" ? "st-cell-hover" : ""
@@ -783,7 +723,7 @@ export default function Plantel() {
                       style={{ textOverflow: "clip" }}
                       onMouseEnter={() => handleCellEnter(rowId, "producao")}
                     >
-                      <span className="st-num">{producaoTexto}</span>
+                      {producaoTexto}
                     </td>
 
                     {/* DEL */}
