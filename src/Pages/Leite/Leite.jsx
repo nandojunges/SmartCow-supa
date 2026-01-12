@@ -407,7 +407,6 @@ function TabelaResumoDia({
                     triggerRefs.current[coluna.key] = el;
                   }}
                   style={{ position: coluna.filterable ? "relative" : undefined }}
-                  className={hoveredColKey === coluna.key ? "st-col-hover" : ""}
                 >
                   {coluna.sortable || coluna.filterable ? (
                     <button
