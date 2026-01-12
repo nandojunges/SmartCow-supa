@@ -184,6 +184,8 @@ export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }
     Array.isArray(historicoInicial) ? historicoInicial : []
   );
   const [testesDoDia, setTestesDoDia] = useState([]);
+  const [hoveredRowId, setHoveredRowId] = useState(null);
+  const [hoveredColKey, setHoveredColKey] = useState(null);
 
   // id do registro atual para (dia + ordenha). Controla UPDATE vs INSERT.
   const [testeEditandoId, setTesteEditandoId] = useState(null);
@@ -191,6 +193,31 @@ export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }
   // Lactações (partos)
   const [lactacoes, setLactacoes] = useState([]);
   const [lactacaoSelecionada, setLactacaoSelecionada] = useState(null);
+
+  const colunasTabela = useMemo(
+    () => [
+      { key: "dia", label: "Dia" },
+      { key: "datahora", label: "Data/Hora" },
+      { key: "ordenha", label: "Ordenha" },
+      { key: "te", label: "TE", className: "st-td-center" },
+      { key: "td", label: "TD", className: "st-td-center" },
+      { key: "pe", label: "PE", className: "st-td-center" },
+      { key: "pd", label: "PD", className: "st-td-center" },
+      { key: "responsavel", label: "Responsável" },
+      { key: "acoes", label: "Ações", className: "st-td-right" },
+    ],
+    []
+  );
+
+  const handleColEnter = (colKey) => {
+    setHoveredColKey(colKey);
+    setHoveredRowId(null);
+  };
+
+  const handleCellEnter = (rowId, colKey) => {
+    setHoveredRowId(rowId);
+    setHoveredColKey(colKey);
+  };
 
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -1081,68 +1108,122 @@ export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }
           {testesDoDia.length === 0 ? (
             <div style={{ color: "#6b7280" }}>Nenhum CMT registrado neste dia.</div>
           ) : (
-            <div className="st-table-wrap">
-              <div className="st-scroll" style={{ overflowX: "auto" }}>
-                <table className="st-table st-table--darkhead">
-                  <thead>
-                    <tr>
-                      <th>Dia</th>
-                      <th>Data/Hora</th>
-                      <th>Ordenha</th>
-                      <th className="st-td-center">TE</th>
-                      <th className="st-td-center">TD</th>
-                      <th className="st-td-center">PE</th>
-                      <th className="st-td-center">PD</th>
-                      <th>Responsável</th>
-                      <th className="st-td-right">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {testesDoDia.map((t) => (
-                      <tr key={t.id}>
-                        <td>{getDiaDoTeste(t)}</td>
-                        <td>{formatBRDateTime(t.momento)}</td>
-                        <td>{t.ordenha ? labelOrdenha(Number(t.ordenha)) : "—"}</td>
-
-                        {["TE", "TD", "PE", "PD"].map((q) => {
-                          const r = t.cmt?.[q]?.resultado || "";
-                          return (
-                            <td key={q} className="st-td-center">
-                              <span
-                                className="st-pill"
-                                style={{
-                                  minWidth: 44,
-                                  justifyContent: "center",
-                                  background: r ? CORES_RESULTADO[r] || "#e5e7eb" : "#f3f4f6",
-                                  color: "#111827",
-                                }}
-                                title={t.cmt?.[q]?.observacao || ""}
-                              >
-                                {r || "—"}
-                              </span>
-                            </td>
-                          );
-                        })}
-
-                        <td>{t.operador || "—"}</td>
-
-                        <td className="st-td-right">
-                          <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
-                            <button
-                              type="button"
-                              onClick={() => deletarTeste(t.id)}
-                              className="st-btn"
-                              style={{ borderColor: "#fecaca", background: "#fee2e2", color: "#991b1b" }}
-                              title="Excluir"
-                            >
-                              🗑️
-                            </button>
-                          </div>
-                        </td>
+            <div className="st-table-container">
+              <div className="st-table-wrap">
+                <div className="st-scroll" style={{ overflowX: "auto" }}>
+                  <table
+                    className="st-table st-table--darkhead"
+                    onMouseLeave={() => {
+                      setHoveredRowId(null);
+                      setHoveredColKey(null);
+                    }}
+                  >
+                    <thead>
+                      <tr>
+                        {colunasTabela.map((coluna) => (
+                          <th
+                            key={coluna.key}
+                            className={`${coluna.className || ""} ${
+                              hoveredColKey === coluna.key ? "st-col-hover" : ""
+                            }`}
+                            onMouseEnter={() => handleColEnter(coluna.key)}
+                          >
+                            <span className="st-th-label">{coluna.label}</span>
+                          </th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {testesDoDia.map((t) => {
+                        const rowId = t.id ?? t.momento ?? t.dia;
+                        const rowHover = hoveredRowId === rowId;
+                        return (
+                          <tr key={rowId} className={rowHover ? "st-row-hover" : ""}>
+                            <td
+                              className={`${hoveredColKey === "dia" ? "st-col-hover" : ""} ${
+                                rowHover ? "st-row-hover" : ""
+                              } ${rowHover && hoveredColKey === "dia" ? "st-cell-hover" : ""}`}
+                              onMouseEnter={() => handleCellEnter(rowId, "dia")}
+                            >
+                              {getDiaDoTeste(t)}
+                            </td>
+                            <td
+                              className={`${hoveredColKey === "datahora" ? "st-col-hover" : ""} ${
+                                rowHover ? "st-row-hover" : ""
+                              } ${rowHover && hoveredColKey === "datahora" ? "st-cell-hover" : ""}`}
+                              onMouseEnter={() => handleCellEnter(rowId, "datahora")}
+                            >
+                              {formatBRDateTime(t.momento)}
+                            </td>
+                            <td
+                              className={`${hoveredColKey === "ordenha" ? "st-col-hover" : ""} ${
+                                rowHover ? "st-row-hover" : ""
+                              } ${rowHover && hoveredColKey === "ordenha" ? "st-cell-hover" : ""}`}
+                              onMouseEnter={() => handleCellEnter(rowId, "ordenha")}
+                            >
+                              {t.ordenha ? labelOrdenha(Number(t.ordenha)) : "—"}
+                            </td>
+
+                            {["TE", "TD", "PE", "PD"].map((q) => {
+                              const r = t.cmt?.[q]?.resultado || "";
+                              const colKey = q.toLowerCase();
+                              return (
+                                <td
+                                  key={q}
+                                  className={`st-td-center ${hoveredColKey === colKey ? "st-col-hover" : ""} ${
+                                    rowHover ? "st-row-hover" : ""
+                                  } ${rowHover && hoveredColKey === colKey ? "st-cell-hover" : ""}`}
+                                  onMouseEnter={() => handleCellEnter(rowId, colKey)}
+                                >
+                                  <span
+                                    className="st-pill"
+                                    style={{
+                                      minWidth: 44,
+                                      justifyContent: "center",
+                                      background: r ? CORES_RESULTADO[r] || "#e5e7eb" : "#f3f4f6",
+                                      color: "#111827",
+                                    }}
+                                    title={t.cmt?.[q]?.observacao || ""}
+                                  >
+                                    {r || "—"}
+                                  </span>
+                                </td>
+                              );
+                            })}
+
+                            <td
+                              className={`${hoveredColKey === "responsavel" ? "st-col-hover" : ""} ${
+                                rowHover ? "st-row-hover" : ""
+                              } ${rowHover && hoveredColKey === "responsavel" ? "st-cell-hover" : ""}`}
+                              onMouseEnter={() => handleCellEnter(rowId, "responsavel")}
+                            >
+                              {t.operador || "—"}
+                            </td>
+
+                            <td
+                              className={`st-td-right ${hoveredColKey === "acoes" ? "st-col-hover" : ""} ${
+                                rowHover ? "st-row-hover" : ""
+                              } ${rowHover && hoveredColKey === "acoes" ? "st-cell-hover" : ""}`}
+                              onMouseEnter={() => handleCellEnter(rowId, "acoes")}
+                            >
+                              <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+                                <button
+                                  type="button"
+                                  onClick={() => deletarTeste(t.id)}
+                                  className="st-btn"
+                                  style={{ borderColor: "#fecaca", background: "#fee2e2", color: "#991b1b" }}
+                                  title="Excluir"
+                                >
+                                  🗑️
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
