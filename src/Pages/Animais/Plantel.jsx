@@ -1014,7 +1014,7 @@ export default function Plantel() {
                       gap: 6,
                     }}
                   >
-                    Animal
+                    <span className="st-th-label">Animal</span>
                     {sortConfig.key === "animal" && sortConfig.direction && (
                       <span style={{ fontSize: 12, opacity: 0.7 }}>
                         {sortConfig.direction === "asc" ? "▲" : "▼"}
@@ -1110,7 +1110,7 @@ export default function Plantel() {
                       cursor: "pointer",
                     }}
                   >
-                    Lote
+                    <span className="st-th-label">Lote</span>
                   </button>
                   {openPopoverKey === "lote" && (
                     <div
@@ -1163,7 +1163,7 @@ export default function Plantel() {
                       cursor: "pointer",
                     }}
                   >
-                    Situação produtiva
+                    <span className="st-th-label">Situação produtiva</span>
                   </button>
                   {openPopoverKey === "sitprod" && (
                     <div
@@ -1219,7 +1219,7 @@ export default function Plantel() {
                       cursor: "pointer",
                     }}
                   >
-                    Situação reprodutiva
+                    <span className="st-th-label">Situação reprodutiva</span>
                   </button>
                   {openPopoverKey === "sitreprod" && (
                     <div
@@ -1273,7 +1273,7 @@ export default function Plantel() {
                       gap: 6,
                     }}
                   >
-                    Última produção
+                    <span className="st-th-label">Última produção</span>
                     {sortConfig.key === "producao" && sortConfig.direction && (
                       <span style={{ fontSize: 12, opacity: 0.7 }}>
                         {sortConfig.direction === "asc" ? "▲" : "▼"}
@@ -1301,7 +1301,7 @@ export default function Plantel() {
                       gap: 6,
                     }}
                   >
-                    DEL
+                    <span className="st-th-label">DEL</span>
                     {sortConfig.key === "del" && sortConfig.direction && (
                       <span style={{ fontSize: 12, opacity: 0.7 }}>
                         {sortConfig.direction === "asc" ? "▲" : "▼"}
@@ -1331,7 +1331,7 @@ export default function Plantel() {
                       cursor: "pointer",
                     }}
                   >
-                    Origem
+                    <span className="st-th-label">Origem</span>
                   </button>
                   {openPopoverKey === "origem" && (
                     <div
@@ -1366,7 +1366,7 @@ export default function Plantel() {
                   className="st-td-center col-acoes"
                   onMouseEnter={() => handleColEnter("acoes")}
                 >
-                  Ações
+                  <span className="st-th-label">Ações</span>
                 </th>
               </tr>
             </thead>
