@@ -85,48 +85,94 @@ export default function Plantel() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
   const [lotes, setLotes] = useState([]);
-  const [loteMeta, setLoteMeta] = useState({ table: "", idKey: "id", labelKey: "nome" });
   const [loteAviso, setLoteAviso] = useState("");
   const [hoveredRowId, setHoveredRowId] = useState(null);
   const [hoveredColKey, setHoveredColKey] = useState(null);
   const [ultProducao, setUltProducao] = useState({});
   const [editingLoteId, setEditingLoteId] = useState(null);
 
+  const LOTE_FIELD = "lote_id";
+  const LOTE_TABLE = "lotes";
+
   // ficha
   const [animalSelecionado, setAnimalSelecionado] = useState(null);
   const abrirFichaAnimal = (animal) => setAnimalSelecionado(animal);
   const fecharFichaAnimal = () => setAnimalSelecionado(null);
 
-  const detectLoteField = useCallback((lista) => {
-    const campos = ["lote_id", "grupo_id", "lote", "grupo"];
-    const sample = Array.isArray(lista) ? lista.find(Boolean) : null;
-    if (!sample) return "lote_id";
-    const found = campos.find((campo) =>
-      Object.prototype.hasOwnProperty.call(sample, campo)
-    );
-    return found || "lote_id";
-  }, []);
-
-  const loteField = useMemo(() => detectLoteField(animais), [animais, detectLoteField]);
-
   const loteOptions = useMemo(() => {
-    const idKey = loteMeta.idKey || "id";
-    const labelKey = loteMeta.labelKey || "nome";
     const baseOptions = (lotes || []).map((lote) => {
       const label =
-        lote[labelKey] ??
+        lote.nome ??
         lote.nome ??
         lote.descricao ??
         lote.titulo ??
         lote.label ??
-        String(lote[idKey] ?? "—");
+        String(lote.id ?? "—");
       return {
-        value: lote[idKey],
+        value: lote.id,
         label,
       };
     });
     return [{ value: null, label: "Sem lote" }, ...baseOptions];
-  }, [lotes, loteMeta]);
+  }, [lotes]);
+
+  const lotesById = useMemo(() => {
+    const map = {};
+    (lotes || []).forEach((lote) => {
+      if (lote?.id == null) return;
+      map[lote.id] = lote.nome ?? lote.descricao ?? lote.titulo ?? lote.label ?? String(lote.id);
+    });
+    return map;
+  }, [lotes]);
+
+  const carregarAnimais = useCallback(async (userId) => {
+    const { data, error } = await supabase
+      .from("animais")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("ativo", true)
+      .order("numero", { ascending: true });
+
+    if (error) throw error;
+    setAnimais(Array.isArray(data) ? data : []);
+  }, []);
+
+  const carregarLotes = useCallback(async (userId) => {
+    let { data, error } = await supabase
+      .from(LOTE_TABLE)
+      .select("*")
+      .order("id", { ascending: true })
+      .eq("user_id", userId);
+
+    if (error && /column .*user_id.* does not exist/i.test(error.message || "")) {
+      const retry = await supabase.from(LOTE_TABLE).select("*").order("id", { ascending: true });
+      data = retry.data;
+      error = retry.error;
+    }
+
+    if (error) {
+      console.error("Erro ao carregar lotes:", error);
+      setLotes([]);
+      return;
+    }
+
+    setLotes(Array.isArray(data) ? data : []);
+  }, []);
+
+  const carregarRacas = useCallback(async (userId) => {
+    const { data, error } = await supabase
+      .from("racas")
+      .select("id, nome")
+      .eq("user_id", userId);
+
+    if (error) throw error;
+
+    const map = {};
+    (data || []).forEach((r) => {
+      map[r.id] = r.nome;
+    });
+    setRacaMap(map);
+  }, []);
 
   useEffect(() => {
     let ativo = true;
@@ -143,77 +189,13 @@ export default function Plantel() {
         } = await supabase.auth.getUser();
 
         if (userErr || !user) throw new Error("Usuário não autenticado.");
-
-        const { data: animaisData, error: animaisErr } = await supabase
-          .from("animais")
-          .select("*")
-          .eq("user_id", user.id)
-          .eq("ativo", true)
-          .order("numero", { ascending: true });
-
-        if (animaisErr) throw animaisErr;
-
-        const { data: racasData, error: racasErr } = await supabase
-          .from("racas")
-          .select("id, nome")
-          .eq("user_id", user.id);
-
-        if (racasErr) throw racasErr;
-
         if (!ativo) return;
 
-        const map = {};
-        (racasData || []).forEach((r) => {
-          map[r.id] = r.nome;
-        });
-
-        const lotesTabelas = [
-          "lotes",
-          "grupos",
-          "grupos_animais",
-          "grupo_animais",
-          "lotes_animais",
-        ];
-
-        let lotesEncontrados = [];
-        let loteMetaLocal = { table: "", idKey: "id", labelKey: "nome" };
-
-        for (const tabela of lotesTabelas) {
-          let lotesQuery = supabase.from(tabela).select("*").order("id", { ascending: true });
-          let { data: lotesData, error: lotesErr } = await lotesQuery.eq("user_id", user.id);
-
-          if (lotesErr && /column .*user_id.* does not exist/i.test(lotesErr.message || "")) {
-            const retry = await supabase.from(tabela).select("*").order("id", { ascending: true });
-            lotesData = retry.data;
-            lotesErr = retry.error;
-          }
-
-          if (!lotesErr && Array.isArray(lotesData)) {
-            const sample = lotesData.find(Boolean);
-            const idKey = sample && Object.prototype.hasOwnProperty.call(sample, "id")
-              ? "id"
-              : sample && Object.prototype.hasOwnProperty.call(sample, "uuid")
-              ? "uuid"
-              : "id";
-            const labelKey = sample && Object.prototype.hasOwnProperty.call(sample, "nome")
-              ? "nome"
-              : sample && Object.prototype.hasOwnProperty.call(sample, "descricao")
-              ? "descricao"
-              : sample && Object.prototype.hasOwnProperty.call(sample, "titulo")
-              ? "titulo"
-              : sample && Object.prototype.hasOwnProperty.call(sample, "label")
-              ? "label"
-              : "nome";
-            lotesEncontrados = lotesData;
-            loteMetaLocal = { table: tabela, idKey, labelKey };
-            break;
-          }
-        }
-
-        setRacaMap(map);
-        setAnimais(Array.isArray(animaisData) ? animaisData : []);
-        setLotes(lotesEncontrados);
-        setLoteMeta(loteMetaLocal);
+        await Promise.all([
+          carregarAnimais(user.id),
+          carregarLotes(user.id),
+          carregarRacas(user.id),
+        ]);
       } catch (e) {
         console.error("Erro ao carregar plantel:", e);
         if (!ativo) return;
@@ -227,7 +209,7 @@ export default function Plantel() {
     return () => {
       ativo = false;
     };
-  }, []);
+  }, [carregarAnimais, carregarLotes, carregarRacas]);
 
   useEffect(() => {
     let ativo = true;
@@ -248,69 +230,81 @@ export default function Plantel() {
       }
 
       const tabelasLeite = ["medicoes_leite", "leite_registros", "producoes_leite", "leite"];
-      const camposAnimal = ["animal_id", "animalId", "id_animal", "idAnimal"];
-      const camposData = ["data", "created_at"];
-      const camposValor = ["litros", "producao", "volume"];
+      const camposData = ["data", "data_registro", "created_at"];
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      const extrairValor = (registro) => {
+        const totalRaw =
+          registro?.total ??
+          registro?.total_litros ??
+          registro?.litros_total;
+        if (Number.isFinite(Number(totalRaw))) return Number(totalRaw);
+
+        const somaCampos = ["manha", "tarde", "terceira", "noite"];
+        const soma = somaCampos.reduce((acc, campo) => {
+          const valor = Number(registro?.[campo] ?? 0);
+          return Number.isFinite(valor) ? acc + valor : acc;
+        }, 0);
+        if (soma > 0) return soma;
+
+        const valorRaw = [registro?.litros, registro?.volume, registro?.producao].find(
+          (valor) => valor != null && valor !== ""
+        );
+        const valor = Number(valorRaw);
+        return Number.isFinite(valor) ? valor : null;
+      };
 
       for (const tabela of tabelasLeite) {
-        let dados = null;
-        let erroFinal = null;
-        let campoAnimalEncontrado = null;
+        for (const campoData of camposData) {
+          let consulta = supabase
+            .from(tabela)
+            .select("*")
+            .in("animal_id", ids)
+            .order(campoData, { ascending: false })
+            .limit(800);
 
-        for (const campoAnimal of camposAnimal) {
-          for (const campoData of camposData) {
-            const { data, error } = await supabase
+          if (user?.id) {
+            consulta = consulta.eq("user_id", user.id);
+          }
+
+          let { data, error } = await consulta;
+
+          if (error && /column .*user_id.* does not exist/i.test(error.message || "")) {
+            const retry = await supabase
               .from(tabela)
               .select("*")
-              .in(campoAnimal, ids)
+              .in("animal_id", ids)
               .order(campoData, { ascending: false })
-              .limit(400);
+              .limit(800);
+            data = retry.data;
+            error = retry.error;
+          }
 
-            if (!error) {
-              dados = data;
-              erroFinal = null;
-              campoAnimalEncontrado = campoAnimal;
-              break;
-            }
-
-            const msg = error.message || "";
-            if (/column .* does not exist/i.test(msg)) {
-              erroFinal = error;
+          if (error) {
+            if (/column .* does not exist/i.test(error.message || "")) {
               continue;
             }
-
-            erroFinal = error;
-            break;
-          }
-          if (dados) break;
-        }
-
-        if (Array.isArray(dados)) {
-          const mapa = {};
-          dados.forEach((registro) => {
-            const animalId =
-              registro?.[campoAnimalEncontrado] ??
-              registro?.animal_id ??
-              registro?.animalId ??
-              registro?.id_animal ??
-              registro?.idAnimal;
-            if (!animalId || Object.prototype.hasOwnProperty.call(mapa, animalId)) return;
-            const valorRaw = camposValor
-              .map((campo) => registro?.[campo])
-              .find((valor) => valor != null && valor !== "");
-            const valor = Number(valorRaw);
-            if (Number.isFinite(valor)) {
-              mapa[animalId] = valor;
+            if (/relation .* does not exist/i.test(error.message || "")) {
+              break;
             }
-          });
+          }
 
-          if (ativo) setUltProducao(mapa);
-          return;
-        }
-
-        const msg = erroFinal?.message || "";
-        if (/relation .* does not exist/i.test(msg)) {
-          continue;
+          if (Array.isArray(data)) {
+            const mapa = {};
+            data.forEach((registro) => {
+              const animalId = registro?.animal_id;
+              if (!animalId || Object.prototype.hasOwnProperty.call(mapa, animalId)) return;
+              const valor = extrairValor(registro);
+              if (Number.isFinite(valor)) {
+                mapa[animalId] = valor;
+              }
+            });
+            if (ativo) setUltProducao(mapa);
+            return;
+          }
         }
       }
 
@@ -391,47 +385,36 @@ export default function Plantel() {
 
   const resolveSelectedLote = useCallback(
     (animal) => {
-      if (!loteField) return null;
-      const valorAtual = animal?.[loteField];
+      const valorAtual = animal?.[LOTE_FIELD];
       if (valorAtual == null) {
         return loteOptions.find((opt) => opt.value === null) || null;
       }
-      if (loteField.endsWith("_id")) {
-        return loteOptions.find((opt) => opt.value === valorAtual) || null;
-      }
-      return loteOptions.find((opt) => opt.label === valorAtual) || null;
+      return loteOptions.find((opt) => opt.value === valorAtual) || null;
     },
-    [loteField, loteOptions]
+    [LOTE_FIELD, loteOptions]
   );
 
   const resolveLoteLabel = useCallback(
     (animal) => {
       if (!animal) return "Sem lote";
-      if (animal.lote_nome) return animal.lote_nome;
-      if (!loteField) return "Sem lote";
-      const valorAtual = animal[loteField];
+      const valorAtual = animal[LOTE_FIELD];
       if (valorAtual == null || valorAtual === "") return "Sem lote";
-      if (loteField.endsWith("_id")) {
-        return resolveSelectedLote(animal)?.label || "Sem lote";
-      }
-      return valorAtual;
+      return lotesById[valorAtual] || "Sem lote";
     },
-    [loteField, resolveSelectedLote]
+    [LOTE_FIELD, lotesById]
   );
 
   const handleSetLote = useCallback(
     async (animal, option) => {
-      if (!animal?.id || !loteField) return;
-      const isIdField = loteField.endsWith("_id");
+      if (!animal?.id) return;
       const loteId = option?.value ?? null;
-      const loteNome = loteId == null ? null : option?.label ?? null;
-      const valorNovo = isIdField ? loteId : loteNome;
-      const valorAnterior = animal[loteField] ?? null;
+      const valorNovo = loteId;
+      const valorAnterior = animal[LOTE_FIELD] ?? null;
 
       setAnimais((prev) =>
         prev.map((item) =>
           item.id === animal.id
-            ? { ...item, [loteField]: valorNovo, lote_nome: loteNome }
+            ? { ...item, [LOTE_FIELD]: valorNovo }
             : item
         )
       );
@@ -439,23 +422,30 @@ export default function Plantel() {
 
       const { error: updateErr } = await supabase
         .from("animais")
-        .update({ [loteField]: valorNovo })
+        .update({ [LOTE_FIELD]: valorNovo })
         .eq("id", animal.id);
 
       if (updateErr) {
         setAnimais((prev) =>
           prev.map((item) =>
             item.id === animal.id
-              ? { ...item, [loteField]: valorAnterior }
+              ? { ...item, [LOTE_FIELD]: valorAnterior }
               : item
           )
         );
         setLoteAviso("Não foi possível atualizar o lote. Tente novamente.");
+        return;
       }
 
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user?.id) {
+        await carregarAnimais(user.id);
+      }
       closeLoteEdit();
     },
-    [closeLoteEdit, loteField]
+    [LOTE_FIELD, carregarAnimais, closeLoteEdit]
   );
 
   const handleColEnter = useCallback((colKey) => {
@@ -483,14 +473,14 @@ export default function Plantel() {
             }}
           >
             <colgroup>
-              <col style={{ width: "22%" }} />
-              <col style={{ width: "12%" }} />
+              <col style={{ width: "20%" }} />
               <col style={{ width: "14%" }} />
               <col style={{ width: "14%" }} />
+              <col style={{ width: "14%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "6%" }} />
               <col style={{ width: "12%" }} />
-              <col style={{ width: "7%" }} />
-              <col style={{ width: "11%" }} />
-              <col style={{ width: "8%" }} />
+              <col style={{ width: "10%" }} />
             </colgroup>
             <thead>
               <tr>
