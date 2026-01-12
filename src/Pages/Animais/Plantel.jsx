@@ -483,13 +483,13 @@ export default function Plantel() {
             }}
           >
             <colgroup>
-              <col style={{ width: "26%" }} />
-              <col style={{ width: "13%" }} />
+              <col style={{ width: "22%" }} />
+              <col style={{ width: "12%" }} />
               <col style={{ width: "14%" }} />
               <col style={{ width: "14%" }} />
+              <col style={{ width: "12%" }} />
+              <col style={{ width: "7%" }} />
               <col style={{ width: "11%" }} />
-              <col style={{ width: "6%" }} />
-              <col style={{ width: "8%" }} />
               <col style={{ width: "8%" }} />
             </colgroup>
             <thead>
@@ -519,13 +519,13 @@ export default function Plantel() {
                   Situação reprodutiva
                 </th>
                 <th
-                  className="st-td-center col-producao"
+                  className="st-td-right col-producao"
                   onMouseEnter={() => handleColEnter("producao")}
                 >
                   Última produção
                 </th>
                 <th
-                  className="st-td-center col-del"
+                  className="st-td-right col-del"
                   onMouseEnter={() => handleColEnter("del")}
                 >
                   DEL
@@ -623,7 +623,7 @@ export default function Plantel() {
                       } ${rowHover ? "st-row-hover" : ""} ${
                         rowHover && hoveredColKey === "lote" ? "st-cell-hover" : ""
                       }`}
-                      style={{ overflow: "visible" }}
+                      style={{ overflow: "visible", paddingLeft: 12, paddingRight: 12 }}
                       onMouseEnter={() => handleCellEnter(rowId, "lote")}
                     >
                       {editingLoteId === a.id ? (
@@ -688,6 +688,7 @@ export default function Plantel() {
                       } ${rowHover ? "st-row-hover" : ""} ${
                         rowHover && hoveredColKey === "sitprod" ? "st-cell-hover" : ""
                       }`}
+                      style={{ paddingLeft: 12, paddingRight: 12 }}
                       onMouseEnter={() => handleCellEnter(rowId, "sitprod")}
                     >
                       {sitProd === "—" ? "—" : (
@@ -704,6 +705,7 @@ export default function Plantel() {
                       } ${rowHover ? "st-row-hover" : ""} ${
                         rowHover && hoveredColKey === "sitreprod" ? "st-cell-hover" : ""
                       }`}
+                      style={{ paddingLeft: 12, paddingRight: 12 }}
                       onMouseEnter={() => handleCellEnter(rowId, "sitreprod")}
                     >
                       {sitReprod === "—" ? "—" : (
@@ -728,7 +730,7 @@ export default function Plantel() {
 
                     {/* DEL */}
                     <td
-                      className={`st-td-center col-del ${
+                      className={`st-td-right col-del ${
                         hoveredColKey === "del" ? "st-col-hover" : ""
                       } ${rowHover ? "st-row-hover" : ""} ${
                         rowHover && hoveredColKey === "del" ? "st-cell-hover" : ""
@@ -741,7 +743,7 @@ export default function Plantel() {
 
                     {/* ORIGEM */}
                     <td
-                      className={`col-origem ${
+                      className={`col-origem st-td-wrap ${
                         hoveredColKey === "origem" ? "st-col-hover" : ""
                       } ${rowHover ? "st-row-hover" : ""} ${
                         rowHover && hoveredColKey === "origem" ? "st-cell-hover" : ""
