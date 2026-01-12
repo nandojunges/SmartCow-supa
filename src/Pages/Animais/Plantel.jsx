@@ -975,14 +975,14 @@ export default function Plantel() {
             }}
           >
             <colgroup>
-              <col style={{ width: "26%" }} />
+              <col style={{ width: "20%" }} />
               <col style={{ width: "14%" }} />
-              <col style={{ width: "16%" }} />
-              <col style={{ width: "16%" }} />
+              <col style={{ width: "14%" }} />
+              <col style={{ width: "14%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "6%" }} />
               <col style={{ width: "12%" }} />
-              <col style={{ width: "6%" }} />
-              <col style={{ width: "6%" }} />
-              <col style={{ width: "4%" }} />
+              <col style={{ width: "10%" }} />
             </colgroup>
             <thead>
               <tr>
