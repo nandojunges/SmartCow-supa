@@ -331,12 +331,12 @@ function TabelaMedicaoLeite({
 
   return (
     <div>
-      <div className="st-filter-hint">
+      <div className="st-filter-hint" style={filterHintStyle}>
         Dica: clique no título das colunas habilitadas para ordenar ou filtrar. Clique novamente para fechar.
       </div>
       <div className="st-table-container">
         <div className="st-table-wrap">
-          <div className="st-scroll" style={{ overflowX: "auto" }}>
+          <div className="st-scroll" style={tabelaScrollX}>
             <table
               className="st-table st-table--darkhead"
               onMouseLeave={() => {
@@ -993,7 +993,7 @@ export default function ModalMedicaoLeite({
           </button>
         </div>
 
-        <div style={{ padding: "1.5rem", display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+        <div style={modalBody}>
           <div style={gridCompacto}>
             <div>
               <label style={labelEstilo}>Data da medição</label>
@@ -1064,7 +1064,7 @@ export default function ModalMedicaoLeite({
             </div>
           </div>
 
-          <div style={{ fontSize: 12, color: "#64748b", marginTop: -6 }}>
+          <div style={lotesInfoStyle}>
             {loadingLotes ? "Carregando lotes de Lactação…" : `Lotes disponíveis: ${(lotesLeite || []).length} (Alta/Média/Baixa Produção)`}
           </div>
 
@@ -1078,15 +1078,15 @@ export default function ModalMedicaoLeite({
             inputRefs={inputRefs}
             bloquearLote={bloquearLote}
           />
+        </div>
 
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.9rem", marginTop: "1.25rem" }}>
-            <button type="button" onClick={onFechar} style={botaoCancelar} disabled={salvando}>
-              Cancelar
-            </button>
-            <button type="button" onClick={salvar} style={botaoConfirmar} disabled={salvando}>
-              {salvando ? "Salvando..." : "📂 Salvar medições"}
-            </button>
-          </div>
+        <div style={modalFooter}>
+          <button type="button" onClick={onFechar} style={botaoCancelar} disabled={salvando}>
+            Cancelar
+          </button>
+          <button type="button" onClick={salvar} style={botaoConfirmar} disabled={salvando}>
+            {salvando ? "Salvando..." : "📂 Salvar medições"}
+          </button>
         </div>
       </div>
     </div>
@@ -1110,8 +1110,10 @@ const modalBig = {
   borderRadius: "1rem",
   width: "1100px",
   maxWidth: "95vw",
-  maxHeight: "95vh",
-  overflowY: "auto",
+  maxHeight: "90vh",
+  display: "flex",
+  flexDirection: "column",
+  overflow: "hidden",
   fontFamily: "Poppins, sans-serif",
   boxShadow: "0 0 24px rgba(15,23,42,0.35)",
 };
@@ -1127,12 +1129,50 @@ const header = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
+  flex: "0 0 auto",
+};
+
+const modalBody = {
+  padding: "1.25rem 1.5rem",
+  display: "flex",
+  flexDirection: "column",
+  gap: "1.25rem",
+  overflowY: "auto",
+  flex: "1 1 auto",
+};
+
+const modalFooter = {
+  padding: "1rem 1.5rem",
+  display: "flex",
+  justifyContent: "flex-end",
+  gap: "0.9rem",
+  borderTop: "1px solid #e2e8f0",
+  background: "#fff",
+  flex: "0 0 auto",
 };
 
 const gridCompacto = {
   display: "grid",
-  gridTemplateColumns: "minmax(220px, 320px) minmax(220px, 260px)",
-  gap: "1.5rem",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: "1.25rem",
+  alignItems: "start",
+};
+
+const lotesInfoStyle = {
+  fontSize: 12,
+  color: "#64748b",
+  marginTop: -6,
+};
+
+const filterHintStyle = {
+  marginBottom: "0.5rem",
+};
+
+const tabelaScrollX = {
+  width: "100%",
+  overflowX: "auto",
+  overflowY: "visible",
+  WebkitOverflowScrolling: "touch",
 };
 
 const inputBase = {
