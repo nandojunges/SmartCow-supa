@@ -1,5 +1,6 @@
 // src/pages/ConsumoReposicao/limpeza.jsx
 import React, { useMemo, useState, useEffect } from "react";
+import "../../styles/tabelaModerna.css";
 
 /** =========================================================
  *  LIMPEZA — SOMENTE LAYOUT (SEM BANCO / SEM API)
@@ -9,20 +10,6 @@ import React, { useMemo, useState, useEffect } from "react";
 
 const DIAS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 const TIPOS = ["Ordenhadeira", "Resfriador", "Tambo", "Outros"];
-const STICKY_OFFSET = 48;
-
-/* ===== estilos ===== */
-const tableClasses =
-  "w-full border-separate [border-spacing:0_4px] text-[14px] text-[#333] table-auto";
-const thBase =
-  "bg-[#e6f0ff] px-3 py-3 text-left font-bold text-[16px] text-[#1e3a8a] border-b-2 border-[#a8c3e6] sticky z-10 whitespace-nowrap";
-const tdBase = "px-4 py-2 border-b border-[#eee] whitespace-nowrap";
-const tdClamp = tdBase + " overflow-hidden text-ellipsis";
-const rowBase = "bg-white shadow-xs transition-colors";
-const rowAlt = "even:bg-[#f7f7f8]";
-const hoverTH = (i, hc) => (i === hc ? "bg-[rgba(33,150,243,0.08)]" : "");
-const hoverTD = (i, hc) => (i === hc ? "bg-[rgba(33,150,243,0.08)]" : "");
-
 /* ===== helpers ===== */
 const formatBRL = (n) =>
   (Number(n) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -95,7 +82,11 @@ export default function Limpeza() {
   const [erro, setErro] = useState("");
 
   // UI
-  const [hoverCol, setHoverCol] = useState(null);
+  const [hoveredRowId, setHoveredRowId] = useState(null);
+  const [hoveredColKey, setHoveredColKey] = useState(null);
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
+  const [openPopoverKey, setOpenPopoverKey] = useState(null);
+  const [filtros, setFiltros] = useState({ frequencia: "__ALL__" });
   const [modal, setModal] = useState({ open: false, index: null, ciclo: null });
   const [planoDe, setPlanoDe] = useState(null);
   const [excluirIdx, setExcluirIdx] = useState(null);
@@ -111,6 +102,36 @@ export default function Limpeza() {
     keys.sort((a, b) => a.localeCompare(b));
     return keys;
   }, [precoPorML]);
+
+  const frequenciaOptions = useMemo(() => {
+    const values = Array.from(
+      new Set((ciclos || []).map((c) => String(c.frequencia || "")).filter(Boolean))
+    ).sort((a, b) => Number(a) - Number(b));
+    return values;
+  }, [ciclos]);
+
+  const toggleSort = (key) => {
+    setSortConfig((prev) => {
+      if (prev.key !== key) return { key, direction: "asc" };
+      if (prev.direction === "asc") return { key, direction: "desc" };
+      if (prev.direction === "desc") return { key: null, direction: null };
+      return { key, direction: "asc" };
+    });
+  };
+
+  const handleTogglePopover = (key) => {
+    setOpenPopoverKey((prev) => (prev === key ? null : key));
+  };
+
+  useEffect(() => {
+    if (!openPopoverKey) return undefined;
+    const handleClick = (event) => {
+      if (event.target.closest('[data-filter-trigger="true"]')) return;
+      setOpenPopoverKey(null);
+    };
+    document.addEventListener("click", handleClick);
+    return () => document.removeEventListener("click", handleClick);
+  }, [openPopoverKey]);
 
   // ===== Ações =====
   const abrirCadastro = () =>
@@ -192,19 +213,23 @@ export default function Limpeza() {
   };
 
   // ===== cálculos visuais =====
-  const custoDiario = (c) => {
+  const custoDiarioValor = (c) => {
     const freq = Number(c.frequencia) || 1;
-    const dia = (c.etapas || []).reduce((acc, e) => {
+    return (c.etapas || []).reduce((acc, e) => {
       const cond = parseCond(e.condicao);
       const vezes = vezesPorDia(cond, freq);
       const ml = convToMl(e.quantidade, e.unidade);
       const preco = precoPorML[e.produto] ?? 0;
       return acc + ml * vezes * preco;
     }, 0);
-    return dia ? formatBRL(dia) : "—";
   };
 
-  const duracaoEstimada = (c) => {
+  const custoDiario = (c) => {
+    const valor = custoDiarioValor(c);
+    return valor ? formatBRL(valor) : "—";
+  };
+
+  const duracaoEstimadaValor = (c) => {
     const freq = Number(c.frequencia) || 1;
     let minDias = Infinity;
 
@@ -216,9 +241,14 @@ export default function Limpeza() {
       if (mlDia > 0) minDias = Math.min(minDias, estoque / mlDia);
     });
 
-    if (!isFinite(minDias) || minDias === Infinity) return "—";
-    const d = Math.floor(minDias);
-    return `${d} dia${d !== 1 ? "s" : ""}`;
+    if (!isFinite(minDias) || minDias === Infinity) return null;
+    return Math.floor(minDias);
+  };
+
+  const duracaoEstimada = (c) => {
+    const dias = duracaoEstimadaValor(c);
+    if (dias == null) return "—";
+    return `${dias} dia${dias !== 1 ? "s" : ""}`;
   };
 
   const colunas = [
@@ -231,6 +261,41 @@ export default function Limpeza() {
     "Etapas",
     "Ação",
   ];
+
+  const ciclosExibidos = useMemo(() => {
+    let lista = Array.isArray(ciclos) ? [...ciclos] : [];
+
+    if (filtros.frequencia !== "__ALL__") {
+      lista = lista.filter((c) => String(c.frequencia || "") === filtros.frequencia);
+    }
+
+    if (sortConfig.key) {
+      const dir = sortConfig.direction === "desc" ? -1 : 1;
+      lista.sort((a, b) => {
+        switch (sortConfig.key) {
+          case "nome":
+            return String(a.nome || "").localeCompare(String(b.nome || "")) * dir;
+          case "custo":
+            return (custoDiarioValor(a) - custoDiarioValor(b)) * dir;
+          default:
+            return 0;
+        }
+      });
+    }
+
+    return lista;
+  }, [ciclos, filtros, sortConfig, precoPorML]);
+
+  const resumo = useMemo(() => {
+    const total = ciclosExibidos.length;
+    const totalEtapas = ciclosExibidos.reduce(
+      (acc, c) => acc + (Array.isArray(c.etapas) ? c.etapas.length : 0),
+      0
+    );
+    const custoTotal = ciclosExibidos.reduce((acc, c) => acc + custoDiarioValor(c), 0);
+    const custoMedio = total ? custoTotal / total : 0;
+    return { total, totalEtapas, custoMedio };
+  }, [ciclosExibidos, precoPorML]);
 
   return (
     <section className="w-full py-6 font-sans">
@@ -252,108 +317,251 @@ export default function Limpeza() {
           </div>
         )}
 
-        <table className={tableClasses}>
-          <colgroup>
-            <col style={{ width: 220 }} />
-            <col style={{ width: 140 }} />
-            <col style={{ width: 120 }} />
-            <col style={{ width: 220 }} />
-            <col style={{ width: 140 }} />
-            <col style={{ width: 140 }} />
-            <col style={{ width: 320 }} />
-            <col style={{ width: 160 }} />
-          </colgroup>
-          <thead>
-            <tr>
-              {colunas.map((h, i) => (
-                <th
-                  key={h}
-                  onMouseEnter={() => setHoverCol(i)}
-                  onMouseLeave={() => setHoverCol(null)}
-                  className={`${thBase} ${hoverTH(i, hoverCol)}`}
-                  style={{ top: STICKY_OFFSET }}
-                >
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td className={tdBase} colSpan={colunas.length}>
-                  <div className="text-center text-[#1e3a8a] py-6">Carregando…</div>
-                </td>
-              </tr>
-            ) : ciclos.length === 0 ? (
-              <tr>
-                <td className={tdBase} colSpan={colunas.length}>
-                  <div className="text-center text-gray-600 py-6">
-                    Nenhum ciclo cadastrado.
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              ciclos.map((c, i) => (
-                <tr
-                  key={c.id || i}
-                  className={`${rowBase} ${rowAlt} hover:bg-[#eaf5ff]`}
-                >
-                  <td className={`${tdClamp} ${hoverTD(0, hoverCol)}`}>
-                    {c.nome || "—"}
-                  </td>
-                  <td className={`${tdClamp} text-center ${hoverTD(1, hoverCol)}`}>
-                    {c.tipo || "—"}
-                  </td>
-                  <td className={`${tdClamp} text-center ${hoverTD(2, hoverCol)}`}>
-                    {c.frequencia ? `${c.frequencia}x/dia` : "—"}
-                  </td>
-                  <td className={`${tdClamp} text-center ${hoverTD(3, hoverCol)}`}>
-                    {(c.diasSemana || []).map((d) => DIAS[d]).join(", ") || "—"}
-                  </td>
-                  <td className={`${tdClamp} text-center ${hoverTD(4, hoverCol)}`}>
-                    <StatusPill label={duracaoEstimada(c)} color="#1e40af" />
-                  </td>
-                  <td className={`${tdClamp} text-center ${hoverTD(5, hoverCol)}`}>
-                    <StatusPill label={custoDiario(c)} color="#16a34a" />
-                  </td>
-                  <td
-                    className={`${tdClamp} ${hoverTD(6, hoverCol)}`}
-                    title={(c.etapas || [])
-                      .map((e) => `${e.produto} - ${e.quantidade} ${e.unidade}`)
-                      .join(" | ")}
+        <div className="st-filter-hint">
+          Dica: clique no título das colunas habilitadas para ordenar/filtrar. Clique novamente para
+          fechar.
+        </div>
+        <div className="st-table-container">
+          <div className="st-table-wrap">
+            <table
+              className="st-table st-table--darkhead"
+              onMouseLeave={() => {
+                setHoveredRowId(null);
+                setHoveredColKey(null);
+              }}
+            >
+              <colgroup>
+                <col style={{ width: "20%" }} />
+                <col style={{ width: "12%" }} />
+                <col style={{ width: "12%" }} />
+                <col style={{ width: "18%" }} />
+                <col style={{ width: "14%" }} />
+                <col style={{ width: "14%" }} />
+                <col style={{ width: "26%" }} />
+                <col style={{ width: "18%" }} />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th
+                    className="col-nome"
+                    onMouseEnter={() => setHoveredColKey("nome")}
                   >
-                    {(c.etapas || [])
-                      .map((e) => `${e.produto} - ${e.quantidade} ${e.unidade}`)
-                      .join(", ") || "—"}
-                  </td>
-                  <td className={`${tdBase} text-center ${hoverTD(7, hoverCol)}`}>
-                    <div className="inline-flex items-center gap-2">
-                      <button
-                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-[#1e3a8a]/20 hover:border-[#1e3a8a] text-[#1e3a8a] hover:bg-[#1e3a8a]/5"
-                        onClick={() => abrirEdicao(i)}
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("nome")}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        padding: 0,
+                        margin: 0,
+                        font: "inherit",
+                        color: "inherit",
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <span className="st-th-label">Nome do ciclo</span>
+                      {sortConfig.key === "nome" && sortConfig.direction && (
+                        <span style={{ fontSize: 12, opacity: 0.7 }}>
+                          {sortConfig.direction === "asc" ? "▲" : "▼"}
+                        </span>
+                      )}
+                    </button>
+                  </th>
+                  <th
+                    className="st-td-center col-tipo"
+                    onMouseEnter={() => setHoveredColKey("tipo")}
+                  >
+                    <span className="st-th-label">Tipo</span>
+                  </th>
+                  <th
+                    className="st-td-center col-frequencia"
+                    onMouseEnter={() => setHoveredColKey("frequencia")}
+                    style={{ position: "relative" }}
+                  >
+                    <button
+                      type="button"
+                      data-filter-trigger="true"
+                      onClick={() => handleTogglePopover("frequencia")}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        padding: 0,
+                        margin: 0,
+                        font: "inherit",
+                        color: "inherit",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <span className="st-th-label">Frequência</span>
+                    </button>
+                    {openPopoverKey === "frequencia" && (
+                      <div
+                        className="st-filter-popover"
+                        onClick={(event) => event.stopPropagation()}
                       >
-                        Editar
-                      </button>
-                      <button
-                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-red-500/20 hover:border-red-600 text-red-700 hover:bg-red-50"
-                        onClick={() => setExcluirIdx(i)}
-                      >
-                        Excluir
-                      </button>
-                      <button
-                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-gray-300 hover:border-gray-400 text-gray-700 hover:bg-gray-50"
-                        onClick={() => setPlanoDe(c)}
-                      >
-                        Ver plano
-                      </button>
+                        <label className="st-filter__label">
+                          Frequência
+                          <select
+                            className="st-filter-input"
+                            value={filtros.frequencia}
+                            onChange={(event) =>
+                              setFiltros((prev) => ({
+                                ...prev,
+                                frequencia: event.target.value,
+                              }))
+                            }
+                          >
+                            <option value="__ALL__">Todas</option>
+                            {frequenciaOptions.map((opt) => (
+                              <option key={opt} value={opt}>
+                                {opt}x/dia
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                    )}
+                  </th>
+                  <th className="st-td-center col-dias">
+                    <span className="st-th-label">Dias da semana</span>
+                  </th>
+                  <th className="st-td-center col-duracao">
+                    <span className="st-th-label">Duração estimada</span>
+                  </th>
+                  <th
+                    className="st-td-center col-custo"
+                    onMouseEnter={() => setHoveredColKey("custo")}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("custo")}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        padding: 0,
+                        margin: 0,
+                        font: "inherit",
+                        color: "inherit",
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <span className="st-th-label">Custo diário</span>
+                      {sortConfig.key === "custo" && sortConfig.direction && (
+                        <span style={{ fontSize: 12, opacity: 0.7 }}>
+                          {sortConfig.direction === "asc" ? "▲" : "▼"}
+                        </span>
+                      )}
+                    </button>
+                  </th>
+                  <th className="col-etapas">
+                    <span className="st-th-label">Etapas</span>
+                  </th>
+                  <th className="st-td-center col-acoes">
+                    <span className="st-th-label">Ação</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr className="st-empty">
+                    <td colSpan={colunas.length} style={{ textAlign: "center" }}>
+                      Carregando…
+                    </td>
+                  </tr>
+                ) : ciclosExibidos.length === 0 ? (
+                  <tr className="st-empty">
+                    <td colSpan={colunas.length} style={{ textAlign: "center" }}>
+                      Nenhum ciclo cadastrado.
+                    </td>
+                  </tr>
+                ) : (
+                  ciclosExibidos.map((c, i) => {
+                    const rowId = c.id || i;
+                    const rowHover = hoveredRowId === rowId;
+                    return (
+                      <tr key={rowId} className={rowHover ? "st-row-hover" : ""}>
+                        <td
+                          className={`${hoveredColKey === "nome" ? "st-col-hover" : ""} ${
+                            rowHover ? "st-row-hover" : ""
+                          } ${rowHover && hoveredColKey === "nome" ? "st-cell-hover" : ""}`}
+                          onMouseEnter={() => {
+                            setHoveredRowId(rowId);
+                            setHoveredColKey("nome");
+                          }}
+                        >
+                          {c.nome || "—"}
+                        </td>
+                        <td className="st-td-center">{c.tipo || "—"}</td>
+                        <td className="st-td-center">
+                          {c.frequencia ? `${c.frequencia}x/dia` : "—"}
+                        </td>
+                        <td className="st-td-center">
+                          {(c.diasSemana || []).map((d) => DIAS[d]).join(", ") || "—"}
+                        </td>
+                        <td className="st-td-center">
+                          <span className="st-pill st-pill--info">{duracaoEstimada(c)}</span>
+                        </td>
+                        <td
+                          className={`st-td-center ${
+                            hoveredColKey === "custo" ? "st-col-hover" : ""
+                          } ${rowHover ? "st-row-hover" : ""} ${
+                            rowHover && hoveredColKey === "custo" ? "st-cell-hover" : ""
+                          }`}
+                          onMouseEnter={() => {
+                            setHoveredRowId(rowId);
+                            setHoveredColKey("custo");
+                          }}
+                        >
+                          <span className="st-pill st-pill--ok">{custoDiario(c)}</span>
+                        </td>
+                        <td
+                          className="st-td-wrap"
+                          title={(c.etapas || [])
+                            .map((e) => `${e.produto} - ${e.quantidade} ${e.unidade}`)
+                            .join(" | ")}
+                        >
+                          {(c.etapas || [])
+                            .map((e) => `${e.produto} - ${e.quantidade} ${e.unidade}`)
+                            .join(", ") || "—"}
+                        </td>
+                        <td className="st-td-center">
+                          <div style={{ display: "inline-flex", gap: 8, flexWrap: "wrap" }}>
+                            <button className="st-btn" onClick={() => abrirEdicao(i)}>
+                              Editar
+                            </button>
+                            <button className="st-btn" onClick={() => setExcluirIdx(i)}>
+                              Excluir
+                            </button>
+                            <button className="st-btn" onClick={() => setPlanoDe(c)}>
+                              Ver plano
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+              <tfoot>
+                <tr className="st-summary-row">
+                  <td colSpan={8}>
+                    <div className="st-summary-row__content">
+                      <span>Total de ciclos exibidos: {resumo.total}</span>
+                      <span>Total de etapas: {resumo.totalEtapas}</span>
+                      <span>Custo médio diário: {formatBRL(resumo.custoMedio)}</span>
                     </div>
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              </tfoot>
+            </table>
+          </div>
+        </div>
 
         {/* MODAIS */}
         {modal.open && (
@@ -668,23 +876,6 @@ function PlanoSemanal({ ciclo }) {
 }
 
 /* =================== UI mini components =================== */
-function StatusPill({ label = "—", color = "#6b7280" }) {
-  return (
-    <span className="inline-flex items-center justify-center gap-2 font-bold">
-      <span
-        style={{
-          width: 8,
-          height: 8,
-          borderRadius: 999,
-          background: color,
-          display: "inline-block",
-        }}
-      />
-      <span style={{ color }}>{label}</span>
-    </span>
-  );
-}
-
 function Modal({ title, children, onClose }) {
   useEffect(() => {
     const prev = document.body.style.overflow;
