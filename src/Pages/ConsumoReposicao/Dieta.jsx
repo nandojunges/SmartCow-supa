@@ -5,13 +5,11 @@
 // - Excluir remove do banco e recarrega
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import "../../styles/tabelamoderna.css";
+import "../../styles/tabelaModerna.css";
 import "../../styles/botoes.css";
 
 import { supabase } from "../../lib/supabaseClient";
 import ModalDieta from "./ModalDieta";
-
-const STICKY_OFFSET = 48;
 
 function dateOnlyToISO(d) {
   // d vem como "YYYY-MM-DD" (DATE do Postgres)
@@ -22,7 +20,11 @@ function dateOnlyToISO(d) {
 
 export default function Dieta({ onCountChange }) {
   const [dietas, setDietas] = useState([]);
-  const [hoverCol, setHoverCol] = useState(null);
+  const [hoveredRowId, setHoveredRowId] = useState(null);
+  const [hoveredColKey, setHoveredColKey] = useState(null);
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
+  const [openPopoverKey, setOpenPopoverKey] = useState(null);
+  const [filtros, setFiltros] = useState({ lote: "__ALL__" });
 
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState("");
@@ -33,25 +35,82 @@ export default function Dieta({ onCountChange }) {
   useEffect(() => onCountChange?.(dietas.length), [dietas.length, onCountChange]);
 
   const colunas = [
-  "Lote",
-  "Nº de Vacas",
-  "Custo Vaca/dia",
-  "Custo Total",
-  "Custo Vaca/mês",
-  "Data",
-  "Ação",
-];
+    "Lote",
+    "Nº de Vacas",
+    "Custo Vaca/dia",
+    "Custo Total",
+    "Custo Vaca/mês",
+    "Data",
+    "Ação",
+  ];
 
-  const totais = useMemo(() => {
-    const vacas = dietas.reduce((a, d) => a + Number(d.numVacas || 0), 0);
-    const total = dietas.reduce((a, d) => a + Number(d.custoTotal || 0), 0);
-    return {
-      vacas,
-      total,
-      porVacaDia: vacas ? total / vacas : 0,
-      porVacaMes: vacas ? (total / vacas) * 30 : 0,
-    };
+  const loteOptions = useMemo(() => {
+    const values = Array.from(
+      new Set((dietas || []).map((d) => d.lote).filter(Boolean))
+    ).sort((a, b) => a.localeCompare(b));
+    return values;
   }, [dietas]);
+
+  const toggleSort = (key) => {
+    setSortConfig((prev) => {
+      if (prev.key !== key) return { key, direction: "asc" };
+      if (prev.direction === "asc") return { key, direction: "desc" };
+      if (prev.direction === "desc") return { key: null, direction: null };
+      return { key, direction: "asc" };
+    });
+  };
+
+  const handleTogglePopover = (key) => {
+    setOpenPopoverKey((prev) => (prev === key ? null : key));
+  };
+
+  useEffect(() => {
+    if (!openPopoverKey) return undefined;
+    const handleClick = (event) => {
+      if (event.target.closest('[data-filter-trigger="true"]')) return;
+      setOpenPopoverKey(null);
+    };
+    document.addEventListener("click", handleClick);
+    return () => document.removeEventListener("click", handleClick);
+  }, [openPopoverKey]);
+
+  const dietasExibidas = useMemo(() => {
+    let lista = Array.isArray(dietas) ? [...dietas] : [];
+
+    if (filtros.lote !== "__ALL__") {
+      lista = lista.filter((d) => d.lote === filtros.lote);
+    }
+
+    if (sortConfig.key) {
+      const dir = sortConfig.direction === "desc" ? -1 : 1;
+      lista.sort((a, b) => {
+        switch (sortConfig.key) {
+          case "lote":
+            return String(a.lote || "").localeCompare(String(b.lote || "")) * dir;
+          case "numVacas":
+            return (Number(a.numVacas || 0) - Number(b.numVacas || 0)) * dir;
+          case "custoVacaDia":
+            return (Number(a.custoVacaDia || 0) - Number(b.custoVacaDia || 0)) * dir;
+          case "custoTotal":
+            return (Number(a.custoTotal || 0) - Number(b.custoTotal || 0)) * dir;
+          case "data":
+            return (new Date(a.data).getTime() - new Date(b.data).getTime()) * dir;
+          default:
+            return 0;
+        }
+      });
+    }
+
+    return lista;
+  }, [dietas, filtros, sortConfig]);
+
+  const resumo = useMemo(() => {
+    const total = dietasExibidas.length;
+    const vacas = dietasExibidas.reduce((acc, d) => acc + Number(d.numVacas || 0), 0);
+    const totalCusto = dietasExibidas.reduce((acc, d) => acc + Number(d.custoTotal || 0), 0);
+    const custoMedioVaca = vacas ? totalCusto / vacas : 0;
+    return { total, totalCusto, custoMedioVaca };
+  }, [dietasExibidas]);
 
   /** ===================== LOAD DIETAS (BANCO) ===================== */
   const loadDietas = useCallback(async () => {
@@ -222,94 +281,324 @@ export default function Dieta({ onCountChange }) {
         </div>
 
         {erro ? (
-          <div style={{ marginBottom: 10, padding: 10, borderRadius: 10, border: "1px solid #fecaca", background: "#fff1f2", color: "#991b1b", fontWeight: 800 }}>
-            {erro}
-          </div>
+          <div className="st-alert st-alert--danger">{erro}</div>
         ) : null}
 
-        <table className="tabela-padrao">
-          <thead>
-            <tr>
-              {colunas.map((c, i) => (
-                <th
-                  key={c}
-                  style={{ top: STICKY_OFFSET }}
-                  className={hoverCol === i ? "coluna-hover" : ""}
-                  onMouseEnter={() => setHoverCol(i)}
-                  onMouseLeave={() => setHoverCol(null)}
-                >
-                  {c}
-                </th>
-              ))}
-            </tr>
-          </thead>
+        <div className="st-filter-hint">
+          Dica: clique no título das colunas habilitadas para ordenar/filtrar. Clique novamente para
+          fechar.
+        </div>
+        <div className="st-table-container">
+          <div className="st-table-wrap">
+            <table
+              className="st-table st-table--darkhead"
+              onMouseLeave={() => {
+                setHoveredRowId(null);
+                setHoveredColKey(null);
+              }}
+            >
+              <thead>
+                <tr>
+                  <th
+                    className="col-lote"
+                    onMouseEnter={() => setHoveredColKey("lote")}
+                    style={{ position: "relative" }}
+                  >
+                    <button
+                      type="button"
+                      data-filter-trigger="true"
+                      onClick={() => {
+                        toggleSort("lote");
+                        handleTogglePopover("lote");
+                      }}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        padding: 0,
+                        margin: 0,
+                        font: "inherit",
+                        color: "inherit",
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <span className="st-th-label">Lote</span>
+                      {sortConfig.key === "lote" && sortConfig.direction && (
+                        <span style={{ fontSize: 12, opacity: 0.7 }}>
+                          {sortConfig.direction === "asc" ? "▲" : "▼"}
+                        </span>
+                      )}
+                    </button>
+                    {openPopoverKey === "lote" && (
+                      <div
+                        className="st-filter-popover"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <label className="st-filter__label">
+                          Lote
+                          <select
+                            className="st-filter-input"
+                            value={filtros.lote}
+                            onChange={(event) =>
+                              setFiltros((prev) => ({
+                                ...prev,
+                                lote: event.target.value,
+                              }))
+                            }
+                          >
+                            <option value="__ALL__">Todos</option>
+                            {loteOptions.map((opt) => (
+                              <option key={opt} value={opt}>
+                                {opt}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                    )}
+                  </th>
+                  <th
+                    className="st-td-center col-numvacas"
+                    onMouseEnter={() => setHoveredColKey("numVacas")}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("numVacas")}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        padding: 0,
+                        margin: 0,
+                        font: "inherit",
+                        color: "inherit",
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <span className="st-th-label">Nº de Vacas</span>
+                      {sortConfig.key === "numVacas" && sortConfig.direction && (
+                        <span style={{ fontSize: 12, opacity: 0.7 }}>
+                          {sortConfig.direction === "asc" ? "▲" : "▼"}
+                        </span>
+                      )}
+                    </button>
+                  </th>
+                  <th
+                    className="st-td-center col-custo-dia"
+                    onMouseEnter={() => setHoveredColKey("custoVacaDia")}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("custoVacaDia")}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        padding: 0,
+                        margin: 0,
+                        font: "inherit",
+                        color: "inherit",
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <span className="st-th-label">Custo Vaca/dia</span>
+                      {sortConfig.key === "custoVacaDia" && sortConfig.direction && (
+                        <span style={{ fontSize: 12, opacity: 0.7 }}>
+                          {sortConfig.direction === "asc" ? "▲" : "▼"}
+                        </span>
+                      )}
+                    </button>
+                  </th>
+                  <th
+                    className="st-td-center col-custo-total"
+                    onMouseEnter={() => setHoveredColKey("custoTotal")}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("custoTotal")}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        padding: 0,
+                        margin: 0,
+                        font: "inherit",
+                        color: "inherit",
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <span className="st-th-label">Custo Total</span>
+                      {sortConfig.key === "custoTotal" && sortConfig.direction && (
+                        <span style={{ fontSize: 12, opacity: 0.7 }}>
+                          {sortConfig.direction === "asc" ? "▲" : "▼"}
+                        </span>
+                      )}
+                    </button>
+                  </th>
+                  <th className="st-td-center col-custo-mes">
+                    <span className="st-th-label">Custo Vaca/mês</span>
+                  </th>
+                  <th
+                    className="st-td-center col-data"
+                    onMouseEnter={() => setHoveredColKey("data")}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("data")}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        padding: 0,
+                        margin: 0,
+                        font: "inherit",
+                        color: "inherit",
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <span className="st-th-label">Data</span>
+                      {sortConfig.key === "data" && sortConfig.direction && (
+                        <span style={{ fontSize: 12, opacity: 0.7 }}>
+                          {sortConfig.direction === "asc" ? "▲" : "▼"}
+                        </span>
+                      )}
+                    </button>
+                  </th>
+                  <th className="st-td-center col-acoes">
+                    <span className="st-th-label">Ação</span>
+                  </th>
+                </tr>
+              </thead>
 
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={colunas.length} className="text-center py-6">
-                  Carregando...
-                </td>
-              </tr>
-            ) : dietas.length === 0 ? (
-              <tr>
-                <td colSpan={colunas.length} className="text-center py-6">
-                  Nenhuma dieta cadastrada.
-                </td>
-              </tr>
-            ) : (
-              dietas.map((d) => (
-                <tr key={d.id}>
-                  <td className={hoverCol === 0 ? "coluna-hover" : ""}>{d.lote}</td>
+              <tbody>
+                {loading ? (
+                  <tr className="st-empty">
+                    <td colSpan={colunas.length} style={{ textAlign: "center" }}>
+                      Carregando...
+                    </td>
+                  </tr>
+                ) : dietasExibidas.length === 0 ? (
+                  <tr className="st-empty">
+                    <td colSpan={colunas.length} style={{ textAlign: "center" }}>
+                      Nenhuma dieta cadastrada.
+                    </td>
+                  </tr>
+                ) : (
+                  dietasExibidas.map((d) => {
+                    const rowId = d.id;
+                    const rowHover = hoveredRowId === rowId;
+                    return (
+                      <tr key={rowId} className={rowHover ? "st-row-hover" : ""}>
+                        <td
+                          className={`${hoveredColKey === "lote" ? "st-col-hover" : ""} ${
+                            rowHover ? "st-row-hover" : ""
+                          } ${rowHover && hoveredColKey === "lote" ? "st-cell-hover" : ""}`}
+                          onMouseEnter={() => {
+                            setHoveredRowId(rowId);
+                            setHoveredColKey("lote");
+                          }}
+                        >
+                          {d.lote}
+                        </td>
 
-                  <td className={hoverCol === 1 ? "coluna-hover" : ""} align="center">
-                    {d.numVacas}
-                  </td>
+                        <td
+                          className={`st-td-center st-num ${
+                            hoveredColKey === "numVacas" ? "st-col-hover" : ""
+                          } ${rowHover ? "st-row-hover" : ""} ${
+                            rowHover && hoveredColKey === "numVacas" ? "st-cell-hover" : ""
+                          }`}
+                          onMouseEnter={() => {
+                            setHoveredRowId(rowId);
+                            setHoveredColKey("numVacas");
+                          }}
+                        >
+                          {d.numVacas}
+                        </td>
 
-                  <td className={hoverCol === 2 ? "coluna-hover" : ""} align="center">
-                    {formatBRL(d.custoTotal)}
-                  </td>
+                        <td
+                          className={`st-td-center st-num ${
+                            hoveredColKey === "custoVacaDia" ? "st-col-hover" : ""
+                          } ${rowHover ? "st-row-hover" : ""} ${
+                            rowHover && hoveredColKey === "custoVacaDia" ? "st-cell-hover" : ""
+                          }`}
+                          onMouseEnter={() => {
+                            setHoveredRowId(rowId);
+                            setHoveredColKey("custoVacaDia");
+                          }}
+                        >
+                          {formatBRL(d.custoVacaDia)}
+                        </td>
 
-                  <td className={hoverCol === 3 ? "coluna-hover" : ""} align="center">
-                    {formatBRL(d.custoVacaDia)}
-                  </td>
+                        <td
+                          className={`st-td-center st-num ${
+                            hoveredColKey === "custoTotal" ? "st-col-hover" : ""
+                          } ${rowHover ? "st-row-hover" : ""} ${
+                            rowHover && hoveredColKey === "custoTotal" ? "st-cell-hover" : ""
+                          }`}
+                          onMouseEnter={() => {
+                            setHoveredRowId(rowId);
+                            setHoveredColKey("custoTotal");
+                          }}
+                        >
+                          {formatBRL(d.custoTotal)}
+                        </td>
 
-                  <td className={hoverCol === 4 ? "coluna-hover" : ""} align="center">
-                    {formatBRL(Number(d.custoVacaDia || 0) * 30)}
-                  </td>
+                        <td className="st-td-center st-num">{formatBRL(Number(d.custoVacaDia || 0) * 30)}</td>
 
-                  <td className={hoverCol === 5 ? "coluna-hover" : ""} align="center">
-                    {formatDateBR(d.data)}
-                  </td>
+                        <td
+                          className={`st-td-center ${
+                            hoveredColKey === "data" ? "st-col-hover" : ""
+                          } ${rowHover ? "st-row-hover" : ""} ${
+                            rowHover && hoveredColKey === "data" ? "st-cell-hover" : ""
+                          }`}
+                          onMouseEnter={() => {
+                            setHoveredRowId(rowId);
+                            setHoveredColKey("data");
+                          }}
+                        >
+                          {formatDateBR(d.data)}
+                        </td>
 
-                  <td className="coluna-acoes">
-                    <div className="botoes-tabela">
-                      <button className="botao-editar" onClick={() => abrirEditar(d)} disabled={loading}>
-                        Editar
-                      </button>
-                      <button className="botao-excluir" onClick={() => pedirExclusao(d)} disabled={loading}>
-                        Excluir
-                      </button>
+                        <td className="st-td-center">
+                          <div style={{ display: "inline-flex", gap: 8 }}>
+                            <button className="st-btn" onClick={() => abrirEditar(d)} disabled={loading}>
+                              Editar
+                            </button>
+                            <button className="st-btn" onClick={() => pedirExclusao(d)} disabled={loading}>
+                              Excluir
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+
+              <tfoot>
+                <tr className="st-summary-row">
+                  <td colSpan={7}>
+                    <div className="st-summary-row__content">
+                      <span>Total de dietas exibidas: {resumo.total}</span>
+                      <span>Custo total: {formatBRL(resumo.totalCusto)}</span>
+                      <span>Custo médio por vaca: {formatBRL(resumo.custoMedioVaca)}</span>
                     </div>
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-
-          <tfoot>
-            <tr>
-              <td>
-                <strong>Totais</strong>
-              </td>
-              <td align="center">{totais.vacas}</td>
-              <td align="center">{formatBRL(totais.total)}</td>
-              <td align="center">{formatBRL(totais.porVacaDia)}</td>
-              <td align="center">{formatBRL(totais.porVacaMes)}</td>
-              <td colSpan={2} />
-            </tr>
-          </tfoot>
-        </table>
+              </tfoot>
+            </table>
+          </div>
+        </div>
 
         {modal.open && (
           <ModalDieta

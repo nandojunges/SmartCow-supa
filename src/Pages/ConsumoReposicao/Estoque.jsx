@@ -3,13 +3,11 @@ import React, { useMemo, useState, useEffect, useCallback } from "react";
 import Select from "react-select";
 import { supabase } from "../../lib/supabaseClient";
 
-import "../../styles/tabelamoderna.css";
+import "../../styles/tabelaModerna.css";
 import "../../styles/botoes.css";
 
 import ModalAjustesEstoque from "./ModalAjustesEstoque";
 import ModalNovoProduto from "./ModalNovoProduto";
-
-const STICKY_OFFSET = 48;
 
 /* ===================== MODAL BASE (somente para excluir) ===================== */
 const overlay = {
@@ -89,7 +87,11 @@ export default function Estoque({ onCountChange }) {
   const [erro, setErro] = useState("");
 
   const [categoriaSelecionada, setCategoriaSelecionada] = useState(categoriasFixas[0]);
-  const [hoverCol, setHoverCol] = useState(null);
+  const [hoveredRowId, setHoveredRowId] = useState(null);
+  const [hoveredColKey, setHoveredColKey] = useState(null);
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
+  const [openPopoverKey, setOpenPopoverKey] = useState(null);
+  const [filtros, setFiltros] = useState({ unidade: "__ALL__" });
 
   // modais
   const [mostrarCadastro, setMostrarCadastro] = useState(false);
@@ -374,6 +376,13 @@ export default function Estoque({ onCountChange }) {
     return produtos.filter((p) => p.categoria === categoriaSelecionada.value);
   }, [produtos, categoriaSelecionada]);
 
+  const unidadeOptions = useMemo(() => {
+    const values = Array.from(
+      new Set((produtos || []).map((p) => p.unidade).filter(Boolean))
+    ).sort((a, b) => a.localeCompare(b));
+    return values;
+  }, [produtos]);
+
   const colunas = useMemo(
     () => [
       "Nome Comercial",
@@ -390,6 +399,70 @@ export default function Estoque({ onCountChange }) {
     ],
     []
   );
+
+  const toggleSort = (key) => {
+    setSortConfig((prev) => {
+      if (prev.key !== key) return { key, direction: "asc" };
+      if (prev.direction === "asc") return { key, direction: "desc" };
+      if (prev.direction === "desc") return { key: null, direction: null };
+      return { key, direction: "asc" };
+    });
+  };
+
+  const handleTogglePopover = (key) => {
+    setOpenPopoverKey((prev) => (prev === key ? null : key));
+  };
+
+  useEffect(() => {
+    if (!openPopoverKey) return undefined;
+    const handleClick = (event) => {
+      if (event.target.closest('[data-filter-trigger="true"]')) return;
+      setOpenPopoverKey(null);
+    };
+    document.addEventListener("click", handleClick);
+    return () => document.removeEventListener("click", handleClick);
+  }, [openPopoverKey]);
+
+  const produtosExibidos = useMemo(() => {
+    let lista = Array.isArray(produtosFiltrados) ? [...produtosFiltrados] : [];
+
+    if (filtros.unidade !== "__ALL__") {
+      lista = lista.filter((p) => p.unidade === filtros.unidade);
+    }
+
+    if (sortConfig.key) {
+      const dir = sortConfig.direction === "desc" ? -1 : 1;
+      lista.sort((a, b) => {
+        switch (sortConfig.key) {
+          case "produto":
+            return String(a.nomeComercial || "").localeCompare(String(b.nomeComercial || "")) * dir;
+          case "estoque":
+            return (Number(a.quantidade || 0) - Number(b.quantidade || 0)) * dir;
+          case "validade":
+            return (
+              (new Date(a.validade || 0).getTime() - new Date(b.validade || 0).getTime()) * dir
+            );
+          default:
+            return 0;
+        }
+      });
+    }
+
+    return lista;
+  }, [produtosFiltrados, filtros, sortConfig]);
+
+  const resumo = useMemo(() => {
+    const total = produtosExibidos.length;
+    const valorTotal = produtosExibidos.reduce(
+      (acc, p) => acc + Number(p.valorTotal || 0),
+      0
+    );
+    const abaixoMinimo = produtosExibidos.filter((p) => {
+      const min = minimos[p.categoria] ?? 1;
+      return Number(p.quantidade || 0) <= min;
+    }).length;
+    return { total, valorTotal, abaixoMinimo };
+  }, [produtosExibidos, minimos]);
 
   /* ===================== CRUD PRODUTO ===================== */
   async function salvarNovoProduto(produtoUi) {
@@ -529,133 +602,350 @@ export default function Estoque({ onCountChange }) {
           </div>
         )}
 
-        <table className="tabela-padrao">
-          <colgroup>
-            <col style={{ width: 240 }} />
-            <col style={{ width: 160 }} />
-            <col style={{ width: 140 }} />
-            <col style={{ width: 140 }} />
-            <col style={{ width: 90 }} />
-            <col style={{ width: 120 }} />
-            <col style={{ width: 170 }} />
-            <col style={{ width: 140 }} />
-            <col style={{ width: 150 }} />
-            <col style={{ width: 150 }} />
-            <col style={{ width: 190 }} />
-          </colgroup>
+        <div className="st-filter-hint">
+          Dica: clique no título das colunas habilitadas para ordenar/filtrar. Clique novamente para
+          fechar.
+        </div>
+        <div className="st-table-container">
+          <div className="st-table-wrap">
+            <table
+              className="st-table st-table--darkhead"
+              onMouseLeave={() => {
+                setHoveredRowId(null);
+                setHoveredColKey(null);
+              }}
+            >
+              <colgroup>
+                <col style={{ width: "20%" }} />
+                <col style={{ width: "12%" }} />
+                <col style={{ width: "10%" }} />
+                <col style={{ width: "10%" }} />
+                <col style={{ width: "8%" }} />
+                <col style={{ width: "10%" }} />
+                <col style={{ width: "12%" }} />
+                <col style={{ width: "10%" }} />
+                <col style={{ width: "12%" }} />
+                <col style={{ width: "12%" }} />
+                <col style={{ width: "14%" }} />
+              </colgroup>
 
-          <thead>
-            <tr>
-              {colunas.map((c, i) => (
-                <th
-                  key={c}
-                  className={i === hoverCol ? "coluna-hover" : ""}
-                  onMouseEnter={() => setHoverCol(i)}
-                  onMouseLeave={() => setHoverCol(null)}
-                  style={{ top: STICKY_OFFSET }}
-                >
-                  {c}
-                </th>
-              ))}
-            </tr>
-          </thead>
-
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={colunas.length}>
-                  <div className="text-center py-6 text-[#1e3a8a]">Carregando…</div>
-                </td>
-              </tr>
-            ) : produtosFiltrados.length === 0 ? (
-              <tr>
-                <td colSpan={colunas.length}>
-                  <div className="text-center py-6 text-gray-500">Nenhum produto cadastrado.</div>
-                </td>
-              </tr>
-            ) : (
-              produtosFiltrados.map((p, idx) => {
-                const est = alertaEstoque(p, minimos[p.categoria]);
-                const val = alertaValidade(p.validade);
-                const readOnly = !!p?.meta?.readOnly;
-
-                return (
-                  <tr key={p.id || p._virtualId || idx}>
-                    {/* 0 Nome */}
-                    <td
-                      className={["coluna-limitada", hoverCol === 0 ? "coluna-hover" : ""].join(" ")}
-                      title={p.nomeComercial || ""}
+              <thead>
+                <tr>
+                  <th
+                    className="col-nome"
+                    onMouseEnter={() => setHoveredColKey("produto")}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("produto")}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        padding: 0,
+                        margin: 0,
+                        font: "inherit",
+                        color: "inherit",
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
                     >
-                      {p.nomeComercial || "—"}
-                      {readOnly ? <span className="ml-2 text-[12px] text-gray-500">🔒</span> : null}
-                    </td>
-
-                    {/* 1 Categoria */}
-                    <td className={hoverCol === 1 ? "coluna-hover" : ""} style={{ textAlign: "center" }}>
-                      {p.categoria || "—"}
-                    </td>
-
-                    {/* 2 Comprado */}
-                    <td className={hoverCol === 2 ? "coluna-hover" : ""} style={{ textAlign: "center" }}>
-                      {formatQtd(p.compradoTotal)}
-                    </td>
-
-                    {/* 3 Em estoque */}
-                    <td className={hoverCol === 3 ? "coluna-hover" : ""} style={{ textAlign: "center" }}>
-                      {formatQtd(p.quantidade)}
-                    </td>
-
-                    {/* 4 Unid */}
-                    <td className={hoverCol === 4 ? "coluna-hover" : ""} style={{ textAlign: "center" }}>
-                      {p.unidade || "—"}
-                    </td>
-
-                    {/* 5 Validade */}
-                    <td className={hoverCol === 5 ? "coluna-hover" : ""} style={{ textAlign: "center" }}>
-                      {formatVal(p.validade)}
-                    </td>
-
-                    {/* 6 Consumo/dia (dieta) */}
-                    <td className={hoverCol === 6 ? "coluna-hover" : ""} style={{ textAlign: "center", fontWeight: 800 }}>
-                      {p.consumoDiaKg != null ? `${formatQtd(p.consumoDiaKg)} kg/d` : "—"}
-                    </td>
-
-                    {/* 7 Prev. término */}
-                    <td className={hoverCol === 7 ? "coluna-hover" : ""} style={{ textAlign: "center", fontWeight: 800 }}>
-                      {p.prevTerminoDias != null ? `${p.prevTerminoDias} d` : "—"}
-                    </td>
-
-                    {/* 8 Alerta Estoque */}
-                    <td className={hoverCol === 8 ? "coluna-hover" : ""} style={{ textAlign: "center" }}>
-                      <StatusPill {...est} />
-                    </td>
-
-                    {/* 9 Alerta Validade */}
-                    <td className={hoverCol === 9 ? "coluna-hover" : ""} style={{ textAlign: "center" }}>
-                      <StatusPill {...val} />
-                    </td>
-
-                    {/* 10 Ação */}
-                    <td className={`coluna-acoes ${hoverCol === 10 ? "coluna-hover" : ""}`}>
-                      {readOnly ? (
-                        <span style={{ color: "#6b7280", fontWeight: 600 }}>—</span>
-                      ) : (
-                        <div className="botoes-tabela">
-                          <button className="botao-editar" onClick={() => setEditar({ abrir: true, item: p })}>
-                            Editar
-                          </button>
-                          <button className="botao-excluir" onClick={() => setProdutoParaExcluir(p)}>
-                            Excluir
-                          </button>
-                        </div>
+                      <span className="st-th-label">Nome Comercial</span>
+                      {sortConfig.key === "produto" && sortConfig.direction && (
+                        <span style={{ fontSize: 12, opacity: 0.7 }}>
+                          {sortConfig.direction === "asc" ? "▲" : "▼"}
+                        </span>
                       )}
+                    </button>
+                  </th>
+                  <th
+                    className="col-categoria"
+                    style={{ position: "relative" }}
+                  >
+                    <button
+                      type="button"
+                      data-filter-trigger="true"
+                      onClick={() => handleTogglePopover("categoria")}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        padding: 0,
+                        margin: 0,
+                        font: "inherit",
+                        color: "inherit",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <span className="st-th-label">Categoria</span>
+                    </button>
+                    {openPopoverKey === "categoria" && (
+                      <div
+                        className="st-filter-popover"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <label className="st-filter__label">
+                          Categoria
+                          <select
+                            className="st-filter-input"
+                            value={categoriaSelecionada?.value || "Todos"}
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              const opt =
+                                categoriasFixas.find((c) => c.value === value) ||
+                                categoriasFixas[0];
+                              setCategoriaSelecionada(opt);
+                            }}
+                          >
+                            {categoriasFixas.map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                    )}
+                  </th>
+                  <th className="st-td-center col-comprado">
+                    <span className="st-th-label">Comprado</span>
+                  </th>
+                  <th
+                    className="st-td-center col-estoque"
+                    onMouseEnter={() => setHoveredColKey("estoque")}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("estoque")}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        padding: 0,
+                        margin: 0,
+                        font: "inherit",
+                        color: "inherit",
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <span className="st-th-label">Em estoque</span>
+                      {sortConfig.key === "estoque" && sortConfig.direction && (
+                        <span style={{ fontSize: 12, opacity: 0.7 }}>
+                          {sortConfig.direction === "asc" ? "▲" : "▼"}
+                        </span>
+                      )}
+                    </button>
+                  </th>
+                  <th
+                    className="st-td-center col-unidade"
+                    style={{ position: "relative" }}
+                  >
+                    <button
+                      type="button"
+                      data-filter-trigger="true"
+                      onClick={() => handleTogglePopover("unidade")}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        padding: 0,
+                        margin: 0,
+                        font: "inherit",
+                        color: "inherit",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <span className="st-th-label">Unid.</span>
+                    </button>
+                    {openPopoverKey === "unidade" && (
+                      <div
+                        className="st-filter-popover"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <label className="st-filter__label">
+                          Unidade
+                          <select
+                            className="st-filter-input"
+                            value={filtros.unidade}
+                            onChange={(event) =>
+                              setFiltros((prev) => ({
+                                ...prev,
+                                unidade: event.target.value,
+                              }))
+                            }
+                          >
+                            <option value="__ALL__">Todas</option>
+                            {unidadeOptions.map((opt) => (
+                              <option key={opt} value={opt}>
+                                {opt}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                    )}
+                  </th>
+                  <th
+                    className="st-td-center col-validade"
+                    onMouseEnter={() => setHoveredColKey("validade")}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("validade")}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        padding: 0,
+                        margin: 0,
+                        font: "inherit",
+                        color: "inherit",
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <span className="st-th-label">Validade</span>
+                      {sortConfig.key === "validade" && sortConfig.direction && (
+                        <span style={{ fontSize: 12, opacity: 0.7 }}>
+                          {sortConfig.direction === "asc" ? "▲" : "▼"}
+                        </span>
+                      )}
+                    </button>
+                  </th>
+                  <th className="st-td-center col-consumo">
+                    <span className="st-th-label">Consumo/dia (dieta)</span>
+                  </th>
+                  <th className="st-td-center col-prev">
+                    <span className="st-th-label">Prev. término</span>
+                  </th>
+                  <th className="st-td-center col-alerta-estoque">
+                    <span className="st-th-label">Alerta Estoque</span>
+                  </th>
+                  <th className="st-td-center col-alerta-validade">
+                    <span className="st-th-label">Alerta Validade</span>
+                  </th>
+                  <th className="st-td-center col-acoes">
+                    <span className="st-th-label">Ação</span>
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {loading ? (
+                  <tr className="st-empty">
+                    <td colSpan={colunas.length} style={{ textAlign: "center" }}>
+                      Carregando…
                     </td>
                   </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+                ) : produtosExibidos.length === 0 ? (
+                  <tr className="st-empty">
+                    <td colSpan={colunas.length} style={{ textAlign: "center" }}>
+                      Nenhum produto cadastrado.
+                    </td>
+                  </tr>
+                ) : (
+                  produtosExibidos.map((p, idx) => {
+                    const est = alertaEstoque(p, minimos[p.categoria]);
+                    const val = alertaValidade(p.validade);
+                    const readOnly = !!p?.meta?.readOnly;
+                    const rowId = p.id || p._virtualId || idx;
+                    const rowHover = hoveredRowId === rowId;
+
+                    return (
+                      <tr key={rowId} className={rowHover ? "st-row-hover" : ""}>
+                        <td
+                          className={`${hoveredColKey === "produto" ? "st-col-hover" : ""} ${
+                            rowHover ? "st-row-hover" : ""
+                          } ${rowHover && hoveredColKey === "produto" ? "st-cell-hover" : ""}`}
+                          title={p.nomeComercial || ""}
+                          onMouseEnter={() => {
+                            setHoveredRowId(rowId);
+                            setHoveredColKey("produto");
+                          }}
+                        >
+                          {p.nomeComercial || "—"}
+                          {readOnly ? <span className="ml-2 text-[12px] text-gray-500">🔒</span> : null}
+                        </td>
+
+                        <td className="st-td-center">{p.categoria || "—"}</td>
+                        <td className="st-td-center st-num">{formatQtd(p.compradoTotal)}</td>
+                        <td
+                          className={`st-td-center st-num ${
+                            hoveredColKey === "estoque" ? "st-col-hover" : ""
+                          } ${rowHover ? "st-row-hover" : ""} ${
+                            rowHover && hoveredColKey === "estoque" ? "st-cell-hover" : ""
+                          }`}
+                          onMouseEnter={() => {
+                            setHoveredRowId(rowId);
+                            setHoveredColKey("estoque");
+                          }}
+                        >
+                          {formatQtd(p.quantidade)}
+                        </td>
+                        <td className="st-td-center">{p.unidade || "—"}</td>
+                        <td
+                          className={`st-td-center ${
+                            hoveredColKey === "validade" ? "st-col-hover" : ""
+                          } ${rowHover ? "st-row-hover" : ""} ${
+                            rowHover && hoveredColKey === "validade" ? "st-cell-hover" : ""
+                          }`}
+                          onMouseEnter={() => {
+                            setHoveredRowId(rowId);
+                            setHoveredColKey("validade");
+                          }}
+                        >
+                          {formatVal(p.validade)}
+                        </td>
+                        <td className="st-td-center st-num">
+                          {p.consumoDiaKg != null ? `${formatQtd(p.consumoDiaKg)} kg/d` : "—"}
+                        </td>
+                        <td className="st-td-center st-num">
+                          {p.prevTerminoDias != null ? `${p.prevTerminoDias} d` : "—"}
+                        </td>
+                        <td className="st-td-center">
+                          <span className={`st-pill ${est.variant}`}>{est.label}</span>
+                        </td>
+                        <td className="st-td-center">
+                          <span className={`st-pill ${val.variant}`}>{val.label}</span>
+                        </td>
+                        <td className="st-td-center">
+                          {readOnly ? (
+                            <span className="st-text">—</span>
+                          ) : (
+                            <div style={{ display: "inline-flex", gap: 8 }}>
+                              <button
+                                className="st-btn"
+                                onClick={() => setEditar({ abrir: true, item: p })}
+                              >
+                                Editar
+                              </button>
+                              <button className="st-btn" onClick={() => setProdutoParaExcluir(p)}>
+                                Excluir
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+              <tfoot>
+                <tr className="st-summary-row">
+                  <td colSpan={11}>
+                    <div className="st-summary-row__content">
+                      <span>Total de itens exibidos: {resumo.total}</span>
+                      <span>Valor total: {formatBRL(resumo.valorTotal)}</span>
+                      <span>Itens abaixo do mínimo: {resumo.abaixoMinimo}</span>
+                    </div>
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
 
         {/* ===================== MODAIS ===================== */}
 
@@ -758,16 +1048,6 @@ export default function Estoque({ onCountChange }) {
   );
 }
 
-/* ===================== UI ===================== */
-function StatusPill({ color, text }) {
-  return (
-    <span className="inline-flex items-center gap-2 font-bold" style={{ color }}>
-      <span style={{ width: 8, height: 8, borderRadius: 999, background: color }} />
-      {text}
-    </span>
-  );
-}
-
 /* ===================== MODAL SIMPLES ===================== */
 function ModalSimples({ title, children, onClose }) {
   useEffect(() => {
@@ -799,13 +1079,13 @@ function ModalSimples({ title, children, onClose }) {
 /* ===================== HELPERS ===================== */
 function alertaEstoque(p, min = 1) {
   const q = Number(p.quantidade || 0);
-  if (q <= 0) return { text: "Insuficiente", color: "#dc2626" };
-  if (q <= min) return { text: "Estoque baixo", color: "#d97706" };
-  return { text: "OK", color: "#16a34a" };
+  if (q <= 0) return { label: "Insuficiente", variant: "st-pill--warn" };
+  if (q <= min) return { label: "Estoque baixo", variant: "st-pill--warn" };
+  return { label: "OK", variant: "st-pill--ok" };
 }
 
 function alertaValidade(v) {
-  if (!v) return { text: "—", color: "#6b7280" };
+  if (!v) return { label: "—", variant: "st-pill--mute" };
   const d = new Date(v);
   const hoje = new Date();
   hoje.setHours(0, 0, 0, 0);
@@ -813,9 +1093,9 @@ function alertaValidade(v) {
   dd.setHours(0, 0, 0, 0);
   const dias = Math.ceil((dd - hoje) / 86400000);
 
-  if (dias < 0) return { text: "Vencido", color: "#dc2626" };
-  if (dias <= 30) return { text: `Vence em ${dias}d`, color: "#d97706" };
-  return { text: "OK", color: "#16a34a" };
+  if (dias < 0) return { label: "Vencido", variant: "st-pill--warn" };
+  if (dias <= 30) return { label: `Vence em ${dias}d`, variant: "st-pill--warn" };
+  return { label: "OK", variant: "st-pill--ok" };
 }
 
 function formatVal(v) {
@@ -828,6 +1108,10 @@ function formatQtd(v) {
   const n = Number(v || 0);
   if (!Number.isFinite(n)) return "0";
   return n.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 3 });
+}
+
+function formatBRL(v) {
+  return (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 /* ===================== ADAPTERS ===================== */

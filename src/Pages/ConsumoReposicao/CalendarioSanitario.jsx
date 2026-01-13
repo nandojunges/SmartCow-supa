@@ -1,5 +1,6 @@
 // src/pages/ConsumoReposicao/CalendarioSanitario.jsx
 import React, { useMemo, useState, useEffect } from "react";
+import "../../styles/tabelaModerna.css";
 
 /** =====================================================================
  * CALENDÁRIO SANITÁRIO — SOMENTE LAYOUT (SEM BANCO / SEM API)
@@ -7,20 +8,6 @@ import React, { useMemo, useState, useEffect } from "react";
  * - Mantém modais e formulários
  * - CRUD em memória (mock) para você plugar no novo banco depois
  * ===================================================================== */
-
-const STICKY_OFFSET = 48;
-
-/* ===== estilos de tabela ===== */
-const tableClasses =
-  "w-full border-separate [border-spacing:0_4px] text-[14px] text-[#333] table-auto";
-const thBase =
-  "bg-[#e6f0ff] px-3 py-3 text-left font-bold text-[16px] text-[#1e3a8a] border-b-2 border-[#a8c3e6] sticky z-10 whitespace-nowrap";
-const tdBase = "px-4 py-2 border-b border-[#eee] whitespace-nowrap";
-const tdClamp = tdBase + " overflow-hidden text-ellipsis";
-const rowBase = "bg-white shadow-xs transition-colors";
-const rowAlt = "even:bg-[#f7f7f8]";
-const hoverTH = (i, hc) => (i === hc ? "bg-[rgba(33,150,243,0.08)]" : "");
-const hoverTD = (i, hc) => (i === hc ? "bg-[rgba(33,150,243,0.08)]" : "");
 
 /* ===== estilos modal ===== */
 const overlay = {
@@ -86,13 +73,40 @@ export default function CalendarioSanitario() {
   const [mostrarExames, setMostrarExames] = useState(false);
   const [excluirIdx, setExcluirIdx] = useState(null);
 
-  const [hoverCol, setHoverCol] = useState(null);
+  const [hoveredRowId, setHoveredRowId] = useState(null);
+  const [hoveredColKey, setHoveredColKey] = useState(null);
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
+  const [openPopoverKey, setOpenPopoverKey] = useState(null);
+  const [filtros, setFiltros] = useState({ status: "__ALL__" });
 
   // ✅ não carrega nada de API/banco (layout apenas)
   useEffect(() => {
     setErro("");
     setLoading(false);
   }, []);
+
+  const toggleSort = (key) => {
+    setSortConfig((prev) => {
+      if (prev.key !== key) return { key, direction: "asc" };
+      if (prev.direction === "asc") return { key, direction: "desc" };
+      if (prev.direction === "desc") return { key: null, direction: null };
+      return { key, direction: "asc" };
+    });
+  };
+
+  const handleTogglePopover = (key) => {
+    setOpenPopoverKey((prev) => (prev === key ? null : key));
+  };
+
+  useEffect(() => {
+    if (!openPopoverKey) return undefined;
+    const handleClick = (event) => {
+      if (event.target.closest('[data-filter-trigger="true"]')) return;
+      setOpenPopoverKey(null);
+    };
+    document.addEventListener("click", handleClick);
+    return () => document.removeEventListener("click", handleClick);
+  }, [openPopoverKey]);
 
   const abrirNovo = () => {
     setEditarIdx(null);
@@ -174,6 +188,61 @@ export default function CalendarioSanitario() {
     []
   );
 
+  const statusFromManejo = (m) => {
+    const raw = m?.proximaAplicacao || m?.dataInicial;
+    if (!raw) return { label: "Sem data", variant: "st-pill--mute", key: "Sem data" };
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const dt = new Date(raw);
+    dt.setHours(0, 0, 0, 0);
+    const dias = Math.ceil((dt - hoje) / 86400000);
+    if (dias < 0) return { label: "Vencido", variant: "st-pill--warn", key: "Vencido" };
+    if (dias <= 7) return { label: "Próximo", variant: "st-pill--info", key: "Próximo" };
+    return { label: "Em dia", variant: "st-pill--ok", key: "Em dia" };
+  };
+
+  const manejosExibidos = useMemo(() => {
+    let lista = Array.isArray(manejos) ? [...manejos] : [];
+
+    if (filtros.status !== "__ALL__") {
+      lista = lista.filter((m) => statusFromManejo(m).key === filtros.status);
+    }
+
+    if (sortConfig.key) {
+      const dir = sortConfig.direction === "desc" ? -1 : 1;
+      lista.sort((a, b) => {
+        switch (sortConfig.key) {
+          case "produto":
+            return String(a.produto || "").localeCompare(String(b.produto || "")) * dir;
+          case "data":
+            return (
+              (new Date(a.proximaAplicacao || a.dataInicial || 0).getTime() -
+                new Date(b.proximaAplicacao || b.dataInicial || 0).getTime()) *
+              dir
+            );
+          default:
+            return 0;
+        }
+      });
+    }
+
+    return lista;
+  }, [manejos, filtros, sortConfig]);
+
+  const resumo = useMemo(() => {
+    const total = manejosExibidos.length;
+    const statusCounts = manejosExibidos.reduce(
+      (acc, m) => {
+        const status = statusFromManejo(m);
+        if (status.key === "Vencido") acc.vencidos += 1;
+        if (status.key === "Próximo") acc.proximos += 1;
+        return acc;
+      },
+      { vencidos: 0, proximos: 0 }
+    );
+    return { total, ...statusCounts };
+  }, [manejosExibidos]);
+
   return (
     <section className="w-full py-6 font-sans">
       <div className="px-2 md:px-4 lg:px-6">
@@ -203,115 +272,247 @@ export default function CalendarioSanitario() {
           </div>
         )}
 
-        <table className={tableClasses}>
-          <colgroup>
-            <col style={{ width: 150 }} />
-            <col style={{ width: 120 }} />
-            <col style={{ width: 220 }} />
-            <col style={{ width: 170 }} />
-            <col style={{ width: 150 }} />
-            <col style={{ width: 140 }} />
-            <col style={{ width: 120 }} />
-            <col style={{ width: 170 }} />
-            <col style={{ width: 160 }} />
-          </colgroup>
+        <div className="st-filter-hint">
+          Dica: clique no título das colunas habilitadas para ordenar/filtrar. Clique novamente para
+          fechar.
+        </div>
+        <div className="st-table-container">
+          <div className="st-table-wrap">
+            <table
+              className="st-table st-table--darkhead"
+              onMouseLeave={() => {
+                setHoveredRowId(null);
+                setHoveredColKey(null);
+              }}
+            >
+              <colgroup>
+                <col style={{ width: "14%" }} />
+                <col style={{ width: "12%" }} />
+                <col style={{ width: "18%" }} />
+                <col style={{ width: "14%" }} />
+                <col style={{ width: "14%" }} />
+                <col style={{ width: "12%" }} />
+                <col style={{ width: "10%" }} />
+                <col style={{ width: "14%" }} />
+                <col style={{ width: "12%" }} />
+              </colgroup>
 
-          <thead>
-            <tr>
-              {titulos.map((t, i) => (
-                <th
-                  key={t}
-                  className={`${thBase} ${hoverTH(i, hoverCol)}`}
-                  onMouseEnter={() => setHoverCol(i)}
-                  onMouseLeave={() => setHoverCol(null)}
-                  style={{ top: STICKY_OFFSET }}
-                >
-                  {t}
-                </th>
-              ))}
-            </tr>
-          </thead>
+              <thead>
+                <tr>
+                  <th className="col-categoria">
+                    <span className="st-th-label">Categoria</span>
+                  </th>
+                  <th className="col-tipo">
+                    <span className="st-th-label">Tipo</span>
+                  </th>
+                  <th
+                    className="col-produto"
+                    onMouseEnter={() => setHoveredColKey("produto")}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("produto")}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        padding: 0,
+                        margin: 0,
+                        font: "inherit",
+                        color: "inherit",
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <span className="st-th-label">Produto / Manejo</span>
+                      {sortConfig.key === "produto" && sortConfig.direction && (
+                        <span style={{ fontSize: 12, opacity: 0.7 }}>
+                          {sortConfig.direction === "asc" ? "▲" : "▼"}
+                        </span>
+                      )}
+                    </button>
+                  </th>
+                  <th className="col-frequencia">
+                    <span className="st-th-label">Frequência / Intervalo</span>
+                  </th>
+                  <th className="col-idade">
+                    <span className="st-th-label">Idade de Aplicação</span>
+                  </th>
+                  <th className="col-via">
+                    <span className="st-th-label">Via</span>
+                  </th>
+                  <th className="col-dose">
+                    <span className="st-th-label">Dose (mL)</span>
+                  </th>
+                  <th
+                    className="col-data"
+                    onMouseEnter={() => setHoveredColKey("data")}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("data")}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        padding: 0,
+                        margin: 0,
+                        font: "inherit",
+                        color: "inherit",
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <span className="st-th-label">Data prevista</span>
+                      {sortConfig.key === "data" && sortConfig.direction && (
+                        <span style={{ fontSize: 12, opacity: 0.7 }}>
+                          {sortConfig.direction === "asc" ? "▲" : "▼"}
+                        </span>
+                      )}
+                    </button>
+                  </th>
+                  <th
+                    className="st-td-center col-status"
+                    style={{ position: "relative" }}
+                  >
+                    <button
+                      type="button"
+                      data-filter-trigger="true"
+                      onClick={() => handleTogglePopover("status")}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        padding: 0,
+                        margin: 0,
+                        font: "inherit",
+                        color: "inherit",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <span className="st-th-label">Status</span>
+                    </button>
+                    {openPopoverKey === "status" && (
+                      <div
+                        className="st-filter-popover"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <label className="st-filter__label">
+                          Status
+                          <select
+                            className="st-filter-input"
+                            value={filtros.status}
+                            onChange={(event) =>
+                              setFiltros((prev) => ({
+                                ...prev,
+                                status: event.target.value,
+                              }))
+                            }
+                          >
+                            <option value="__ALL__">Todos</option>
+                            <option value="Em dia">Em dia</option>
+                            <option value="Próximo">Próximo</option>
+                            <option value="Vencido">Vencido</option>
+                            <option value="Sem data">Sem data</option>
+                          </select>
+                        </label>
+                      </div>
+                    )}
+                  </th>
+                  <th className="st-td-center col-acoes">
+                    <span className="st-th-label">Ações</span>
+                  </th>
+                </tr>
+              </thead>
 
-          <tbody>
-            {loading ? (
-              <tr>
-                <td className={tdBase} colSpan={titulos.length}>
-                  <div className="text-center text-[#1e3a8a] py-6">
-                    Carregando…
-                  </div>
-                </td>
-              </tr>
-            ) : manejos.length === 0 ? (
-              <tr>
-                <td className={tdBase} colSpan={titulos.length}>
-                  <div className="text-center text-gray-600 py-6">
-                    Nenhum manejo cadastrado.
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              manejos.map((m, idx) => (
-                <tr
-                  key={m.id || idx}
-                  className={`${rowBase} ${rowAlt} hover:bg-[#eaf5ff]`}
-                >
-                  <td className={`${tdClamp} ${hoverTD(0, hoverCol)}`}>
-                    {m.categoria || "—"}
-                  </td>
-                  <td className={`${tdClamp} ${hoverTD(1, hoverCol)}`}>
-                    {m.tipo || "—"}
-                  </td>
-                  <td className={`${tdClamp} ${hoverTD(2, hoverCol)}`}>
-                    {m.produto || "—"}
-                  </td>
-                  <td className={`${tdClamp} ${hoverTD(3, hoverCol)}`}>
-                    {m.frequencia ? `${m.frequencia} dias` : "—"}
-                  </td>
-                  <td className={`${tdClamp} ${hoverTD(4, hoverCol)}`}>
-                    {m.idade || "—"}
-                  </td>
-                  <td className={`${tdClamp} ${hoverTD(5, hoverCol)}`}>
-                    {m.via || "—"}
-                  </td>
-                  <td className={`${tdClamp} ${hoverTD(6, hoverCol)}`}>
-                    {m.dose ?? "—"}
-                  </td>
-                  <td className={`${tdClamp} ${hoverTD(7, hoverCol)}`}>
-                    {m.proximaAplicacao
-                      ? formatBR(m.proximaAplicacao)
-                      : m.dataInicial
-                      ? formatBR(m.dataInicial)
-                      : "—"}
-                  </td>
-                  <td className={`${tdBase} ${hoverTD(8, hoverCol)}`}>
-                    <div className="whitespace-nowrap">
-                      <button
-                        className="text-[#2563eb] font-extrabold"
-                        onClick={() => abrirEdicao(idx)}
-                      >
-                        Editar
-                      </button>
-                      <span className="mx-2 text-[#e5e7eb]">|</span>
-                      <button
-                        className="text-[#2563eb] font-extrabold"
-                        onClick={() => abrirRegistro(idx)}
-                      >
-                        Registrar
-                      </button>
-                      <span className="mx-2 text-[#e5e7eb]">|</span>
-                      <button
-                        className="text-[#dc2626] font-extrabold"
-                        onClick={() => setExcluirIdx(idx)}
-                      >
-                        Excluir
-                      </button>
+              <tbody>
+                {loading ? (
+                  <tr className="st-empty">
+                    <td colSpan={titulos.length} style={{ textAlign: "center" }}>
+                      Carregando…
+                    </td>
+                  </tr>
+                ) : manejosExibidos.length === 0 ? (
+                  <tr className="st-empty">
+                    <td colSpan={titulos.length} style={{ textAlign: "center" }}>
+                      Nenhum manejo cadastrado.
+                    </td>
+                  </tr>
+                ) : (
+                  manejosExibidos.map((m, idx) => {
+                    const rowId = m.id || idx;
+                    const rowHover = hoveredRowId === rowId;
+                    const status = statusFromManejo(m);
+                    return (
+                      <tr key={rowId} className={rowHover ? "st-row-hover" : ""}>
+                        <td>{m.categoria || "—"}</td>
+                        <td>{m.tipo || "—"}</td>
+                        <td
+                          className={`${hoveredColKey === "produto" ? "st-col-hover" : ""} ${
+                            rowHover ? "st-row-hover" : ""
+                          } ${rowHover && hoveredColKey === "produto" ? "st-cell-hover" : ""}`}
+                          onMouseEnter={() => {
+                            setHoveredRowId(rowId);
+                            setHoveredColKey("produto");
+                          }}
+                        >
+                          {m.produto || "—"}
+                        </td>
+                        <td>{m.frequencia ? `${m.frequencia} dias` : "—"}</td>
+                        <td>{m.idade || "—"}</td>
+                        <td>{m.via || "—"}</td>
+                        <td className="st-td-center">{m.dose ?? "—"}</td>
+                        <td
+                          className={`${hoveredColKey === "data" ? "st-col-hover" : ""} ${
+                            rowHover ? "st-row-hover" : ""
+                          } ${rowHover && hoveredColKey === "data" ? "st-cell-hover" : ""}`}
+                          onMouseEnter={() => {
+                            setHoveredRowId(rowId);
+                            setHoveredColKey("data");
+                          }}
+                        >
+                          {m.proximaAplicacao
+                            ? formatBR(m.proximaAplicacao)
+                            : m.dataInicial
+                            ? formatBR(m.dataInicial)
+                            : "—"}
+                        </td>
+                        <td className="st-td-center">
+                          <span className={`st-pill ${status.variant}`}>{status.label}</span>
+                        </td>
+                        <td className="st-td-center">
+                          <div style={{ display: "inline-flex", gap: 8, flexWrap: "wrap" }}>
+                            <button className="st-btn" onClick={() => abrirEdicao(idx)}>
+                              Editar
+                            </button>
+                            <button className="st-btn" onClick={() => abrirRegistro(idx)}>
+                              Registrar
+                            </button>
+                            <button className="st-btn" onClick={() => setExcluirIdx(idx)}>
+                              Excluir
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+              <tfoot>
+                <tr className="st-summary-row">
+                  <td colSpan={9}>
+                    <div className="st-summary-row__content">
+                      <span>Total de eventos: {resumo.total}</span>
+                      <span>Vencidos: {resumo.vencidos}</span>
+                      <span>Próximos 7 dias: {resumo.proximos}</span>
                     </div>
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              </tfoot>
+            </table>
+          </div>
+        </div>
 
         {/* Modais */}
         {mostrarCadastro && (

@@ -2,12 +2,10 @@
 import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { supabase } from "../../lib/supabaseClient";
 
-import "../../styles/tabelamoderna.css";
+import "../../styles/tabelaModerna.css";
 import "../../styles/botoes.css";
 
 import { ModalLoteCadastro, ModalLoteInfo, ModalConfirmarExclusao } from "./ModalLote";
-
-const STICKY_OFFSET = 48;
 
 /* ===================== helpers (map modal <-> banco) ===================== */
 // Banco usa: nivel_produtivo
@@ -47,7 +45,15 @@ export default function Lotes() {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState("");
 
-  const [hoverCol, setHoverCol] = useState(null);
+  const [hoveredRowId, setHoveredRowId] = useState(null);
+  const [hoveredColKey, setHoveredColKey] = useState(null);
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
+  const [openPopoverKey, setOpenPopoverKey] = useState(null);
+  const [filtros, setFiltros] = useState({
+    funcao: "__ALL__",
+    nivel: "__ALL__",
+    status: "__ALL__",
+  });
   const [cad, setCad] = useState({ open: false, index: null, lote: null });
   const [info, setInfo] = useState(null);
   const [excluirId, setExcluirId] = useState(null);
@@ -56,6 +62,43 @@ export default function Lotes() {
     () => ["Nome", "Nº de Vacas", "Função", "Nível Produtivo", "Status", "Ação"],
     []
   );
+
+  const funcaoOptions = useMemo(() => {
+    const values = Array.from(
+      new Set((lotes || []).map((l) => l.funcao).filter(Boolean))
+    ).sort((a, b) => a.localeCompare(b));
+    return values;
+  }, [lotes]);
+
+  const nivelOptions = useMemo(() => {
+    const values = Array.from(
+      new Set((lotes || []).map((l) => l.nivelProducao).filter(Boolean))
+    ).sort((a, b) => a.localeCompare(b));
+    return values;
+  }, [lotes]);
+
+  const toggleSort = (key) => {
+    setSortConfig((prev) => {
+      if (prev.key !== key) return { key, direction: "asc" };
+      if (prev.direction === "asc") return { key, direction: "desc" };
+      if (prev.direction === "desc") return { key: null, direction: null };
+      return { key, direction: "asc" };
+    });
+  };
+
+  const handleTogglePopover = (key) => {
+    setOpenPopoverKey((prev) => (prev === key ? null : key));
+  };
+
+  useEffect(() => {
+    if (!openPopoverKey) return undefined;
+    const handleClick = (event) => {
+      if (event.target.closest('[data-filter-trigger="true"]')) return;
+      setOpenPopoverKey(null);
+    };
+    document.addEventListener("click", handleClick);
+    return () => document.removeEventListener("click", handleClick);
+  }, [openPopoverKey]);
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -172,6 +215,47 @@ export default function Lotes() {
     }
   };
 
+  const lotesExibidos = useMemo(() => {
+    let lista = Array.isArray(lotes) ? [...lotes] : [];
+
+    if (filtros.funcao !== "__ALL__") {
+      lista = lista.filter((l) => l.funcao === filtros.funcao);
+    }
+    if (filtros.nivel !== "__ALL__") {
+      lista = lista.filter((l) => l.nivelProducao === filtros.nivel);
+    }
+    if (filtros.status !== "__ALL__") {
+      const ativo = filtros.status === "Ativo";
+      lista = lista.filter((l) => !!l.ativo === ativo);
+    }
+
+    if (sortConfig.key) {
+      const dir = sortConfig.direction === "desc" ? -1 : 1;
+      lista.sort((a, b) => {
+        switch (sortConfig.key) {
+          case "nome":
+            return String(a.nome || "").localeCompare(String(b.nome || "")) * dir;
+          case "numVacas":
+            return (Number(a.numVacas || 0) - Number(b.numVacas || 0)) * dir;
+          case "nivel":
+            return String(a.nivelProducao || "").localeCompare(String(b.nivelProducao || "")) * dir;
+          default:
+            return 0;
+        }
+      });
+    }
+
+    return lista;
+  }, [lotes, filtros, sortConfig]);
+
+  const resumo = useMemo(() => {
+    const total = lotesExibidos.length;
+    const totalVacas = lotesExibidos.reduce((acc, l) => acc + Number(l.numVacas || 0), 0);
+    const ativos = lotesExibidos.filter((l) => l.ativo).length;
+    const inativos = total - ativos;
+    return { total, totalVacas, ativos, inativos };
+  }, [lotesExibidos]);
+
   return (
     <section style={{ width: "100%", padding: "24px 0" }}>
       <div style={{ padding: "0 12px" }}>
@@ -183,136 +267,402 @@ export default function Lotes() {
         </div>
 
         {erro && (
-          <div
-            style={{
-              marginBottom: 12,
-              fontSize: 13,
-              color: "#92400e",
-              background: "#fffbeb",
-              border: "1px solid #fcd34d",
-              padding: "10px 12px",
-              borderRadius: 8,
-            }}
-          >
-            {erro}
-          </div>
+          <div className="st-alert st-alert--danger">{erro}</div>
         )}
 
-        <table className="tabela-padrao">
-          <colgroup>
-            <col style={{ width: 220 }} />
-            <col style={{ width: 140 }} />
-            <col style={{ width: 150 }} />
-            <col style={{ width: 170 }} />
-            <col style={{ width: 120 }} />
-            <col style={{ width: 170 }} />
-          </colgroup>
+        <div className="st-filter-hint">
+          Dica: clique no título das colunas habilitadas para ordenar/filtrar. Clique novamente para
+          fechar.
+        </div>
+        <div className="st-table-container">
+          <div className="st-table-wrap">
+            <table
+              className="st-table st-table--darkhead"
+              onMouseLeave={() => {
+                setHoveredRowId(null);
+                setHoveredColKey(null);
+              }}
+            >
+              <colgroup>
+                <col style={{ width: "22%" }} />
+                <col style={{ width: "12%" }} />
+                <col style={{ width: "16%" }} />
+                <col style={{ width: "18%" }} />
+                <col style={{ width: "12%" }} />
+                <col style={{ width: "20%" }} />
+              </colgroup>
 
-          <thead>
-            <tr>
-              {colunas.map((c, i) => (
-                <th
-                  key={c}
-                  className={hoverCol === i ? "coluna-hover" : ""}
-                  onMouseEnter={() => setHoverCol(i)}
-                  onMouseLeave={() => setHoverCol(null)}
-                  style={{ top: STICKY_OFFSET }}
-                >
-                  {c}
-                </th>
-              ))}
-            </tr>
-          </thead>
-
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={colunas.length}>
-                  <div style={{ textAlign: "center", color: "#1e3a8a", padding: "22px 0" }}>
-                    Carregando…
-                  </div>
-                </td>
-              </tr>
-            ) : lotes.length === 0 ? (
-              <tr>
-                <td colSpan={colunas.length}>
-                  <div style={{ textAlign: "center", color: "#4b5563", padding: "22px 0" }}>
-                    Nenhum lote cadastrado.
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              lotes.map((l, i) => (
-                <tr key={l.id || i}>
-                  <td className={hoverCol === 0 ? "coluna-hover" : ""} title={l.nome || ""}>
-                    {l.nome || "—"}
-                  </td>
-
-                  <td className={hoverCol === 1 ? "coluna-hover" : ""}>
-                    <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                      <span>{typeof l.numVacas === "number" ? l.numVacas : 0}</span>
-                      <button
-                        className="botao-editar"
-                        style={{ padding: "2px 10px", height: 28 }}
-                        title="Informações do lote"
-                        onClick={() => setInfo(l)}
-                      >
-                        ℹ️
-                      </button>
-                    </div>
-                  </td>
-
-                  <td className={hoverCol === 2 ? "coluna-hover" : ""} title={l.funcao || ""}>
-                    {l.funcao || "—"}
-                  </td>
-
-                  <td className={hoverCol === 3 ? "coluna-hover" : ""} title={l.nivelProducao || ""}>
-                    {l.funcao === "Lactação" ? l.nivelProducao || "—" : "—"}
-                  </td>
-
-                  <td className={hoverCol === 4 ? "coluna-hover" : ""}>
-                    <span
+              <thead>
+                <tr>
+                  <th
+                    className="col-nome"
+                    onMouseEnter={() => setHoveredColKey("nome")}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("nome")}
                       style={{
+                        background: "transparent",
+                        border: "none",
+                        padding: 0,
+                        margin: 0,
+                        font: "inherit",
+                        color: "inherit",
+                        cursor: "pointer",
                         display: "inline-flex",
                         alignItems: "center",
-                        justifyContent: "center",
-                        height: 28,
-                        padding: "0 14px",
-                        borderRadius: 999,
-                        fontSize: 14,
-                        fontWeight: 800,
-                        background: "#fff",
-                        border: `1.5px solid ${l.ativo ? "#86efac" : "#e5e7eb"}`,
-                        color: l.ativo ? "#065f46" : "#374151",
+                        gap: 6,
                       }}
                     >
-                      {l.ativo ? "Ativo" : "Inativo"}
-                    </span>
-                  </td>
-
-                  <td className="coluna-acoes">
-                    <div className="botoes-tabela">
-                      <button className="botao-editar" onClick={() => abrirEdicao(i)}>
-                        Editar
-                      </button>
-
-                      <button
-                        className="btn-registrar"
-                        onClick={() => alternarAtivoBanco(l.id, l.ativo)}
+                      <span className="st-th-label">Nome</span>
+                      {sortConfig.key === "nome" && sortConfig.direction && (
+                        <span style={{ fontSize: 12, opacity: 0.7 }}>
+                          {sortConfig.direction === "asc" ? "▲" : "▼"}
+                        </span>
+                      )}
+                    </button>
+                  </th>
+                  <th
+                    className="st-td-center col-numvacas"
+                    onMouseEnter={() => setHoveredColKey("numVacas")}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("numVacas")}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        padding: 0,
+                        margin: 0,
+                        font: "inherit",
+                        color: "inherit",
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <span className="st-th-label">Nº de Vacas</span>
+                      {sortConfig.key === "numVacas" && sortConfig.direction && (
+                        <span style={{ fontSize: 12, opacity: 0.7 }}>
+                          {sortConfig.direction === "asc" ? "▲" : "▼"}
+                        </span>
+                      )}
+                    </button>
+                  </th>
+                  <th
+                    className="col-funcao"
+                    onMouseEnter={() => setHoveredColKey("funcao")}
+                    style={{ position: "relative" }}
+                  >
+                    <button
+                      type="button"
+                      data-filter-trigger="true"
+                      onClick={() => handleTogglePopover("funcao")}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        padding: 0,
+                        margin: 0,
+                        font: "inherit",
+                        color: "inherit",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <span className="st-th-label">Função</span>
+                    </button>
+                    {openPopoverKey === "funcao" && (
+                      <div
+                        className="st-filter-popover"
+                        onClick={(event) => event.stopPropagation()}
                       >
-                        {l.ativo ? "Inativar" : "Ativar"}
-                      </button>
+                        <label className="st-filter__label">
+                          Função
+                          <select
+                            className="st-filter-input"
+                            value={filtros.funcao}
+                            onChange={(event) =>
+                              setFiltros((prev) => ({
+                                ...prev,
+                                funcao: event.target.value,
+                              }))
+                            }
+                          >
+                            <option value="__ALL__">Todas</option>
+                            {funcaoOptions.map((opt) => (
+                              <option key={opt} value={opt}>
+                                {opt}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                    )}
+                  </th>
+                  <th
+                    className="col-nivel"
+                    onMouseEnter={() => setHoveredColKey("nivel")}
+                    style={{ position: "relative" }}
+                  >
+                    <button
+                      type="button"
+                      data-filter-trigger="true"
+                      onClick={() => {
+                        toggleSort("nivel");
+                        handleTogglePopover("nivel");
+                      }}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        padding: 0,
+                        margin: 0,
+                        font: "inherit",
+                        color: "inherit",
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <span className="st-th-label">Nível Produtivo</span>
+                      {sortConfig.key === "nivel" && sortConfig.direction && (
+                        <span style={{ fontSize: 12, opacity: 0.7 }}>
+                          {sortConfig.direction === "asc" ? "▲" : "▼"}
+                        </span>
+                      )}
+                    </button>
+                    {openPopoverKey === "nivel" && (
+                      <div
+                        className="st-filter-popover"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <label className="st-filter__label">
+                          Nível Produtivo
+                          <select
+                            className="st-filter-input"
+                            value={filtros.nivel}
+                            onChange={(event) =>
+                              setFiltros((prev) => ({
+                                ...prev,
+                                nivel: event.target.value,
+                              }))
+                            }
+                          >
+                            <option value="__ALL__">Todos</option>
+                            {nivelOptions.map((opt) => (
+                              <option key={opt} value={opt}>
+                                {opt}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                    )}
+                  </th>
+                  <th
+                    className="st-td-center col-status"
+                    onMouseEnter={() => setHoveredColKey("status")}
+                    style={{ position: "relative" }}
+                  >
+                    <button
+                      type="button"
+                      data-filter-trigger="true"
+                      onClick={() => handleTogglePopover("status")}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        padding: 0,
+                        margin: 0,
+                        font: "inherit",
+                        color: "inherit",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <span className="st-th-label">Status</span>
+                    </button>
+                    {openPopoverKey === "status" && (
+                      <div
+                        className="st-filter-popover"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <label className="st-filter__label">
+                          Status
+                          <select
+                            className="st-filter-input"
+                            value={filtros.status}
+                            onChange={(event) =>
+                              setFiltros((prev) => ({
+                                ...prev,
+                                status: event.target.value,
+                              }))
+                            }
+                          >
+                            <option value="__ALL__">Todos</option>
+                            <option value="Ativo">Ativo</option>
+                            <option value="Inativo">Inativo</option>
+                          </select>
+                        </label>
+                      </div>
+                    )}
+                  </th>
+                  <th
+                    className="st-td-center col-acoes"
+                    onMouseEnter={() => setHoveredColKey("acoes")}
+                  >
+                    <span className="st-th-label">Ação</span>
+                  </th>
+                </tr>
+              </thead>
 
-                      <button className="btn-excluir" onClick={() => setExcluirId(l.id)}>
-                        Excluir
-                      </button>
+              <tbody>
+                {loading ? (
+                  <tr className="st-empty">
+                    <td colSpan={colunas.length} style={{ textAlign: "center" }}>
+                      Carregando…
+                    </td>
+                  </tr>
+                ) : lotesExibidos.length === 0 ? (
+                  <tr className="st-empty">
+                    <td colSpan={colunas.length} style={{ textAlign: "center" }}>
+                      Nenhum lote cadastrado.
+                    </td>
+                  </tr>
+                ) : (
+                  lotesExibidos.map((l, i) => {
+                    const rowId = l.id || i;
+                    const rowHover = hoveredRowId === rowId;
+                    return (
+                      <tr key={rowId} className={rowHover ? "st-row-hover" : ""}>
+                        <td
+                          className={`${hoveredColKey === "nome" ? "st-col-hover" : ""} ${
+                            rowHover ? "st-row-hover" : ""
+                          } ${rowHover && hoveredColKey === "nome" ? "st-cell-hover" : ""}`}
+                          title={l.nome || ""}
+                          onMouseEnter={() => {
+                            setHoveredRowId(rowId);
+                            setHoveredColKey("nome");
+                          }}
+                        >
+                          {l.nome || "—"}
+                        </td>
+
+                        <td
+                          className={`st-td-center st-num ${
+                            hoveredColKey === "numVacas" ? "st-col-hover" : ""
+                          } ${rowHover ? "st-row-hover" : ""} ${
+                            rowHover && hoveredColKey === "numVacas" ? "st-cell-hover" : ""
+                          }`}
+                          onMouseEnter={() => {
+                            setHoveredRowId(rowId);
+                            setHoveredColKey("numVacas");
+                          }}
+                        >
+                          <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                            <span>{typeof l.numVacas === "number" ? l.numVacas : 0}</span>
+                            <button
+                              className="st-btn"
+                              title="Informações do lote"
+                              onClick={() => setInfo(l)}
+                              style={{ height: 28, padding: "0 10px" }}
+                            >
+                              ℹ️
+                            </button>
+                          </div>
+                        </td>
+
+                        <td
+                          className={`${hoveredColKey === "funcao" ? "st-col-hover" : ""} ${
+                            rowHover ? "st-row-hover" : ""
+                          } ${rowHover && hoveredColKey === "funcao" ? "st-cell-hover" : ""}`}
+                          title={l.funcao || ""}
+                          onMouseEnter={() => {
+                            setHoveredRowId(rowId);
+                            setHoveredColKey("funcao");
+                          }}
+                        >
+                          {l.funcao || "—"}
+                        </td>
+
+                        <td
+                          className={`${hoveredColKey === "nivel" ? "st-col-hover" : ""} ${
+                            rowHover ? "st-row-hover" : ""
+                          } ${rowHover && hoveredColKey === "nivel" ? "st-cell-hover" : ""}`}
+                          title={l.nivelProducao || ""}
+                          onMouseEnter={() => {
+                            setHoveredRowId(rowId);
+                            setHoveredColKey("nivel");
+                          }}
+                        >
+                          {l.funcao === "Lactação" ? l.nivelProducao || "—" : "—"}
+                        </td>
+
+                        <td
+                          className={`st-td-center ${
+                            hoveredColKey === "status" ? "st-col-hover" : ""
+                          } ${rowHover ? "st-row-hover" : ""} ${
+                            rowHover && hoveredColKey === "status" ? "st-cell-hover" : ""
+                          }`}
+                          onMouseEnter={() => {
+                            setHoveredRowId(rowId);
+                            setHoveredColKey("status");
+                          }}
+                        >
+                          <span
+                            className={`st-pill ${l.ativo ? "st-pill--ok" : "st-pill--mute"}`}
+                          >
+                            {l.ativo ? "Ativo" : "Inativo"}
+                          </span>
+                        </td>
+
+                        <td
+                          className={`st-td-center ${
+                            hoveredColKey === "acoes" ? "st-col-hover" : ""
+                          } ${rowHover ? "st-row-hover" : ""} ${
+                            rowHover && hoveredColKey === "acoes" ? "st-cell-hover" : ""
+                          }`}
+                          onMouseEnter={() => {
+                            setHoveredRowId(rowId);
+                            setHoveredColKey("acoes");
+                          }}
+                        >
+                          <div style={{ display: "inline-flex", gap: 8, flexWrap: "wrap" }}>
+                            <button className="st-btn" onClick={() => abrirEdicao(i)}>
+                              Editar
+                            </button>
+
+                            <button
+                              className="st-btn"
+                              onClick={() => alternarAtivoBanco(l.id, l.ativo)}
+                            >
+                              {l.ativo ? "Inativar" : "Ativar"}
+                            </button>
+
+                            <button className="st-btn" onClick={() => setExcluirId(l.id)}>
+                              Excluir
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+              <tfoot>
+                <tr className="st-summary-row">
+                  <td colSpan={6}>
+                    <div className="st-summary-row__content">
+                      <span>Total de lotes exibidos: {resumo.total}</span>
+                      <span>Total de vacas somadas: {resumo.totalVacas}</span>
+                      <span>
+                        Ativos: {resumo.ativos} • Inativos: {resumo.inativos}
+                      </span>
                     </div>
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              </tfoot>
+            </table>
+          </div>
+        </div>
 
         {cad.open && (
           <ModalLoteCadastro
