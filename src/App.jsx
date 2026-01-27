@@ -2,7 +2,6 @@
 import { useEffect, useState } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { supabase } from "./lib/supabaseClient";
-import StatusConexao from "./components/StatusConexao";
 import { syncPending } from "./offline/sync";
 
 // Telas
@@ -58,7 +57,6 @@ export default function App() {
 
   return (
     <>
-      <StatusConexao isSyncing={false} />
       <Routes>
         {/* 🔓 ROTAS PÚBLICAS (sem login) */}
         {!session && (
