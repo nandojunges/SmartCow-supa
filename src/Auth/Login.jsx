@@ -10,6 +10,8 @@ export default function Login() {
   const [lembrar, setLembrar] = useState(false);
   const [erroEmail, setErroEmail] = useState("");
   const [erroSenha, setErroSenha] = useState("");
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [canInstall, setCanInstall] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -24,6 +26,20 @@ export default function Login() {
       setEmail(salvo);
       setLembrar(true);
     }
+  }, []);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (event) => {
+      event.preventDefault();
+      setDeferredPrompt(event);
+      setCanInstall(true);
+    };
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    };
   }, []);
 
   const validar = () => {
@@ -130,6 +146,15 @@ export default function Login() {
     } finally {
       setCarregando(false);
     }
+  };
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    setDeferredPrompt(null);
+    setCanInstall(false);
   };
 
   return (
@@ -273,6 +298,27 @@ export default function Login() {
           >
             {carregando ? "Entrando..." : "Entrar"}
           </button>
+
+          {canInstall && (
+            <button
+              type="button"
+              onClick={handleInstallClick}
+              style={{
+                width: "100%",
+                borderRadius: "30px",
+                border: "1px solid #1e3a8a",
+                background: "#ffffff",
+                color: "#1e3a8a",
+                padding: "12px 24px",
+                fontSize: "1rem",
+                fontWeight: "600",
+                cursor: "pointer",
+                marginTop: "8px",
+              }}
+            >
+              Instalar SmartCow
+            </button>
+          )}
         </form>
 
         <div
