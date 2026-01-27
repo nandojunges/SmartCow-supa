@@ -2,6 +2,8 @@
 import { useEffect, useState } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { supabase } from "./lib/supabaseClient";
+import StatusConexao from "./components/StatusConexao";
+import { syncPending } from "./offline/sync";
 
 // Telas
 import Login from "./Auth/Login";
@@ -44,52 +46,61 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    if (navigator.onLine) {
+      syncPending();
+    }
+  }, []);
+
   if (loading) {
     return null; // ou um spinner de "Carregando..."
   }
 
   return (
-    <Routes>
-      {/* 🔓 ROTAS PÚBLICAS (sem login) */}
-      {!session && (
-        <>
-          <Route path="/login" element={<Login />} />
-          <Route path="/cadastro" element={<Cadastro />} />
-          <Route path="/verificar-email" element={<VerificarEmail />} />
-          <Route path="/esqueci-senha" element={<EsqueciSenha />} />
+    <>
+      <StatusConexao isSyncing={false} />
+      <Routes>
+        {/* 🔓 ROTAS PÚBLICAS (sem login) */}
+        {!session && (
+          <>
+            <Route path="/login" element={<Login />} />
+            <Route path="/cadastro" element={<Cadastro />} />
+            <Route path="/verificar-email" element={<VerificarEmail />} />
+            <Route path="/esqueci-senha" element={<EsqueciSenha />} />
 
-          {/* qualquer outra rota cai no /login */}
-          <Route path="*" element={<Navigate to="/login" replace />} />
-        </>
-      )}
+            {/* qualquer outra rota cai no /login */}
+            <Route path="*" element={<Navigate to="/login" replace />} />
+          </>
+        )}
 
-      {/* 🔐 ROTAS PROTEGIDAS (com login) */}
-      {session && (
-        <>
-          {/* redireciona "/" para /inicio por padrão */}
-          <Route path="/" element={<Navigate to="/inicio" replace />} />
+        {/* 🔐 ROTAS PROTEGIDAS (com login) */}
+        {session && (
+          <>
+            {/* redireciona "/" para /inicio por padrão */}
+            <Route path="/" element={<Navigate to="/inicio" replace />} />
 
-          {/* 🟥 ADMIN FORA DO LAYOUT (sem menu azul) */}
-          <Route path="/admin" element={<Admin />} />
+            {/* 🟥 ADMIN FORA DO LAYOUT (sem menu azul) */}
+            <Route path="/admin" element={<Admin />} />
 
-          {/* 🟦 DEMAIS PÁGINAS DENTRO DO SISTEMABASE (com menu azul) */}
-          <Route element={<SistemaBase />}>
-            <Route path="/inicio" element={<Inicio />} />
-            <Route path="/animais" element={<Animais />} />
-            <Route path="/bezerras" element={<Bezerras />} />
-            <Route path="/reproducao" element={<Reproducao />} />
-            <Route path="/leite" element={<Leite />} />
-            <Route path="/saude" element={<Saude />} />
-            <Route path="/consumo" element={<ConsumoReposicao />} />
-            <Route path="/financeiro" element={<Financeiro />} />
-            <Route path="/calendario" element={<Calendario />} />
-            <Route path="/ajustes" element={<Ajustes />} />
+            {/* 🟦 DEMAIS PÁGINAS DENTRO DO SISTEMABASE (com menu azul) */}
+            <Route element={<SistemaBase />}>
+              <Route path="/inicio" element={<Inicio />} />
+              <Route path="/animais" element={<Animais />} />
+              <Route path="/bezerras" element={<Bezerras />} />
+              <Route path="/reproducao" element={<Reproducao />} />
+              <Route path="/leite" element={<Leite />} />
+              <Route path="/saude" element={<Saude />} />
+              <Route path="/consumo" element={<ConsumoReposicao />} />
+              <Route path="/financeiro" element={<Financeiro />} />
+              <Route path="/calendario" element={<Calendario />} />
+              <Route path="/ajustes" element={<Ajustes />} />
 
-            {/* qualquer rota desconhecida volta para /inicio */}
-            <Route path="*" element={<Navigate to="/inicio" replace />} />
-          </Route>
-        </>
-      )}
-    </Routes>
+              {/* qualquer rota desconhecida volta para /inicio */}
+              <Route path="*" element={<Navigate to="/inicio" replace />} />
+            </Route>
+          </>
+        )}
+      </Routes>
+    </>
   );
 }
