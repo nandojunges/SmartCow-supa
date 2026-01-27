@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
+import { canUseOffline, saveOfflineSession } from "../offline/offlineAuth";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -10,6 +11,7 @@ export default function Login() {
   const [lembrar, setLembrar] = useState(false);
   const [erroEmail, setErroEmail] = useState("");
   const [erroSenha, setErroSenha] = useState("");
+  const [offlineError, setOfflineError] = useState("");
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [canInstall, setCanInstall] = useState(false);
   const navigate = useNavigate();
@@ -69,10 +71,23 @@ export default function Login() {
     if (!validar()) return;
 
     setCarregando(true);
+    setOfflineError("");
 
     try {
       const emailTrim = email.trim().toLowerCase();
       const senhaTrim = senha.trim();
+
+      if (!navigator.onLine) {
+        const allowedOffline = await canUseOffline();
+        if (allowedOffline) {
+          navigate("/inicio", { replace: true });
+          return;
+        }
+        setOfflineError(
+          "Modo offline indisponível. Faça login online pelo menos 1 vez neste dispositivo."
+        );
+        return;
+      }
 
       // 1) Login no Supabase Auth
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -102,6 +117,12 @@ export default function Login() {
         navigate("/inicio", { replace: true });
         return;
       }
+
+      await saveOfflineSession({
+        userId,
+        email: user.email,
+        savedAtISO: new Date().toISOString(),
+      });
 
       // 3) Busca o perfil pela COLUNA id (auth.uid() == profiles.id)
       const { data: perfil, error: perfilError } = await supabase
@@ -298,6 +319,22 @@ export default function Login() {
           >
             {carregando ? "Entrando..." : "Entrar"}
           </button>
+
+          {offlineError && (
+            <div
+              style={{
+                marginTop: "8px",
+                padding: "10px 12px",
+                background: "#fff7ed",
+                border: "1px solid #fdba74",
+                borderRadius: "8px",
+                color: "#9a3412",
+                fontSize: "0.9rem",
+              }}
+            >
+              {offlineError}
+            </div>
+          )}
 
           {canInstall && (
             <button
