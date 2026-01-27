@@ -1,58 +1,77 @@
-const CACHE_NAME = "smartcow-static-v1";
-const STATIC_ASSETS = ["/", "/index.html", "/src/main.jsx", "/src/index.css"];
+/* public/service-worker.js */
+const CACHE_NAME = "smartcow-static-v2"; // <-- troquei para v2 (força atualizar)
+const CORE = [
+  "/",
+  "/index.html",
+  "/manifest.json",
+  "/icons/icon-192.png",
+  "/icons/icon-512.png"
+];
 
 self.addEventListener("install", (event) => {
+  self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
-    })
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(CORE))
   );
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => {
-      return Promise.all(
-        keys
-          .filter((key) => key !== CACHE_NAME)
-          .map((key) => caches.delete(key))
-      );
-    })
+    (async () => {
+      const keys = await caches.keys();
+      await Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)));
+      await self.clients.claim();
+    })()
   );
 });
 
 self.addEventListener("fetch", (event) => {
-  if (event.request.method !== "GET") {
+  if (event.request.method !== "GET") return;
+
+  const url = new URL(event.request.url);
+  if (url.origin !== self.location.origin) return;
+
+  const isHTML = event.request.mode === "navigate" || url.pathname.endsWith(".html");
+  const isAsset =
+    url.pathname.startsWith("/assets/") ||
+    url.pathname.startsWith("/icons/") ||
+    url.pathname.endsWith(".js") ||
+    url.pathname.endsWith(".css") ||
+    url.pathname.endsWith(".png") ||
+    url.pathname.endsWith(".svg") ||
+    url.pathname.endsWith(".ico") ||
+    url.pathname.endsWith(".webp");
+
+  // HTML: network-first (pra não “travar” em cache velho)
+  if (isHTML) {
+    event.respondWith(
+      (async () => {
+        try {
+          const fresh = await fetch(event.request);
+          const cache = await caches.open(CACHE_NAME);
+          cache.put(event.request, fresh.clone());
+          return fresh;
+        } catch (e) {
+          const cached = await caches.match(event.request);
+          return cached || caches.match("/index.html");
+        }
+      })()
+    );
     return;
   }
 
-  const requestUrl = new URL(event.request.url);
-  const isSameOrigin = requestUrl.origin === self.location.origin;
-  const isAssetRequest =
-    isSameOrigin &&
-    (STATIC_ASSETS.includes(requestUrl.pathname) ||
-      requestUrl.pathname.startsWith("/assets/") ||
-      requestUrl.pathname.endsWith(".js") ||
-      requestUrl.pathname.endsWith(".css") ||
-      requestUrl.pathname.endsWith(".png") ||
-      requestUrl.pathname.endsWith(".svg") ||
-      requestUrl.pathname.endsWith(".ico"));
+  // Assets: cache-first
+  if (isAsset) {
+    event.respondWith(
+      (async () => {
+        const cached = await caches.match(event.request);
+        if (cached) return cached;
 
-  if (!isAssetRequest) {
-    return;
+        const fresh = await fetch(event.request);
+        const cache = await caches.open(CACHE_NAME);
+        cache.put(event.request, fresh.clone());
+        return fresh;
+      })()
+    );
   }
-
-  event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-
-      return fetch(event.request).then((response) => {
-        const responseClone = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
-        return response;
-      });
-    })
-  );
 });
