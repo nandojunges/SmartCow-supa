@@ -35,7 +35,11 @@ function openDB() {
       };
 
       request.onsuccess = (event) => {
-        resolve(event.target.result);
+        const db = event.target.result;
+        db.onversionchange = () => {
+          db.close();
+        };
+        resolve(db);
       };
 
       request.onerror = () => {
@@ -174,7 +178,15 @@ export async function listPending(limit = 50) {
   }
 
   return new Promise((resolve) => {
-    const request = context.store.getAll();
+    let request;
+    try {
+      const statusIndex = context.store.index("status");
+      request = statusIndex.getAll("pending");
+    } catch (error) {
+      logError("Failed to read status index", error);
+      request = context.store.getAll();
+    }
+
     request.onsuccess = () => {
       const items = Array.isArray(request.result) ? request.result : [];
       const pending = items
