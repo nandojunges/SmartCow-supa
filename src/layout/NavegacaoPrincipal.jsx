@@ -2,6 +2,7 @@
 import React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
+import StatusConexao from "../components/StatusConexao";
 
 const ABAS_BASE = [
   { id: "inicio",     label: "Início",            title: "Página inicial" },
@@ -58,16 +59,7 @@ export default function NavegacaoPrincipal() {
         {/* Marca / contexto mínimo (sem barra extra) */}
         <div style={{ display: "flex", flexDirection: "column", minWidth: 180 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span
-              style={{
-                width: 10,
-                height: 10,
-                borderRadius: 999,
-                background: ACCENT,
-                boxShadow: "0 0 0 4px rgba(25,182,164,0.14)",
-                flexShrink: 0,
-              }}
-            />
+            <StatusConexao />
             <span
               style={{
                 color: TXT,
