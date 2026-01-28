@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Select from "react-select";
 import { supabase } from "../../lib/supabaseClient";
+import { enqueue, kvGet, kvSet } from "../../offline/localDB";
 import FichaComplementarAnimal from "./FichaComplementarAnimal";
 
 /* ============================
@@ -84,6 +85,7 @@ function previsaoPartoISO(ultimaIABR) {
    Componente principal
 ============================ */
 export default function CadastroAnimal() {
+  const CACHE_KEY = "cache:animais:plantel:v1";
   const [mostrarFichaComplementar, setMostrarFichaComplementar] = useState(false);
   // básicos
   const [numero, setNumero] = useState("1");
@@ -119,6 +121,18 @@ export default function CadastroAnimal() {
   // feedback
   const [mensagemSucesso, setMensagemSucesso] = useState("");
   const [mensagemErro, setMensagemErro] = useState("");
+
+  const atualizarCachePlantel = async (novoAnimal) => {
+    const cache = await kvGet(CACHE_KEY);
+    const animaisCache = Array.isArray(cache?.animais) ? [...cache.animais] : [];
+    animaisCache.push(novoAnimal);
+    animaisCache.sort((a, b) => Number(a.numero) - Number(b.numero));
+    await kvSet(CACHE_KEY, {
+      ...(cache || {}),
+      animais: animaisCache,
+      updatedAt: new Date().toISOString(),
+    });
+  };
   const [abaLateral] = useState("ficha");
 
   // selects
@@ -449,6 +463,23 @@ export default function CadastroAnimal() {
       user_id: user.id,
     };
 
+    const payloadMinimo = {
+      ...payloadAnimal,
+      ativo: true,
+    };
+
+    if (!navigator.onLine) {
+      const offlineId = `offline-${Date.now()}`;
+      await enqueue("animals.upsert", payloadMinimo);
+      await atualizarCachePlantel({ ...payloadMinimo, id: offlineId });
+      setMensagemSucesso(
+        "Animal salvo offline. Será sincronizado quando a conexão voltar."
+      );
+      setTimeout(() => setMensagemSucesso(""), 2500);
+      limpar();
+      return;
+    }
+
     const { data: animalData, error: animalError } = await supabase
       .from("animais")
       .insert(payloadAnimal)
@@ -463,6 +494,7 @@ export default function CadastroAnimal() {
     }
 
     const animalId = animalData.id;
+    await atualizarCachePlantel({ ...payloadMinimo, id: animalId });
     const eventos = [];
 
     const adicionarEventos = (lista, tipo) => {

@@ -46,24 +46,27 @@ export default function StatusConexao({ isSyncing = false }) {
       : Number.isFinite(total - processed)
         ? Math.max(total - processed, 0)
         : 0;
+  const totalLabel = total > 0 ? total : processed + pending;
   const canShowPercent =
-    syncing && total > 0 && processed >= 0 && processed <= total;
-  const percent = canShowPercent ? Math.round((processed / total) * 100) : null;
+    syncing && totalLabel > 0 && processed >= 0 && processed <= totalLabel;
+  const percent = canShowPercent
+    ? Math.round((processed / totalLabel) * 100)
+    : null;
 
   const statusKey = syncing ? "syncing" : isOnline ? "online" : "offline";
   const color = STATUS_COLORS[statusKey];
 
   const label = syncing
-    ? percent !== null
-      ? `Sincronizando ${percent}%`
-      : "Sincronizando"
+    ? totalLabel > 0
+      ? `Sync ${processed}/${totalLabel}${percent !== null ? ` (${percent}%)` : ""}`
+      : "Sync"
     : isOnline
       ? "Online"
       : "Offline";
   const tooltip = syncing
-    ? percent !== null
-      ? `Sincronizando ${percent}%`
-      : `Sincronizando (${pending} pendentes)`
+    ? totalLabel > 0
+      ? `Sync ${processed}/${totalLabel}${percent !== null ? ` (${percent}%)` : ""}`
+      : `Sync (${pending} pendentes)`
     : isOnline
       ? "Online"
       : "Offline";
