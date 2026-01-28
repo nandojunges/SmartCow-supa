@@ -9,7 +9,7 @@ import {
   DownloadCloud,
 } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
-import { kvGet } from "../../offline/localDB";
+import { kvGet, kvSet } from "../../offline/localDB";
 
 // Páginas internas
 import SubAbasAnimais from "./SubAbasAnimais";
@@ -139,6 +139,7 @@ function BarraLateral({ abaAtiva, setAbaAtiva }) {
 // =========================
 export default function Animais() {
   const [abaAtiva, setAbaAtiva] = useState("todos");
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   const [animaisAtivos, setAnimaisAtivos] = useState([]);
   const [animaisInativos, setAnimaisInativos] = useState([]);
@@ -148,12 +149,24 @@ export default function Animais() {
   const [fichaOpen, setFichaOpen] = useState(false);
   const [animalFicha, setAnimalFicha] = useState(null);
 
+  useEffect(() => {
+    const on = () => setIsOnline(true);
+    const off = () => setIsOnline(false);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    setIsOnline(navigator.onLine);
+    return () => {
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", off);
+    };
+  }, []);
+
   // =========================
   //   CARREGAR ANIMAL COMPLETO
   // =========================
   const carregarAnimalCompleto = useCallback(async (id) => {
     if (!id) return null;
-    if (!navigator.onLine) return null;
+    if (!isOnline) return null;
 
     const { data, error } = await supabase
       .from("animais")
@@ -203,7 +216,7 @@ export default function Animais() {
     };
 
     return animalCompleto;
-  }, []);
+  }, [isOnline]);
 
   // =========================
   //   CARREGAR ATIVOS + INATIVOS
@@ -215,7 +228,7 @@ export default function Animais() {
     setCarregando(true);
     setOfflineAviso("");
 
-    if (!navigator.onLine) {
+    if (!isOnline) {
       console.log("[animais] offline -> lendo cache:animais:list");
       const cachePrimario = await kvGet(CACHE_LIST_KEY);
       const cacheSecundario = cachePrimario ? null : await kvGet(CACHE_PLANTEL_KEY);
@@ -266,6 +279,15 @@ export default function Animais() {
       if (erroInativos || !inativosRaw) {
         setAnimaisInativos([]);
         return;
+      }
+
+      if (!erroAtivos && ativos) {
+        const cacheAtivos = ativos.map((animal) => ({ ...animal, ativo: true }));
+        const cacheInativos = inativosRaw.map((animal) => ({
+          ...animal,
+          ativo: false,
+        }));
+        await kvSet(CACHE_LIST_KEY, [...cacheAtivos, ...cacheInativos]);
       }
 
       const idsInativos = inativosRaw.map((a) => a.id).filter(Boolean);
@@ -319,7 +341,7 @@ export default function Animais() {
     } finally {
       setCarregando(false);
     }
-  }, []);
+  }, [isOnline]);
 
   useEffect(() => {
     carregarAnimais();
@@ -350,6 +372,7 @@ export default function Animais() {
           <SubAbasAnimais
             animais={animaisAtivos}
             onRefresh={handleAtualizar}
+            isOnline={isOnline}
             // onVerFicha={handleVerFicha}
           />
         );

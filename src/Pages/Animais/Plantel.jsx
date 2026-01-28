@@ -97,7 +97,7 @@ function formatProducao(valor) {
   return valor.toFixed(1).replace(".", ",");
 }
 
-export default function Plantel() {
+export default function Plantel({ isOnline = navigator.onLine }) {
   const CACHE_KEY = "cache:animais:list";
   const CACHE_FALLBACK_KEY = "cache:animais:plantel:v1";
   const [animais, setAnimais] = useState([]);
@@ -243,7 +243,7 @@ export default function Plantel() {
       setOfflineAviso("");
 
       try {
-        if (!navigator.onLine) {
+        if (!isOnline) {
           const cacheOk = await carregarDoCache();
           if (!cacheOk) {
             setOfflineAviso(
@@ -286,13 +286,13 @@ export default function Plantel() {
     return () => {
       ativo = false;
     };
-  }, [carregarAnimais, carregarDoCache, carregarLotes, carregarRacas]);
+  }, [carregarAnimais, carregarDoCache, carregarLotes, carregarRacas, isOnline]);
 
   useEffect(() => {
     let ativo = true;
 
     async function carregarUltimaProducao() {
-      if (!navigator.onLine) {
+      if (!isOnline) {
         if (ativo) setUltProducao({});
         return;
       }
@@ -311,7 +311,7 @@ export default function Plantel() {
       }
 
       const tabelasLeite = ["medicoes_leite", "leite_registros", "producoes_leite", "leite"];
-      const camposData = ["data", "data_registro", "created_at"];
+      const camposData = ["data", "created_at"];
 
       const {
         data: { user },
@@ -338,58 +338,63 @@ export default function Plantel() {
         return Number.isFinite(valor) ? valor : null;
       };
 
-      for (const tabela of tabelasLeite) {
-        for (const campoData of camposData) {
-          let consulta = supabase
-            .from(tabela)
-            .select("*")
-            .in("animal_id", ids)
-            .order(campoData, { ascending: false })
-            .limit(800);
-
-          if (user?.id) {
-            consulta = consulta.eq("user_id", user.id);
-          }
-
-          let { data, error } = await consulta;
-
-          if (error && /column .*user_id.* does not exist/i.test(error.message || "")) {
-            const retry = await supabase
+      try {
+        for (const tabela of tabelasLeite) {
+          for (const campoData of camposData) {
+            let consulta = supabase
               .from(tabela)
               .select("*")
               .in("animal_id", ids)
               .order(campoData, { ascending: false })
               .limit(800);
-            data = retry.data;
-            error = retry.error;
-          }
 
-          if (error) {
-            if (/column .* does not exist/i.test(error.message || "")) {
-              continue;
+            if (user?.id) {
+              consulta = consulta.eq("user_id", user.id);
             }
-            if (/relation .* does not exist/i.test(error.message || "")) {
-              break;
-            }
-          }
 
-          if (Array.isArray(data)) {
-            const mapa = {};
-            data.forEach((registro) => {
-              const animalId = registro?.animal_id;
-              if (!animalId || Object.prototype.hasOwnProperty.call(mapa, animalId)) return;
-              const valor = extrairValor(registro);
-              if (Number.isFinite(valor)) {
-                mapa[animalId] = valor;
+            let { data, error } = await consulta;
+
+            if (error && /column .*user_id.* does not exist/i.test(error.message || "")) {
+              const retry = await supabase
+                .from(tabela)
+                .select("*")
+                .in("animal_id", ids)
+                .order(campoData, { ascending: false })
+                .limit(800);
+              data = retry.data;
+              error = retry.error;
+            }
+
+            if (error) {
+              if (/column .* does not exist/i.test(error.message || "")) {
+                continue;
               }
-            });
-            if (ativo) setUltProducao(mapa);
-            return;
+              if (/relation .* does not exist/i.test(error.message || "")) {
+                break;
+              }
+            }
+
+            if (Array.isArray(data)) {
+              const mapa = {};
+              data.forEach((registro) => {
+                const animalId = registro?.animal_id;
+                if (!animalId || Object.prototype.hasOwnProperty.call(mapa, animalId)) return;
+                const valor = extrairValor(registro);
+                if (Number.isFinite(valor)) {
+                  mapa[animalId] = valor;
+                }
+              });
+              if (ativo) setUltProducao(mapa);
+              return;
+            }
           }
         }
-      }
 
-      if (ativo) setUltProducao({});
+        if (ativo) setUltProducao({});
+      } catch (error) {
+        console.error("Erro ao carregar ultima produção de leite:", error);
+        if (ativo) setUltProducao({});
+      }
     }
 
     carregarUltimaProducao();
@@ -397,7 +402,7 @@ export default function Plantel() {
     return () => {
       ativo = false;
     };
-  }, [animais]);
+  }, [animais, isOnline]);
 
   const linhas = useMemo(() => (Array.isArray(animais) ? animais : []), [animais]);
   const situacoesProdutivas = useMemo(() => {
