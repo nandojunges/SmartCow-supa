@@ -37,6 +37,49 @@ export async function syncPending() {
           if (error) throw error;
         }
         await markDone(item.id);
+      } else if (item.action === "medicoes_leite.upsert") {
+        const payload = item.payload || {};
+        if (payload.id) {
+          const { error } = await supabase
+            .from("medicoes_leite")
+            .upsert(payload, { onConflict: "id" });
+          if (error) throw error;
+          await markDone(item.id);
+        } else {
+          await markFailed(item.id, "Payload inválido para medicoes_leite.upsert");
+        }
+      } else if (item.action === "leite_cmt_testes.upsert") {
+        const payload = item.payload || {};
+        const teste = payload?.teste || {};
+        const quartos = payload?.quartos || [];
+        if (teste?.id) {
+          const { error: testeError } = await supabase
+            .from("leite_cmt_testes")
+            .upsert(teste, { onConflict: "id" });
+          if (testeError) throw testeError;
+
+          if (Array.isArray(quartos) && quartos.length > 0) {
+            const { error: quartosError } = await supabase
+              .from("leite_cmt_quartos")
+              .upsert(quartos, { onConflict: "teste_id,quarto" });
+            if (quartosError) throw quartosError;
+          }
+
+          await markDone(item.id);
+        } else {
+          await markFailed(item.id, "Payload inválido para leite_cmt_testes.upsert");
+        }
+      } else if (item.action === "leite_ccs_registros.upsert") {
+        const payload = item.payload || {};
+        if (payload.id) {
+          const { error } = await supabase
+            .from("leite_ccs_registros")
+            .upsert(payload, { onConflict: "id" });
+          if (error) throw error;
+          await markDone(item.id);
+        } else {
+          await markFailed(item.id, "Payload inválido para leite_ccs_registros.upsert");
+        }
       } else {
         await markFailed(item.id, `Ação não suportada: ${item.action}`);
       }

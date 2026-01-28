@@ -1,6 +1,7 @@
 // src/pages/Leite/AbaCCS.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
+import { enqueue, kvGet, kvSet } from "../../offline/localDB";
 import Select from "react-select";
 import {
   LineChart,
@@ -39,6 +40,35 @@ const toInt = (s) => {
   return Number.isFinite(n) ? n : 0;
 };
 const toPtBRNumber = (n) => Number(n || 0).toLocaleString("pt-BR");
+
+const CACHE_KEY_MEDICOES = "cache:leite:medicoes:list";
+
+const getCacheList = async () => {
+  const cached = await kvGet(CACHE_KEY_MEDICOES);
+  return Array.isArray(cached) ? cached : [];
+};
+
+const upsertCacheList = (list, item, matchFn) => {
+  const idx = list.findIndex(matchFn);
+  const next = [...list];
+  if (idx >= 0) {
+    next[idx] = { ...next[idx], ...item };
+  } else {
+    next.push(item);
+  }
+  return next;
+};
+
+const gerarUUID = () => {
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+  } catch (err) {
+    console.warn("Falha ao gerar UUID com crypto.randomUUID", err);
+  }
+  return `offline-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+};
 
 /* ===================== react-select styles ===================== */
 const selectBaseStyles = {
@@ -203,6 +233,20 @@ export default function AbaCCS({ vaca }) {
     setErro("");
     setCarregando(true);
 
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      const cacheList = await getCacheList();
+      const cached = cacheList
+        .filter((item) => item?.table === "leite_ccs_registros" && item?.payload?.animal_id === vaca.id)
+        .map((item) => item?.payload)
+        .sort((a, b) => new Date(b.dia).getTime() - new Date(a.dia).getTime());
+
+      if (!mountedRef.current) return;
+
+      setHistorico(cached);
+      setCarregando(false);
+      return;
+    }
+
     const { data, error } = await supabase
       .from("leite_ccs_registros")
       .select(
@@ -231,6 +275,23 @@ export default function AbaCCS({ vaca }) {
     }
 
     setHistorico(data || []);
+    const cacheList = await getCacheList();
+    let cacheAtualizado = cacheList;
+    (data || []).forEach((registro) => {
+      cacheAtualizado = upsertCacheList(
+        cacheAtualizado,
+        {
+          id: registro.id,
+          table: "leite_ccs_registros",
+          payload: registro,
+          updatedAt: new Date().toISOString(),
+        },
+        (item) => item?.table === "leite_ccs_registros" && item?.id === registro.id
+      );
+    });
+    if (cacheAtualizado !== cacheList) {
+      await kvSet(CACHE_KEY_MEDICOES, cacheAtualizado);
+    }
     setCarregando(false);
   };
 
@@ -417,6 +478,40 @@ export default function AbaCCS({ vaca }) {
     };
 
     try {
+      const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+      if (isOffline) {
+        const cacheList = await getCacheList();
+        const existente = cacheList.find(
+          (item) =>
+            item?.table === "leite_ccs_registros" &&
+            item?.payload?.animal_id === vaca.id &&
+            String(item?.payload?.dia || "").slice(0, 10) === dia
+        );
+        const id = existente?.id || registroEditandoId || gerarUUID();
+        const payloadOffline = { ...payload, id };
+        const cacheAtualizado = upsertCacheList(
+          cacheList,
+          {
+            id,
+            table: "leite_ccs_registros",
+            payload: payloadOffline,
+            updatedAt: new Date().toISOString(),
+          },
+          (item) =>
+            item?.table === "leite_ccs_registros" &&
+            item?.payload?.animal_id === vaca.id &&
+            String(item?.payload?.dia || "").slice(0, 10) === dia
+        );
+        await kvSet(CACHE_KEY_MEDICOES, cacheAtualizado);
+        await enqueue("leite_ccs_registros.upsert", payloadOffline);
+
+        setRegistroEditandoId(id);
+        alert(registroEditandoId ? "✅ CCS atualizado (offline)." : "✅ CCS salvo (offline).");
+        await carregarHistorico();
+        setSalvando(false);
+        return;
+      }
+
       const { data, error } = await supabase
         .from("leite_ccs_registros")
         .upsert(payload, { onConflict: "animal_id,dia" })

@@ -2,12 +2,31 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import Select from "react-select";
 import { supabase } from "../../lib/supabaseClient";
+import { kvGet, kvSet } from "../../offline/localDB";
 import ModalMedicaoLeite from "./ModalMedicaoLeite";
 import FichaLeiteira from "./FichaLeiteira";
 import ResumoLeiteDia from "./ResumoLeiteDia";
 import "../../styles/tabelaModerna.css";
 
 /* ===== helpers de data / DEL ===== */
+const CACHE_KEY_MEDICOES = "cache:leite:medicoes:list";
+
+const getCacheList = async () => {
+  const cached = await kvGet(CACHE_KEY_MEDICOES);
+  return Array.isArray(cached) ? cached : [];
+};
+
+const upsertCacheList = (list, item, matchFn) => {
+  const idx = list.findIndex(matchFn);
+  const next = [...list];
+  if (idx >= 0) {
+    next[idx] = { ...next[idx], ...item };
+  } else {
+    next.push(item);
+  }
+  return next;
+};
+
 function parseBR(str) {
   if (!str || str.length !== 10) return null;
   const [d, m, y] = str.split("/").map(Number);
@@ -805,6 +824,52 @@ export default function Leite() {
       try {
         if (!dataTabela || vacas.length === 0) return;
 
+        const cacheList = await getCacheList();
+        const cachedRows = cacheList.filter(
+          (item) => item?.table === "medicoes_leite" && item?.payload?.data_medicao === dataTabela
+        );
+        if (cachedRows.length > 0) {
+          const mapaPorNumero = {};
+
+          cachedRows.forEach((item) => {
+            const linha = item.payload || {};
+            const vaca = vacas.find((v) => v.id === linha.animal_id);
+            if (!vaca) return;
+
+            const numeroStr = String(vaca.numero ?? "");
+
+            mapaPorNumero[numeroStr] = {
+              manha:
+                linha.litros_manha !== null && linha.litros_manha !== undefined
+                  ? String(linha.litros_manha)
+                  : "",
+              tarde:
+                linha.litros_tarde !== null && linha.litros_tarde !== undefined
+                  ? String(linha.litros_tarde)
+                  : "",
+              terceira:
+                linha.litros_terceira !== null && linha.litros_terceira !== undefined
+                  ? String(linha.litros_terceira)
+                  : "",
+              total:
+                linha.litros_total !== null && linha.litros_total !== undefined
+                  ? String(linha.litros_total)
+                  : "",
+            };
+          });
+
+          if (Object.keys(mapaPorNumero).length > 0) {
+            setMedicoesPorDia((prev) => ({
+              ...prev,
+              [dataTabela]: mapaPorNumero,
+            }));
+          }
+        }
+
+        if (typeof navigator !== "undefined" && !navigator.onLine) {
+          return;
+        }
+
         const {
           data: { user },
           error: userError,
@@ -818,7 +883,9 @@ export default function Leite() {
 
         const { data, error } = await supabase
           .from("medicoes_leite")
-          .select("id, animal_id, data_medicao, tipo_lancamento, litros_manha, litros_tarde, litros_terceira, litros_total")
+          .select(
+            "id, user_id, animal_id, data_medicao, tipo_lancamento, litros_manha, litros_tarde, litros_terceira, litros_total"
+          )
           .eq("user_id", user.id)
           .eq("data_medicao", dataTabela);
 
@@ -828,6 +895,7 @@ export default function Leite() {
         }
 
         const mapaPorNumero = {};
+        let cacheAtualizado = cacheList;
 
         data.forEach((linha) => {
           const vaca = vacas.find((v) => v.id === linha.animal_id);
@@ -842,12 +910,27 @@ export default function Leite() {
               linha.litros_terceira !== null && linha.litros_terceira !== undefined ? String(linha.litros_terceira) : "",
             total: linha.litros_total !== null && linha.litros_total !== undefined ? String(linha.litros_total) : "",
           };
+
+          cacheAtualizado = upsertCacheList(
+            cacheAtualizado,
+            {
+              id: linha.id,
+              table: "medicoes_leite",
+              payload: linha,
+              updatedAt: new Date().toISOString(),
+            },
+            (item) => item?.table === "medicoes_leite" && item?.id === linha.id
+          );
         });
 
         setMedicoesPorDia((prev) => ({
           ...prev,
           [dataTabela]: mapaPorNumero,
         }));
+
+        if (cacheAtualizado !== cacheList) {
+          await kvSet(CACHE_KEY_MEDICOES, cacheAtualizado);
+        }
       } catch (e) {
         console.error("Erro inesperado ao carregar medições de leite:", e);
       }

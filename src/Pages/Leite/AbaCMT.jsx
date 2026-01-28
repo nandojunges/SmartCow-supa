@@ -1,6 +1,7 @@
 // src/pages/Leite/AbaCMT.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
+import { enqueue, kvGet, kvSet } from "../../offline/localDB";
 import Select from "react-select";
 import "../../styles/tabelaModerna.css";
 import {
@@ -61,6 +62,35 @@ function formatBRDateTime(isoOrTs) {
   const mi = pad2(dt.getMinutes());
   return `${dd}/${mm}/${yyyy} ${hh}:${mi}`;
 }
+
+const CACHE_KEY_MEDICOES = "cache:leite:medicoes:list";
+
+const getCacheList = async () => {
+  const cached = await kvGet(CACHE_KEY_MEDICOES);
+  return Array.isArray(cached) ? cached : [];
+};
+
+const upsertCacheList = (list, item, matchFn) => {
+  const idx = list.findIndex(matchFn);
+  const next = [...list];
+  if (idx >= 0) {
+    next[idx] = { ...next[idx], ...item };
+  } else {
+    next.push(item);
+  }
+  return next;
+};
+
+const gerarUUID = () => {
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+  } catch (err) {
+    console.warn("Falha ao gerar UUID com crypto.randomUUID", err);
+  }
+  return `offline-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+};
 
 /* obtém “dia” do teste priorizando coluna dia */
 function getDiaDoTeste(t) {
@@ -396,6 +426,38 @@ export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }
     setErro("");
     setCarregando(true);
 
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      const cacheList = await getCacheList();
+      const cached = cacheList
+        .filter((item) => item?.table === "leite_cmt_testes" && item?.payload?.teste?.animal_id === vaca.id)
+        .map((item) => {
+          const teste = item?.payload?.teste || {};
+          const quartos = item?.payload?.quartos || [];
+          const map = { TE: {}, TD: {}, PE: {}, PD: {} };
+          quartos.forEach((q) => {
+            map[q.quarto] = { resultado: q.resultado || "", observacao: q.observacao || "" };
+          });
+          return {
+            ...teste,
+            cmt: {
+              TE: map.TE || { resultado: "", observacao: "" },
+              TD: map.TD || { resultado: "", observacao: "" },
+              PE: map.PE || { resultado: "", observacao: "" },
+              PD: map.PD || { resultado: "", observacao: "" },
+            },
+          };
+        })
+        .sort((a, b) => new Date(b.momento).getTime() - new Date(a.momento).getTime());
+
+      if (!mountedRef.current) return;
+
+      setHistorico(cached);
+      const doDia = cached.filter((t) => getDiaDoTeste(t) === diaSelecionado);
+      setTestesDoDia(doDia);
+      setCarregando(false);
+      return;
+    }
+
     const { data, error } = await supabase
       .from("leite_cmt_testes")
       .select(
@@ -445,6 +507,42 @@ export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }
     });
 
     setHistorico(normalizado);
+
+    const cacheList = await getCacheList();
+    let cacheAtualizado = cacheList;
+    normalizado.forEach((registro) => {
+      const payload = {
+        teste: {
+          id: registro.id,
+          animal_id: registro.animal_id,
+          dia: registro.dia,
+          momento: registro.momento,
+          ordenha: registro.ordenha,
+          operador: registro.operador,
+          obs_geral: registro.obs_geral,
+          created_at: registro.created_at,
+        },
+        quartos: ["TE", "TD", "PE", "PD"].map((q) => ({
+          teste_id: registro.id,
+          quarto: q,
+          resultado: registro.cmt?.[q]?.resultado || "",
+          observacao: registro.cmt?.[q]?.observacao || "",
+        })),
+      };
+      cacheAtualizado = upsertCacheList(
+        cacheAtualizado,
+        {
+          id: registro.id,
+          table: "leite_cmt_testes",
+          payload,
+          updatedAt: new Date().toISOString(),
+        },
+        (item) => item?.table === "leite_cmt_testes" && item?.id === registro.id
+      );
+    });
+    if (cacheAtualizado !== cacheList) {
+      await kvSet(CACHE_KEY_MEDICOES, cacheAtualizado);
+    }
 
     const doDia = normalizado.filter((t) => getDiaDoTeste(t) === diaSelecionado);
     setTestesDoDia(doDia);
@@ -600,13 +698,74 @@ export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }
 
     try {
       let testeId = testeEditandoId;
+      const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
 
       if (!testeId) {
-        const existenteId = await buscarTesteExistentePorChave(vaca.id, diaSelecionado, ordenha);
-        if (existenteId) {
-          testeId = existenteId;
-          setTesteEditandoId(existenteId);
+        if (!isOffline) {
+          const existenteId = await buscarTesteExistentePorChave(vaca.id, diaSelecionado, ordenha);
+          if (existenteId) {
+            testeId = existenteId;
+            setTesteEditandoId(existenteId);
+          }
+        } else {
+          const cacheList = await getCacheList();
+          const existente = cacheList.find(
+            (item) =>
+              item?.table === "leite_cmt_testes" &&
+              item?.payload?.teste?.animal_id === vaca.id &&
+              item?.payload?.teste?.dia === diaSelecionado &&
+              Number(item?.payload?.teste?.ordenha) === Number(ordenha)
+          );
+          if (existente?.id) {
+            testeId = existente.id;
+            setTesteEditandoId(existente.id);
+          }
         }
+      }
+
+      if (isOffline) {
+        if (!testeId) {
+          testeId = gerarUUID();
+          setTesteEditandoId(testeId);
+        }
+
+        const payloadQuartos = ["TE", "TD", "PE", "PD"].map((q) => ({
+          teste_id: testeId,
+          quarto: q,
+          resultado: (cmt?.[q]?.resultado || "").trim() || null,
+          observacao: (cmt?.[q]?.observacao || "").trim() || null,
+        }));
+
+        const cacheList = await getCacheList();
+        const payload = {
+          teste: { ...payloadTeste, id: testeId },
+          quartos: payloadQuartos,
+        };
+        const cacheAtualizado = upsertCacheList(
+          cacheList,
+          {
+            id: testeId,
+            table: "leite_cmt_testes",
+            payload,
+            updatedAt: new Date().toISOString(),
+          },
+          (item) =>
+            item?.table === "leite_cmt_testes" &&
+            item?.payload?.teste?.animal_id === vaca.id &&
+            item?.payload?.teste?.dia === diaSelecionado &&
+            Number(item?.payload?.teste?.ordenha) === Number(ordenha)
+        );
+        await kvSet(CACHE_KEY_MEDICOES, cacheAtualizado);
+        await enqueue("leite_cmt_testes.upsert", payload);
+
+        if (typeof onSalvarRegistro === "function") {
+          onSalvarRegistro({ teste_id: testeId, ...payloadTeste, quartos: payloadQuartos });
+        }
+
+        alert("✅ CMT salvo/atualizado com sucesso (offline).");
+        await carregarHistoricoCompleto();
+        setSalvando(false);
+        return;
       }
 
       if (testeId) {

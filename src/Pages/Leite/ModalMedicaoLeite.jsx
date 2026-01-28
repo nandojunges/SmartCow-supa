@@ -2,10 +2,39 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import Select from "react-select";
 import { supabase } from "../../lib/supabaseClient";
+import { enqueue, kvGet, kvSet } from "../../offline/localDB";
 import "../../styles/tabelaModerna.css";
 
 /* ===== helpers ===== */
 const toNum = (v) => parseFloat(String(v ?? "0").replace(",", ".")) || 0;
+const CACHE_KEY_MEDICOES = "cache:leite:medicoes:list";
+
+const getCacheList = async () => {
+  const cached = await kvGet(CACHE_KEY_MEDICOES);
+  return Array.isArray(cached) ? cached : [];
+};
+
+const upsertCacheList = (list, item, matchFn) => {
+  const idx = list.findIndex(matchFn);
+  const next = [...list];
+  if (idx >= 0) {
+    next[idx] = { ...next[idx], ...item };
+  } else {
+    next.push(item);
+  }
+  return next;
+};
+
+const gerarUUID = () => {
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+  } catch (err) {
+    console.warn("Falha ao gerar UUID com crypto.randomUUID", err);
+  }
+  return `offline-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+};
 
 function parseBR(str) {
   if (!str || str.length !== 10) return null;
@@ -761,9 +790,46 @@ export default function ModalMedicaoLeite({
         return;
       }
 
+      const cacheList = await getCacheList();
+      const cachedRows = cacheList.filter(
+        (item) =>
+          item?.table === "medicoes_leite" &&
+          item?.payload?.data_medicao === dataISO &&
+          ids.includes(item?.payload?.animal_id)
+      );
+
+      if (cachedRows.length > 0) {
+        const mapa = { ...baseVazio };
+        cachedRows.forEach((item) => {
+          const r = item?.payload || {};
+          const vaca = (vacas || []).find((v) => v.id === r.animal_id);
+          if (!vaca) return;
+
+          const numeroStr = String(vaca.numero ?? "");
+          mapa[numeroStr] = {
+            ...mapa[numeroStr],
+            manha: r.litros_manha ?? "",
+            tarde: r.litros_tarde ?? "",
+            terceira: r.litros_terceira ?? "",
+            total: r.litros_total ?? "",
+          };
+        });
+
+        const tipoBanco = cachedRows[0]?.payload?.tipo_lancamento;
+        if (tipoBanco === "total" || tipoBanco === "2" || tipoBanco === "3") setTipoLancamento(tipoBanco);
+        setMedicoes(mapa);
+      }
+
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        if (cachedRows.length === 0) {
+          setMedicoes(baseVazio);
+        }
+        return;
+      }
+
       const { data: rows, error } = await supabase
         .from("medicoes_leite")
-        .select("animal_id, litros_manha, litros_tarde, litros_terceira, litros_total, tipo_lancamento")
+        .select("id, user_id, animal_id, litros_manha, litros_tarde, litros_terceira, litros_total, tipo_lancamento")
         .eq("user_id", userId)
         .eq("data_medicao", dataISO)
         .in("animal_id", ids);
@@ -781,6 +847,7 @@ export default function ModalMedicaoLeite({
       }
 
       const mapa = { ...baseVazio };
+      let cacheAtualizado = cacheList;
 
       rows?.forEach((r) => {
         const vaca = (vacas || []).find((v) => v.id === r.animal_id);
@@ -795,9 +862,27 @@ export default function ModalMedicaoLeite({
           terceira: r.litros_terceira ?? "",
           total: r.litros_total ?? "",
         };
+
+        cacheAtualizado = upsertCacheList(
+          cacheAtualizado,
+          {
+            id: r.id,
+            table: "medicoes_leite",
+            payload: {
+              ...r,
+              data_medicao: dataISO,
+            },
+            updatedAt: new Date().toISOString(),
+          },
+          (item) => item?.table === "medicoes_leite" && item?.id === r.id
+        );
       });
 
       setMedicoes(mapa);
+
+      if (cacheAtualizado !== cacheList) {
+        await kvSet(CACHE_KEY_MEDICOES, cacheAtualizado);
+      }
     },
     [aberto, userId, vacas, criarMapaVazio]
   );
@@ -915,6 +1000,9 @@ export default function ModalMedicaoLeite({
 
       const payload = [];
       const updatesAnimais = []; // { animal_id, lote_id }
+      const cacheList = await getCacheList();
+      const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+      let cacheAtualizado = cacheList;
 
       Object.entries(medicoes).forEach(([numeroStr, dados]) => {
         const temAlgumValor = dados.total || dados.manha || dados.tarde || dados.terceira;
@@ -931,7 +1019,19 @@ export default function ModalMedicaoLeite({
 
         // sempre que tiver valor (medição), salva registro
         if (temAlgumValor) {
-          payload.push(montarPayloadLinha({ userId: user.id, vaca, dados }));
+          const basePayload = montarPayloadLinha({ userId: user.id, vaca, dados });
+          if (isOffline) {
+            const existente = cacheList.find(
+              (item) =>
+                item?.table === "medicoes_leite" &&
+                item?.payload?.animal_id === vaca.id &&
+                item?.payload?.data_medicao === dataMedicao
+            );
+            const id = existente?.id || gerarUUID();
+            payload.push({ ...basePayload, id });
+          } else {
+            payload.push(basePayload);
+          }
         }
 
         // se mudou o lote_id, atualiza animal.lote_id (para contar nos Lotes)
@@ -939,6 +1039,44 @@ export default function ModalMedicaoLeite({
           updatesAnimais.push({ animal_id: vaca.id, lote_id: dados.lote_id || null });
         }
       });
+
+      if (isOffline) {
+        if (payload.length > 0) {
+          for (const row of payload) {
+            cacheAtualizado = upsertCacheList(
+              cacheAtualizado,
+              {
+                id: row.id,
+                table: "medicoes_leite",
+                payload: row,
+                updatedAt: new Date().toISOString(),
+              },
+              (item) =>
+                item?.table === "medicoes_leite" &&
+                item?.payload?.animal_id === row.animal_id &&
+                item?.payload?.data_medicao === row.data_medicao
+            );
+            await enqueue("medicoes_leite.upsert", row);
+          }
+          await kvSet(CACHE_KEY_MEDICOES, cacheAtualizado);
+        }
+
+        if (updatesAnimais.length > 0) {
+          const results = await Promise.all(
+            updatesAnimais.map((u) => supabase.from("animais").update({ lote_id: u.lote_id }).eq("id", u.animal_id))
+          );
+          const algumErro = results.find((r) => r.error);
+          if (algumErro?.error) {
+            console.error("Erro ao atualizar lote_id em animais:", algumErro.error);
+            alert("As medições salvaram, mas houve erro ao atualizar o lote das vacas (veja o console).");
+          }
+        }
+
+        onSalvar?.({ data: dataMedicao, tipoLancamento, medicoes });
+        setSalvando(false);
+        onFechar?.();
+        return;
+      }
 
       // 1) salva medições (se houver)
       if (payload.length > 0) {
