@@ -99,6 +99,7 @@ function formatProducao(valor) {
 
 export default function Plantel() {
   const CACHE_KEY = "cache:animais:list";
+  const CACHE_FALLBACK_KEY = "cache:animais:plantel:v1";
   const [animais, setAnimais] = useState([]);
   const [racaMap, setRacaMap] = useState({});
   const [carregando, setCarregando] = useState(true);
@@ -217,7 +218,9 @@ export default function Plantel() {
   }, []);
 
   const carregarDoCache = useCallback(async () => {
-    const cache = await kvGet(CACHE_KEY);
+    const cachePrimario = await kvGet(CACHE_KEY);
+    const cacheFallback = cachePrimario ? null : await kvGet(CACHE_FALLBACK_KEY);
+    const cache = cachePrimario ?? cacheFallback;
     if (!cache) return false;
     if (Array.isArray(cache)) {
       setAnimais(cache.filter((animal) => animal?.ativo !== false));
@@ -228,7 +231,7 @@ export default function Plantel() {
       return true;
     }
     return false;
-  }, [CACHE_KEY]);
+  }, [CACHE_FALLBACK_KEY, CACHE_KEY]);
 
   useEffect(() => {
     let ativo = true;

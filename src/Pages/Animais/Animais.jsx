@@ -9,6 +9,7 @@ import {
   DownloadCloud,
 } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
+import { kvGet } from "../../offline/localDB";
 
 // Páginas internas
 import SubAbasAnimais from "./SubAbasAnimais";
@@ -142,6 +143,7 @@ export default function Animais() {
   const [animaisAtivos, setAnimaisAtivos] = useState([]);
   const [animaisInativos, setAnimaisInativos] = useState([]);
   const [carregando, setCarregando] = useState(false);
+  const [offlineAviso, setOfflineAviso] = useState("");
 
   const [fichaOpen, setFichaOpen] = useState(false);
   const [animalFicha, setAnimalFicha] = useState(null);
@@ -151,6 +153,7 @@ export default function Animais() {
   // =========================
   const carregarAnimalCompleto = useCallback(async (id) => {
     if (!id) return null;
+    if (!navigator.onLine) return null;
 
     const { data, error } = await supabase
       .from("animais")
@@ -206,7 +209,45 @@ export default function Animais() {
   //   CARREGAR ATIVOS + INATIVOS
   // =========================
   const carregarAnimais = useCallback(async () => {
+    const CACHE_LIST_KEY = "cache:animais:list";
+    const CACHE_PLANTEL_KEY = "cache:animais:plantel:v1";
+
     setCarregando(true);
+    setOfflineAviso("");
+
+    if (!navigator.onLine) {
+      console.log("[animais] offline -> lendo cache:animais:list");
+      const cachePrimario = await kvGet(CACHE_LIST_KEY);
+      const cacheSecundario = cachePrimario ? null : await kvGet(CACHE_PLANTEL_KEY);
+      const cache = cachePrimario ?? cacheSecundario;
+      const lista = Array.isArray(cache) ? cache : Array.isArray(cache?.animais) ? cache.animais : [];
+      console.log(`[animais] cache length: ${lista.length}`);
+
+      if (lista.length === 0) {
+        setAnimaisAtivos([]);
+        setAnimaisInativos([]);
+        setOfflineAviso(
+          "Sem dados offline ainda. Conecte na internet uma vez para baixar os animais."
+        );
+        setCarregando(false);
+        return;
+      }
+
+      const ativos = lista.filter((animal) => animal?.ativo !== false);
+      const inativos = lista
+        .filter((animal) => animal?.ativo === false)
+        .map((animal) => ({
+          ...animal,
+          status: animal?.status ?? "inativo",
+        }));
+
+      setAnimaisAtivos(ativos);
+      setAnimaisInativos(inativos);
+      setCarregando(false);
+      return;
+    }
+
+    console.log("[animais] online -> buscando supabase");
     try {
       const { data: ativos, error: erroAtivos } = await supabase
         .from("animais")
@@ -377,6 +418,8 @@ export default function Animais() {
           <div style={{ flex: 1, overflowY: "auto" }}>
             {carregando ? (
               <div className="p-4 text-sm text-gray-500">Carregando animais...</div>
+            ) : offlineAviso ? (
+              <div className="p-4 text-sm text-gray-500">{offlineAviso}</div>
             ) : (
               renderizarPrincipal()
             )}
