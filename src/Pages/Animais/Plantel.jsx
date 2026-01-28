@@ -313,10 +313,6 @@ export default function Plantel({ isOnline = navigator.onLine }) {
       const tabelasLeite = ["medicoes_leite", "leite_registros", "producoes_leite", "leite"];
       const camposData = ["data", "created_at"];
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
       const extrairValor = (registro) => {
         const totalRaw =
           registro?.total ??
@@ -338,8 +334,43 @@ export default function Plantel({ isOnline = navigator.onLine }) {
         return Number.isFinite(valor) ? valor : null;
       };
 
+      const buscarMedicoesLeite = async () => {
+        const { data, error } = await supabase
+          .from("medicoes_leite")
+          .select("*")
+          .in("animal_id", ids)
+          .order("data", { ascending: false })
+          .limit(800);
+
+        if (error) {
+          console.error("Erro ao carregar medicoes_leite:", error);
+          return [];
+        }
+
+        return Array.isArray(data) ? data : [];
+      };
+
       try {
         for (const tabela of tabelasLeite) {
+          if (tabela === "medicoes_leite") {
+            const data = await buscarMedicoesLeite();
+            if (!data.length) {
+              continue;
+            }
+
+            const mapa = {};
+            data.forEach((registro) => {
+              const animalId = registro?.animal_id;
+              if (!animalId || Object.prototype.hasOwnProperty.call(mapa, animalId)) return;
+              const valor = extrairValor(registro);
+              if (Number.isFinite(valor)) {
+                mapa[animalId] = valor;
+              }
+            });
+            if (ativo) setUltProducao(mapa);
+            return;
+          }
+
           for (const campoData of camposData) {
             let consulta = supabase
               .from(tabela)
@@ -347,10 +378,6 @@ export default function Plantel({ isOnline = navigator.onLine }) {
               .in("animal_id", ids)
               .order(campoData, { ascending: false })
               .limit(800);
-
-            if (user?.id) {
-              consulta = consulta.eq("user_id", user.id);
-            }
 
             let { data, error } = await consulta;
 
@@ -1027,16 +1054,7 @@ export default function Plantel({ isOnline = navigator.onLine }) {
               setHoveredColKey(null);
             }}
           >
-            <colgroup>
-  {/* Animal */}              <col style={{ width: "19%" }} />
-  {/* Lote */}                <col style={{ width: "14%" }} />
-  {/* Situação produtiva */}  <col style={{ width: "14%" }} />
-  {/* Situação reprodutiva */}<col style={{ width: "14%" }} />
-  {/* Última produção */}     <col style={{ width: "12%" }} />
-  {/* DEL */}                 <col style={{ width: "6%" }} />
-  {/* Origem */}              <col style={{ width: "11%" }} />
-  {/* Ações */}               <col style={{ width: "10%" }} />
-</colgroup>
+            <colgroup><col style={{ width: "19%" }} /><col style={{ width: "14%" }} /><col style={{ width: "14%" }} /><col style={{ width: "14%" }} /><col style={{ width: "12%" }} /><col style={{ width: "6%" }} /><col style={{ width: "11%" }} /><col style={{ width: "10%" }} /></colgroup>
             <thead>
               <tr>
                 <th
