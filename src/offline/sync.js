@@ -25,7 +25,7 @@ export async function syncPending() {
 
   for (const item of pending) {
     try {
-      if (item.action === "animals.upsert") {
+      if (item.action === "animais.upsert" || item.action === "animals.upsert") {
         const payload = item.payload || {};
         if (payload.id) {
           const { error } = await supabase
@@ -37,9 +37,39 @@ export async function syncPending() {
           if (error) throw error;
         }
         await markDone(item.id);
-      } else {
-        await markFailed(item.id, `Ação não suportada: ${item.action}`);
+        continue;
       }
+
+      if (item.action === "saidas_animais.insert") {
+        const payload = item.payload || {};
+        const { error } = await supabase.from("saidas_animais").insert(payload);
+        if (error) throw error;
+        await markDone(item.id);
+        continue;
+      }
+
+      if (item.action === "animais.setAtivoFalse") {
+        const { animal_id: animalId } = item.payload || {};
+        const { error } = await supabase
+          .from("animais")
+          .update({ ativo: false })
+          .eq("id", animalId);
+        if (error) throw error;
+        await markDone(item.id);
+        continue;
+      }
+
+      if (item.action === "eventos_reprodutivos.insert") {
+        const payload = item.payload || {};
+        const { error } = await supabase
+          .from("eventos_reprodutivos")
+          .insert(payload);
+        if (error) throw error;
+        await markDone(item.id);
+        continue;
+      }
+
+      await markFailed(item.id, `Ação não suportada: ${item.action}`);
     } catch (error) {
       console.error("[sync] Falha ao processar item:", item, error);
       await markFailed(item.id, error?.message || "Erro ao sincronizar");

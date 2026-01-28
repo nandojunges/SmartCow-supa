@@ -220,11 +220,11 @@ export default function Plantel() {
     const cache = await kvGet(CACHE_KEY);
     if (!cache) return false;
     if (Array.isArray(cache)) {
-      setAnimais(cache);
+      setAnimais(cache.filter((animal) => animal?.ativo !== false));
       return true;
     }
     if (Array.isArray(cache.animais)) {
-      setAnimais(cache.animais);
+      setAnimais(cache.animais.filter((animal) => animal?.ativo !== false));
       return true;
     }
     return false;

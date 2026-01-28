@@ -81,11 +81,23 @@ function previsaoPartoISO(ultimaIABR) {
   return { iso: previsao.toISOString().split("T")[0], br: `${dd}/${mm}/${yyyy}` };
 }
 
+function gerarUUID() {
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+  } catch (error) {
+    console.warn("Falha ao gerar UUID nativo:", error);
+  }
+  const randomPart = () => Math.random().toString(16).slice(2, 10);
+  return `${Date.now().toString(16)}-${randomPart()}-${randomPart()}`;
+}
+
 /* ============================
    Componente principal
 ============================ */
 export default function CadastroAnimal() {
-  const CACHE_KEY = "cache:animais:plantel:v1";
+  const CACHE_KEY = "cache:animais:list";
   const [mostrarFichaComplementar, setMostrarFichaComplementar] = useState(false);
   // básicos
   const [numero, setNumero] = useState("1");
@@ -124,14 +136,19 @@ export default function CadastroAnimal() {
 
   const atualizarCachePlantel = async (novoAnimal) => {
     const cache = await kvGet(CACHE_KEY);
-    const animaisCache = Array.isArray(cache?.animais) ? [...cache.animais] : [];
-    animaisCache.push(novoAnimal);
+    const animaisCache = Array.isArray(cache)
+      ? [...cache]
+      : Array.isArray(cache?.animais)
+      ? [...cache.animais]
+      : [];
+    const idx = animaisCache.findIndex((animal) => animal?.id === novoAnimal?.id);
+    if (idx >= 0) {
+      animaisCache[idx] = { ...animaisCache[idx], ...novoAnimal };
+    } else {
+      animaisCache.push(novoAnimal);
+    }
     animaisCache.sort((a, b) => Number(a.numero) - Number(b.numero));
-    await kvSet(CACHE_KEY, {
-      ...(cache || {}),
-      animais: animaisCache,
-      updatedAt: new Date().toISOString(),
-    });
+    await kvSet(CACHE_KEY, animaisCache);
   };
   const [abaLateral] = useState("ficha");
 
@@ -468,10 +485,41 @@ export default function CadastroAnimal() {
       ativo: true,
     };
 
+    const montarEventos = (animalId) => {
+      const eventos = [];
+
+      const adicionarEventos = (lista, tipo) => {
+        (lista || []).forEach((item) => {
+          if (!item || !item.trim()) return;
+          const iso = dataBRParaISO(item);
+          if (!iso) return;
+          eventos.push({
+            animal_id: animalId,
+            tipo_evento: tipo,
+            data_evento: iso,
+            user_id: user.id,
+          });
+        });
+      };
+
+      adicionarEventos(inseminacoesAnteriores, "inseminacao");
+      adicionarEventos(partosAnteriores, "parto");
+      adicionarEventos(secagensAnteriores, "secagem");
+
+      return eventos;
+    };
+
     if (!navigator.onLine) {
-      const offlineId = `offline-${Date.now()}`;
-      await enqueue("animals.upsert", payloadMinimo);
-      await atualizarCachePlantel({ ...payloadMinimo, id: offlineId });
+      const offlineId = gerarUUID();
+      const payloadOffline = { ...payloadMinimo, id: offlineId };
+      const eventos = montarEventos(offlineId);
+
+      await enqueue("animais.upsert", payloadOffline);
+      for (const evento of eventos) {
+        await enqueue("eventos_reprodutivos.insert", evento);
+      }
+      await atualizarCachePlantel(payloadOffline);
+
       setMensagemSucesso(
         "Animal salvo offline. Será sincronizado quando a conexão voltar."
       );
@@ -495,25 +543,7 @@ export default function CadastroAnimal() {
 
     const animalId = animalData.id;
     await atualizarCachePlantel({ ...payloadMinimo, id: animalId });
-    const eventos = [];
-
-    const adicionarEventos = (lista, tipo) => {
-      (lista || []).forEach((item) => {
-        if (!item || !item.trim()) return;
-        const iso = dataBRParaISO(item);
-        if (!iso) return;
-        eventos.push({
-          animal_id: animalId,
-          tipo_evento: tipo,
-          data_evento: iso,
-          user_id: user.id,
-        });
-      });
-    };
-
-    adicionarEventos(inseminacoesAnteriores, "inseminacao");
-    adicionarEventos(partosAnteriores, "parto");
-    adicionarEventos(secagensAnteriores, "secagem");
+    const eventos = montarEventos(animalId);
 
     if (eventos.length > 0) {
       const { error: eventosError } = await supabase
