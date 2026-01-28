@@ -2,8 +2,13 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import Select from "react-select";
 import { supabase } from "../../lib/supabaseClient";
-import { kvGet, kvSet } from "../../offline/localDB";
-import { getOfflineSession } from "../../offline/offlineAuth";
+import {
+  fetchLeiteOnline,
+  fetchUltimaDataOnline,
+  hasLeiteCache,
+  loadLeiteCache,
+  saveLeiteCache,
+} from "../../repo/leiteRepo";
 import ModalMedicaoLeite from "./ModalMedicaoLeite";
 import FichaLeiteira from "./FichaLeiteira";
 import ResumoLeiteDia from "./ResumoLeiteDia";
@@ -23,6 +28,12 @@ function toBR(dt) {
   const mm = String(dt.getMonth() + 1).padStart(2, "0");
   const yyyy = dt.getFullYear();
   return `${dd}/${mm}/${yyyy}`;
+}
+
+function formatISOToBR(iso) {
+  if (!iso) return "";
+  const dt = new Date(iso);
+  return Number.isNaN(dt.getTime()) ? "" : toBR(dt);
 }
 
 function calcularDEL(partoBR) {
@@ -65,37 +76,6 @@ function normalizar(str) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .trim();
-}
-
-const CACHE_MEDICOES_KEY = "cache:leite:medicoes:list";
-
-function normalizeCacheList(cache) {
-  return Array.isArray(cache)
-    ? cache
-    : Array.isArray(cache?.medicoes)
-    ? cache.medicoes
-    : [];
-}
-
-function upsertMedicoesCache(list, itens) {
-  const next = [...list];
-  (itens || []).forEach((item) => {
-    const idx = next.findIndex((c) => {
-      if (item?.id && c?.id) return String(item.id) === String(c.id);
-      return (
-        String(c?.user_id || "") === String(item?.user_id || "") &&
-        String(c?.animal_id || "") === String(item?.animal_id || "") &&
-        String(c?.data_medicao || "") === String(item?.data_medicao || "")
-      );
-    });
-
-    if (idx >= 0) {
-      next[idx] = { ...next[idx], ...item };
-    } else {
-      next.push(item);
-    }
-  });
-  return next;
 }
 
 /** Regra: está em lactação? */
@@ -165,6 +145,9 @@ function TabelaResumoDia({
   salvarLotes,
   salvandoLotes,
   podeEditarLote,
+  isOffline,
+  hasCache,
+  ultimaMedicaoPorAnimal,
   dataEhPassada,
   modoEdicaoPassado,
   toggleModoEdicaoPassado,
@@ -404,8 +387,14 @@ function TabelaResumoDia({
             type="button"
             className="botao-acao"
             onClick={salvarLotes}
-            disabled={salvandoLotes || !podeEditarLote}
-            title={!podeEditarLote ? "Edição de lote está bloqueada nesta data" : "Salvar lotes alterados"}
+            disabled={salvandoLotes || !podeEditarLote || isOffline}
+            title={
+              isOffline
+                ? "Disponível ao reconectar"
+                : !podeEditarLote
+                ? "Edição de lote está bloqueada nesta data"
+                : "Salvar lotes alterados"
+            }
           >
             {salvandoLotes ? "Salvando lotes..." : "💾 Salvar lote do dia"}
           </button>
@@ -504,7 +493,7 @@ function TabelaResumoDia({
             {linhasOrdenadas.length === 0 ? (
               <tr className="st-empty">
                 <td colSpan={colunasExibidas.length} className="st-td-center">
-                  Nenhuma vaca em lactação encontrada.
+                  {isOffline && !hasCache ? "Sem dados offline disponíveis." : "Nenhuma vaca em lactação encontrada."}
                 </td>
               </tr>
             ) : (
@@ -516,7 +505,12 @@ function TabelaResumoDia({
 
                 const del = calcularDEL(getUltimoPartoBR(vaca));
 
-                const ultimaMed = dados.total ? String(dataTabela || "").split("-").reverse().join("/") : "—";
+                const ultimaRegistro = ultimaMedicaoPorAnimal?.[vaca.id];
+                const ultimaMed = ultimaRegistro?.data_medicao
+                  ? formatISOToBR(ultimaRegistro.data_medicao)
+                  : dados.total
+                  ? String(dataTabela || "").split("-").reverse().join("/")
+                  : "—";
                 const rowId = vaca.id ?? vaca.numero ?? rowIndex;
                 const rowHover = hoveredRowId === rowId;
 
@@ -622,6 +616,14 @@ function mergeMedicoesDia(existentes = {}, novas = {}) {
 
 export default function Leite() {
   const [vacas, setVacas] = useState([]);
+  const [ultimaMedicaoPorAnimal, setUltimaMedicaoPorAnimal] = useState({});
+  const [isOffline, setIsOffline] = useState(
+    typeof navigator !== "undefined" ? !navigator.onLine : false
+  );
+  const [hasCache, setHasCache] = useState(false);
+  const [cacheMetadata, setCacheMetadata] = useState({ updatedAt: null, dateRange: null });
+  const [sincronizado, setSincronizado] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const vacasLactacao = useMemo(() => {
     const filtradas = vacas.filter(isLactatingAnimal);
@@ -683,6 +685,45 @@ export default function Leite() {
   const [loteEditPorNumero, setLoteEditPorNumero] = useState({});
   const [salvandoLotes, setSalvandoLotes] = useState(false);
 
+  const statusSyncTexto = useMemo(() => {
+    if (isOffline) {
+      if (hasCache && cacheMetadata?.updatedAt) {
+        const textoData = new Date(cacheMetadata.updatedAt).toLocaleString("pt-BR");
+        return `Offline: usando dados salvos em ${textoData}`;
+      }
+      return "Offline: sem dados salvos no computador";
+    }
+    return sincronizado ? "Online: dados atualizados" : "Online: dados atualizados";
+  }, [isOffline, hasCache, cacheMetadata, sincronizado]);
+
+  const montarMapaMedicoes = useCallback((rows, listaVacas) => {
+    const mapaPorNumero = {};
+    (rows || []).forEach((linha) => {
+      const vaca = (listaVacas || []).find((v) => v.id === linha.animal_id);
+      if (!vaca) return;
+      const numeroStr = String(vaca.numero ?? "");
+      mapaPorNumero[numeroStr] = {
+        manha:
+          linha.litros_manha !== null && linha.litros_manha !== undefined
+            ? String(linha.litros_manha)
+            : "",
+        tarde:
+          linha.litros_tarde !== null && linha.litros_tarde !== undefined
+            ? String(linha.litros_tarde)
+            : "",
+        terceira:
+          linha.litros_terceira !== null && linha.litros_terceira !== undefined
+            ? String(linha.litros_terceira)
+            : "",
+        total:
+          linha.litros_total !== null && linha.litros_total !== undefined
+            ? String(linha.litros_total)
+            : "",
+      };
+    });
+    return mapaPorNumero;
+  }, []);
+
   /* ===== Resumo do dia (baseado na DATA DA TABELA) ===== */
   const resumoDia = useMemo(() => {
     const toNum = (v) => parseFloat(String(v ?? "0").replace(",", ".")) || 0;
@@ -720,234 +761,134 @@ export default function Leite() {
     };
   }, [vacasLactacao, medicoesDoDiaTabela]);
 
-  const carregarVacas = useCallback(async () => {
-    try {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
 
-      if (userError) {
-        console.error("Erro ao obter usuário:", userError);
-        return;
-      }
-      if (!user) return;
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
 
-      const { data, error } = await supabase.from("animais").select("*").eq("user_id", user.id);
-
-      if (error) {
-        console.error("Erro ao buscar animais:", error);
-        setVacas([]);
-        return;
-      }
-
-      setVacas(data || []);
-    } catch (e) {
-      console.error("Erro inesperado ao carregar vacas:", e);
-      setVacas([]);
-    }
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
   }, []);
 
-  /* ===== Carregar vacas do plantel (Supabase) ===== */
   useEffect(() => {
-    carregarVacas();
-  }, [carregarVacas]);
+    let ativo = true;
 
-  /* ===== Carregar lotes Lactação (para selects) ===== */
+    (async () => {
+      if (jaSetouUltimaTabelaRef.current) return;
+
+      if (isOffline) {
+        const cache = await loadLeiteCache({ dateISO: ymdHoje() });
+        if (!ativo) return;
+        setHasCache(cache.hasCache);
+        setCacheMetadata(cache.metadata);
+        const fallbackDate = cache.metadata?.dateRange?.max || ymdHoje();
+        setDataTabela(fallbackDate);
+        setDataAtual(fallbackDate);
+        jaSetouUltimaTabelaRef.current = true;
+        return;
+      }
+
+      const { data, error } = await fetchUltimaDataOnline();
+      if (!ativo) return;
+      if (error) {
+        console.error("Erro ao buscar última data de medição:", error);
+      }
+      const resolvedDate = data || ymdHoje();
+      setDataTabela(resolvedDate);
+      setDataAtual(resolvedDate);
+      jaSetouUltimaTabelaRef.current = true;
+    })();
+
+    return () => {
+      ativo = false;
+    };
+  }, [isOffline]);
+
   useEffect(() => {
-    async function carregarLotes() {
+    let ativo = true;
+
+    (async () => {
+      if (!dataTabela) return;
+
+      if (isOffline) {
+        setLoadingLotes(false);
+        const cache = await loadLeiteCache({ dateISO: dataTabela });
+        if (!ativo) return;
+        setHasCache(cache.hasCache);
+        setCacheMetadata(cache.metadata);
+        if (!cache.hasCache) {
+          setVacas([]);
+          setLotesLeite([]);
+          setUltimaMedicaoPorAnimal({});
+          setMedicoesPorDia((prev) => ({ ...prev, [dataTabela]: {} }));
+          return;
+        }
+
+        setVacas(cache.vacas || []);
+        setLotesLeite(cache.lotes || []);
+        setUltimaMedicaoPorAnimal(cache.ultimaMedicaoPorAnimal || {});
+        const mapaPorNumero = montarMapaMedicoes(cache.medicoesDia || [], cache.vacas || []);
+        setMedicoesPorDia((prev) => ({
+          ...prev,
+          [dataTabela]: mapaPorNumero,
+        }));
+        return;
+      }
+
       try {
         setLoadingLotes(true);
+        const { data, error } = await fetchLeiteOnline({ dateISO: dataTabela });
+        if (!ativo) return;
 
-        const { data: authData, error: authError } = await supabase.auth.getUser();
-        if (authError || !authData?.user) {
+        if (error) {
+          console.error("Erro ao carregar dados de leite:", error);
           setLoadingLotes(false);
           return;
         }
 
-        const { data, error } = await supabase
-          .from("lotes")
-          .select("id,nome,funcao,nivel_produtivo,ativo")
-          .eq("funcao", "Lactação")
-          .eq("ativo", true)
-          .not("nivel_produtivo", "is", null)
-          .order("nome", { ascending: true });
+        setVacas(data?.vacas || []);
+        setLotesLeite(data?.lotes || []);
+        setUltimaMedicaoPorAnimal(data?.ultimaMedicaoPorAnimal || {});
 
-        if (error) {
-          console.error("Erro ao carregar lotes (Lactação):", error);
-          setLotesLeite([]);
-          setLoadingLotes(false);
-          return;
-        }
-
-        setLotesLeite(Array.isArray(data) ? data : []);
-        setLoadingLotes(false);
-      } catch (e) {
-        console.error("Erro inesperado ao carregar lotes:", e);
-        setLotesLeite([]);
-        setLoadingLotes(false);
-      }
-    }
-
-    carregarLotes();
-  }, []);
-
-  /* ===== ✅ Buscar ÚLTIMA DATA COM MEDIÇÃO (para a TABELA) ===== */
-  useEffect(() => {
-    async function carregarUltimaDataTabela() {
-      try {
-        if (jaSetouUltimaTabelaRef.current) return;
-
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser();
-        const offlineSession = user ? null : await getOfflineSession();
-        const resolvedUserId = user?.id || offlineSession?.userId || null;
-
-        if (userError) {
-          console.error("Erro ao obter usuário para última medição:", userError);
-        }
-        if (!resolvedUserId) return;
-
-        if (typeof navigator !== "undefined" && !navigator.onLine) {
-          const cache = normalizeCacheList(await kvGet(CACHE_MEDICOES_KEY));
-          const filtradas = cache.filter(
-            (item) => String(item?.user_id || "") === String(resolvedUserId)
-          );
-          const datas = filtradas
-            .map((item) => String(item?.data_medicao || "").slice(0, 10))
-            .filter(Boolean)
-            .sort((a, b) => (a < b ? 1 : -1));
-          setDataTabela(datas[0] || ymdHoje());
-          jaSetouUltimaTabelaRef.current = true;
-          return;
-        }
-
-        const { data, error } = await supabase
-          .from("medicoes_leite")
-          .select("data_medicao")
-          .eq("user_id", resolvedUserId)
-          .order("data_medicao", { ascending: false })
-          .limit(1);
-
-        if (error) {
-          console.error("Erro ao buscar última data de medição:", error);
-          return;
-        }
-
-        const ultimaData = data?.[0]?.data_medicao; // yyyy-mm-dd
-        setDataTabela(ultimaData || ymdHoje());
-        jaSetouUltimaTabelaRef.current = true;
-      } catch (e) {
-        console.error("Erro inesperado ao carregar última data da tabela:", e);
-      }
-    }
-
-    carregarUltimaDataTabela();
-  }, []);
-
-  /* ===== Carregar medições do DIA DA TABELA (Supabase) ===== */
-  useEffect(() => {
-    async function carregarMedicoesDiaTabela() {
-      try {
-        if (!dataTabela || vacas.length === 0) return;
-
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser();
-        const offlineSession = user ? null : await getOfflineSession();
-        const resolvedUserId = user?.id || offlineSession?.userId || null;
-
-        if (userError) {
-          console.error("Erro ao obter usuário para medições:", userError);
-        }
-        if (!resolvedUserId) return;
-
-        if (typeof navigator !== "undefined" && !navigator.onLine) {
-          const cache = normalizeCacheList(await kvGet(CACHE_MEDICOES_KEY));
-          const filtradas = cache.filter(
-            (item) =>
-              String(item?.user_id || "") === String(resolvedUserId) &&
-              String(item?.data_medicao || "") === String(dataTabela)
-          );
-          const mapaPorNumero = {};
-          filtradas.forEach((linha) => {
-            const vaca = vacas.find((v) => v.id === linha.animal_id);
-            if (!vaca) return;
-            const numeroStr = String(vaca.numero ?? "");
-            mapaPorNumero[numeroStr] = {
-              manha:
-                linha.litros_manha !== null && linha.litros_manha !== undefined
-                  ? String(linha.litros_manha)
-                  : "",
-              tarde:
-                linha.litros_tarde !== null && linha.litros_tarde !== undefined
-                  ? String(linha.litros_tarde)
-                  : "",
-              terceira:
-                linha.litros_terceira !== null && linha.litros_terceira !== undefined
-                  ? String(linha.litros_terceira)
-                  : "",
-              total:
-                linha.litros_total !== null && linha.litros_total !== undefined
-                  ? String(linha.litros_total)
-                  : "",
-            };
-          });
-          setMedicoesPorDia((prev) => ({
-            ...prev,
-            [dataTabela]: mapaPorNumero,
-          }));
-          return;
-        }
-
-        const { data, error } = await supabase
-          .from("medicoes_leite")
-          .select(
-            "id, user_id, animal_id, data_medicao, tipo_lancamento, litros_manha, litros_tarde, litros_terceira, litros_total"
-          )
-          .eq("user_id", resolvedUserId)
-          .eq("data_medicao", dataTabela);
-
-        if (error) {
-          console.error("Erro ao buscar medições de leite:", error);
-          return;
-        }
-
-        const mapaPorNumero = {};
-
-        data.forEach((linha) => {
-          const vaca = vacas.find((v) => v.id === linha.animal_id);
-          if (!vaca) return;
-
-          const numeroStr = String(vaca.numero ?? "");
-
-          mapaPorNumero[numeroStr] = {
-            manha: linha.litros_manha !== null && linha.litros_manha !== undefined ? String(linha.litros_manha) : "",
-            tarde: linha.litros_tarde !== null && linha.litros_tarde !== undefined ? String(linha.litros_tarde) : "",
-            terceira:
-              linha.litros_terceira !== null && linha.litros_terceira !== undefined ? String(linha.litros_terceira) : "",
-            total: linha.litros_total !== null && linha.litros_total !== undefined ? String(linha.litros_total) : "",
-          };
-        });
-
+        const mapaPorNumero = montarMapaMedicoes(data?.medicoesDia || [], data?.vacas || []);
         setMedicoesPorDia((prev) => ({
           ...prev,
           [dataTabela]: mapaPorNumero,
         }));
 
-        const cacheAtual = normalizeCacheList(await kvGet(CACHE_MEDICOES_KEY));
-        const cacheAtualizado = upsertMedicoesCache(cacheAtual, data || []);
-        await kvSet(CACHE_MEDICOES_KEY, cacheAtualizado);
+        setLoadingLotes(false);
+        const cacheAtualizado = await saveLeiteCache(data);
+        if (!ativo) return;
+        setCacheMetadata(cacheAtualizado.metadata);
+        setHasCache(true);
+        setSincronizado(true);
       } catch (e) {
-        console.error("Erro inesperado ao carregar medições de leite:", e);
+        console.error("Erro inesperado ao carregar dados de leite:", e);
+        setLoadingLotes(false);
       }
-    }
+    })();
 
-    carregarMedicoesDiaTabela();
-  }, [dataTabela, vacas]);
+    return () => {
+      ativo = false;
+    };
+  }, [dataTabela, isOffline, montarMapaMedicoes, reloadKey]);
+
+  useEffect(() => {
+    if (!isOffline) return;
+    let ativo = true;
+    (async () => {
+      const possuiCache = await hasLeiteCache();
+      if (!ativo) return;
+      setHasCache(possuiCache);
+    })();
+    return () => {
+      ativo = false;
+    };
+  }, [isOffline]);
 
   // ✅ navegação (setas) muda tabela E calendário juntos
   const irParaAnterior = () => {
@@ -989,7 +930,7 @@ export default function Leite() {
 
     setDataTabela(data);
     setDataAtual(ymdHoje());
-    await carregarVacas();
+    setReloadKey((prev) => prev + 1);
   };
 
   // Abre a ficha leiteira
@@ -1014,6 +955,9 @@ export default function Leite() {
     try {
       if (!podeEditarLote) return;
       if (!dataTabela) return;
+      if (isOffline) {
+        return;
+      }
 
       setSalvandoLotes(true);
 
@@ -1060,7 +1004,7 @@ export default function Leite() {
       );
       setLoteEditPorNumero({});
 
-      await carregarVacas();
+      setReloadKey((prev) => prev + 1);
       setSalvandoLotes(false);
     } catch (e) {
       console.error("Erro inesperado ao salvar lotes:", e);
@@ -1099,6 +1043,10 @@ export default function Leite() {
       <ResumoLeiteDia resumoDia={resumoDia} qtdLactacao={vacasLactacao.length} />
 
       <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8 }}>
+        {statusSyncTexto}
+      </div>
+
+      <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8 }}>
         {loadingLotes
           ? "Carregando lotes de Lactação..."
           : `Lotes disponíveis: ${(lotesLeite || []).length} (Alta/Média/Baixa Produção)`}
@@ -1117,6 +1065,9 @@ export default function Leite() {
         salvarLotes={salvarLotes}
         salvandoLotes={salvandoLotes}
         podeEditarLote={podeEditarLote}
+        isOffline={isOffline}
+        hasCache={hasCache}
+        ultimaMedicaoPorAnimal={ultimaMedicaoPorAnimal}
         dataEhPassada={dataEhPassada}
         modoEdicaoPassado={modoEdicaoPassado}
         toggleModoEdicaoPassado={() => setModoEdicaoPassado((v) => !v)}
