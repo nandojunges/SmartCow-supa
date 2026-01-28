@@ -2,6 +2,8 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import Select from "react-select";
 import { supabase } from "../../lib/supabaseClient";
+import { kvGet, kvSet } from "../../offline/localDB";
+import { getOfflineSession } from "../../offline/offlineAuth";
 import ModalMedicaoLeite from "./ModalMedicaoLeite";
 import FichaLeiteira from "./FichaLeiteira";
 import ResumoLeiteDia from "./ResumoLeiteDia";
@@ -63,6 +65,37 @@ function normalizar(str) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .trim();
+}
+
+const CACHE_MEDICOES_KEY = "cache:leite:medicoes:list";
+
+function normalizeCacheList(cache) {
+  return Array.isArray(cache)
+    ? cache
+    : Array.isArray(cache?.medicoes)
+    ? cache.medicoes
+    : [];
+}
+
+function upsertMedicoesCache(list, itens) {
+  const next = [...list];
+  (itens || []).forEach((item) => {
+    const idx = next.findIndex((c) => {
+      if (item?.id && c?.id) return String(item.id) === String(c.id);
+      return (
+        String(c?.user_id || "") === String(item?.user_id || "") &&
+        String(c?.animal_id || "") === String(item?.animal_id || "") &&
+        String(c?.data_medicao || "") === String(item?.data_medicao || "")
+      );
+    });
+
+    if (idx >= 0) {
+      next[idx] = { ...next[idx], ...item };
+    } else {
+      next.push(item);
+    }
+  });
+  return next;
 }
 
 /** Regra: está em lactação? */
@@ -769,17 +802,32 @@ export default function Leite() {
           data: { user },
           error: userError,
         } = await supabase.auth.getUser();
+        const offlineSession = user ? null : await getOfflineSession();
+        const resolvedUserId = user?.id || offlineSession?.userId || null;
 
         if (userError) {
           console.error("Erro ao obter usuário para última medição:", userError);
+        }
+        if (!resolvedUserId) return;
+
+        if (typeof navigator !== "undefined" && !navigator.onLine) {
+          const cache = normalizeCacheList(await kvGet(CACHE_MEDICOES_KEY));
+          const filtradas = cache.filter(
+            (item) => String(item?.user_id || "") === String(resolvedUserId)
+          );
+          const datas = filtradas
+            .map((item) => String(item?.data_medicao || "").slice(0, 10))
+            .filter(Boolean)
+            .sort((a, b) => (a < b ? 1 : -1));
+          setDataTabela(datas[0] || ymdHoje());
+          jaSetouUltimaTabelaRef.current = true;
           return;
         }
-        if (!user) return;
 
         const { data, error } = await supabase
           .from("medicoes_leite")
           .select("data_medicao")
-          .eq("user_id", user.id)
+          .eq("user_id", resolvedUserId)
           .order("data_medicao", { ascending: false })
           .limit(1);
 
@@ -809,17 +857,58 @@ export default function Leite() {
           data: { user },
           error: userError,
         } = await supabase.auth.getUser();
+        const offlineSession = user ? null : await getOfflineSession();
+        const resolvedUserId = user?.id || offlineSession?.userId || null;
 
         if (userError) {
           console.error("Erro ao obter usuário para medições:", userError);
+        }
+        if (!resolvedUserId) return;
+
+        if (typeof navigator !== "undefined" && !navigator.onLine) {
+          const cache = normalizeCacheList(await kvGet(CACHE_MEDICOES_KEY));
+          const filtradas = cache.filter(
+            (item) =>
+              String(item?.user_id || "") === String(resolvedUserId) &&
+              String(item?.data_medicao || "") === String(dataTabela)
+          );
+          const mapaPorNumero = {};
+          filtradas.forEach((linha) => {
+            const vaca = vacas.find((v) => v.id === linha.animal_id);
+            if (!vaca) return;
+            const numeroStr = String(vaca.numero ?? "");
+            mapaPorNumero[numeroStr] = {
+              manha:
+                linha.litros_manha !== null && linha.litros_manha !== undefined
+                  ? String(linha.litros_manha)
+                  : "",
+              tarde:
+                linha.litros_tarde !== null && linha.litros_tarde !== undefined
+                  ? String(linha.litros_tarde)
+                  : "",
+              terceira:
+                linha.litros_terceira !== null && linha.litros_terceira !== undefined
+                  ? String(linha.litros_terceira)
+                  : "",
+              total:
+                linha.litros_total !== null && linha.litros_total !== undefined
+                  ? String(linha.litros_total)
+                  : "",
+            };
+          });
+          setMedicoesPorDia((prev) => ({
+            ...prev,
+            [dataTabela]: mapaPorNumero,
+          }));
           return;
         }
-        if (!user) return;
 
         const { data, error } = await supabase
           .from("medicoes_leite")
-          .select("id, animal_id, data_medicao, tipo_lancamento, litros_manha, litros_tarde, litros_terceira, litros_total")
-          .eq("user_id", user.id)
+          .select(
+            "id, user_id, animal_id, data_medicao, tipo_lancamento, litros_manha, litros_tarde, litros_terceira, litros_total"
+          )
+          .eq("user_id", resolvedUserId)
           .eq("data_medicao", dataTabela);
 
         if (error) {
@@ -848,6 +937,10 @@ export default function Leite() {
           ...prev,
           [dataTabela]: mapaPorNumero,
         }));
+
+        const cacheAtual = normalizeCacheList(await kvGet(CACHE_MEDICOES_KEY));
+        const cacheAtualizado = upsertMedicoesCache(cacheAtual, data || []);
+        await kvSet(CACHE_MEDICOES_KEY, cacheAtualizado);
       } catch (e) {
         console.error("Erro inesperado ao carregar medições de leite:", e);
       }

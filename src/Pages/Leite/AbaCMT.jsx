@@ -1,6 +1,7 @@
 // src/pages/Leite/AbaCMT.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
+import { enqueue, kvGet, kvSet } from "../../offline/localDB";
 import Select from "react-select";
 import "../../styles/tabelaModerna.css";
 import {
@@ -84,6 +85,48 @@ const QUARTOS = [
   { sigla: "TE", nome: "Anterior Esquerdo" },
   { sigla: "TD", nome: "Anterior Direito" },
 ];
+
+const CACHE_CMT_KEY = "cache:leite:cmt:list";
+
+function gerarUUID() {
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+  } catch (error) {
+    console.warn("Falha ao gerar UUID nativo:", error);
+  }
+  const randomPart = () => Math.random().toString(16).slice(2, 10);
+  return `${Date.now().toString(16)}-${randomPart()}-${randomPart()}`;
+}
+
+function normalizeCacheList(cache) {
+  return Array.isArray(cache)
+    ? cache
+    : Array.isArray(cache?.registros)
+    ? cache.registros
+    : [];
+}
+
+function upsertCmtCache(list, item) {
+  const next = [...list];
+  const idx = next.findIndex((c) => {
+    if (item?.id && c?.id) return String(item.id) === String(c.id);
+    return (
+      String(c?.animal_id || "") === String(item?.animal_id || "") &&
+      String(c?.dia || "").slice(0, 10) === String(item?.dia || "").slice(0, 10) &&
+      Number(c?.ordenha) === Number(item?.ordenha)
+    );
+  });
+
+  if (idx >= 0) {
+    next[idx] = { ...next[idx], ...item };
+  } else {
+    next.push(item);
+  }
+
+  return next;
+}
 
 function scoreResultado(r) {
   if (r === "0") return 0;
@@ -396,6 +439,16 @@ export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }
     setErro("");
     setCarregando(true);
 
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      const cache = normalizeCacheList(await kvGet(CACHE_CMT_KEY));
+      const filtrado = cache.filter((t) => String(t?.animal_id || "") === String(vaca.id));
+      setHistorico(filtrado);
+      const doDia = filtrado.filter((t) => getDiaDoTeste(t) === diaSelecionado);
+      setTestesDoDia(doDia);
+      setCarregando(false);
+      return;
+    }
+
     const { data, error } = await supabase
       .from("leite_cmt_testes")
       .select(
@@ -448,6 +501,10 @@ export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }
 
     const doDia = normalizado.filter((t) => getDiaDoTeste(t) === diaSelecionado);
     setTestesDoDia(doDia);
+
+    const cacheAtual = normalizeCacheList(await kvGet(CACHE_CMT_KEY));
+    const atualizado = normalizado.reduce((acc, item) => upsertCmtCache(acc, item), cacheAtual);
+    await kvSet(CACHE_CMT_KEY, atualizado);
 
     setCarregando(false);
   };
@@ -599,6 +656,67 @@ export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }
     };
 
     try {
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        const cacheAtual = normalizeCacheList(await kvGet(CACHE_CMT_KEY));
+        const existente = cacheAtual.find(
+          (t) =>
+            String(t?.animal_id || "") === String(vaca.id) &&
+            String(t?.dia || "").slice(0, 10) === String(diaSelecionado) &&
+            Number(t?.ordenha) === Number(ordenha)
+        );
+
+        const testeId = testeEditandoId || existente?.id || gerarUUID();
+        const payloadTesteOffline = { ...payloadTeste, id: testeId };
+        const payloadQuartos = ["TE", "TD", "PE", "PD"].map((q) => ({
+          teste_id: testeId,
+          quarto: q,
+          resultado: (cmt?.[q]?.resultado || "").trim() || null,
+          observacao: (cmt?.[q]?.observacao || "").trim() || null,
+        }));
+
+        const registroLocal = {
+          ...payloadTesteOffline,
+          cmt: {
+            TE: {
+              resultado: (cmt?.TE?.resultado || "").trim(),
+              observacao: (cmt?.TE?.observacao || "").trim(),
+            },
+            TD: {
+              resultado: (cmt?.TD?.resultado || "").trim(),
+              observacao: (cmt?.TD?.observacao || "").trim(),
+            },
+            PE: {
+              resultado: (cmt?.PE?.resultado || "").trim(),
+              observacao: (cmt?.PE?.observacao || "").trim(),
+            },
+            PD: {
+              resultado: (cmt?.PD?.resultado || "").trim(),
+              observacao: (cmt?.PD?.observacao || "").trim(),
+            },
+          },
+        };
+
+        const cacheAtualizado = upsertCmtCache(cacheAtual, registroLocal);
+        await kvSet(CACHE_CMT_KEY, cacheAtualizado);
+        await enqueue("leite_cmt_testes.upsert", {
+          teste: payloadTesteOffline,
+          quartos: payloadQuartos,
+        });
+
+        setTesteEditandoId(testeId);
+        const filtrado = cacheAtualizado.filter(
+          (t) => String(t?.animal_id || "") === String(vaca.id)
+        );
+        setHistorico(filtrado);
+
+        if (typeof onSalvarRegistro === "function") {
+          onSalvarRegistro({ teste_id: testeId, ...payloadTesteOffline, quartos: payloadQuartos });
+        }
+
+        setSalvando(false);
+        return;
+      }
+
       let testeId = testeEditandoId;
 
       if (!testeId) {

@@ -2,10 +2,54 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import Select from "react-select";
 import { supabase } from "../../lib/supabaseClient";
+import { enqueue, kvGet, kvSet } from "../../offline/localDB";
+import { getOfflineSession } from "../../offline/offlineAuth";
 import "../../styles/tabelaModerna.css";
 
 /* ===== helpers ===== */
 const toNum = (v) => parseFloat(String(v ?? "0").replace(",", ".")) || 0;
+const CACHE_MEDICOES_KEY = "cache:leite:medicoes:list";
+
+function gerarUUID() {
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+  } catch (error) {
+    console.warn("Falha ao gerar UUID nativo:", error);
+  }
+  const randomPart = () => Math.random().toString(16).slice(2, 10);
+  return `${Date.now().toString(16)}-${randomPart()}-${randomPart()}`;
+}
+
+function normalizeCacheList(cache) {
+  return Array.isArray(cache)
+    ? cache
+    : Array.isArray(cache?.medicoes)
+    ? cache.medicoes
+    : [];
+}
+
+function upsertMedicoesCache(list, itens) {
+  const next = [...list];
+  (itens || []).forEach((item) => {
+    const idx = next.findIndex((c) => {
+      if (item?.id && c?.id) return String(item.id) === String(c.id);
+      return (
+        String(c?.user_id || "") === String(item?.user_id || "") &&
+        String(c?.animal_id || "") === String(item?.animal_id || "") &&
+        String(c?.data_medicao || "") === String(item?.data_medicao || "")
+      );
+    });
+
+    if (idx >= 0) {
+      next[idx] = { ...next[idx], ...item };
+    } else {
+      next.push(item);
+    }
+  });
+  return next;
+}
 
 function parseBR(str) {
   if (!str || str.length !== 10) return null;
@@ -671,7 +715,8 @@ export default function ModalMedicaoLeite({
 
       if (error || !authData?.user) {
         console.error("Erro ao obter usuário:", error);
-        setUserId(null);
+        const offlineSession = await getOfflineSession();
+        setUserId(offlineSession?.userId || null);
         return;
       }
       setUserId(authData.user.id);
@@ -761,9 +806,43 @@ export default function ModalMedicaoLeite({
         return;
       }
 
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        const cache = normalizeCacheList(await kvGet(CACHE_MEDICOES_KEY));
+        const filtradas = cache.filter(
+          (item) =>
+            String(item?.user_id || "") === String(userId) &&
+            String(item?.data_medicao || "") === String(dataISO)
+        );
+
+        if (filtradas.length > 0) {
+          const tipoCache = filtradas[0]?.tipo_lancamento;
+          if (tipoCache === "total" || tipoCache === "2" || tipoCache === "3") {
+            setTipoLancamento(tipoCache);
+          }
+        }
+
+        const mapa = { ...baseVazio };
+        filtradas.forEach((r) => {
+          const vaca = (vacas || []).find((v) => v.id === r.animal_id);
+          if (!vaca) return;
+          const numeroStr = String(vaca.numero ?? "");
+          mapa[numeroStr] = {
+            ...mapa[numeroStr],
+            manha: r.litros_manha ?? "",
+            tarde: r.litros_tarde ?? "",
+            terceira: r.litros_terceira ?? "",
+            total: r.litros_total ?? "",
+          };
+        });
+        setMedicoes(mapa);
+        return;
+      }
+
       const { data: rows, error } = await supabase
         .from("medicoes_leite")
-        .select("animal_id, litros_manha, litros_tarde, litros_terceira, litros_total, tipo_lancamento")
+        .select(
+          "id, user_id, animal_id, data_medicao, litros_manha, litros_tarde, litros_terceira, litros_total, tipo_lancamento"
+        )
         .eq("user_id", userId)
         .eq("data_medicao", dataISO)
         .in("animal_id", ids);
@@ -798,6 +877,10 @@ export default function ModalMedicaoLeite({
       });
 
       setMedicoes(mapa);
+
+      const atualCache = normalizeCacheList(await kvGet(CACHE_MEDICOES_KEY));
+      const atualizado = upsertMedicoesCache(atualCache, rows || []);
+      await kvSet(CACHE_MEDICOES_KEY, atualizado);
     },
     [aberto, userId, vacas, criarMapaVazio]
   );
@@ -905,8 +988,10 @@ export default function ModalMedicaoLeite({
 
       const { data: authData, error: userError } = await supabase.auth.getUser();
       const user = authData?.user;
+      const offlineSession = user ? null : await getOfflineSession();
+      const resolvedUserId = user?.id || offlineSession?.userId || null;
 
-      if (userError || !user) {
+      if (userError || !resolvedUserId) {
         console.error("Erro ao obter usuário:", userError);
         alert("Não foi possível identificar o usuário logado.");
         setSalvando(false);
@@ -931,7 +1016,7 @@ export default function ModalMedicaoLeite({
 
         // sempre que tiver valor (medição), salva registro
         if (temAlgumValor) {
-          payload.push(montarPayloadLinha({ userId: user.id, vaca, dados }));
+          payload.push(montarPayloadLinha({ userId: resolvedUserId, vaca, dados }));
         }
 
         // se mudou o lote_id, atualiza animal.lote_id (para contar nos Lotes)
@@ -940,11 +1025,46 @@ export default function ModalMedicaoLeite({
         }
       });
 
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        if (payload.length > 0) {
+          const cacheAtual = normalizeCacheList(await kvGet(CACHE_MEDICOES_KEY));
+          const payloadComIds = payload.map((item) => {
+            const existente = cacheAtual.find(
+              (c) =>
+                String(c?.user_id || "") === String(item?.user_id || "") &&
+                String(c?.animal_id || "") === String(item?.animal_id || "") &&
+                String(c?.data_medicao || "") === String(item?.data_medicao || "")
+            );
+            return { ...item, id: existente?.id || gerarUUID() };
+          });
+          const cacheAtualizado = upsertMedicoesCache(cacheAtual, payloadComIds);
+          await kvSet(CACHE_MEDICOES_KEY, cacheAtualizado);
+          await enqueue("medicoes_leite.upsert", payloadComIds);
+        }
+
+        if (updatesAnimais.length > 0) {
+          for (const update of updatesAnimais) {
+            await enqueue("animais.upsert", {
+              id: update.animal_id,
+              lote_id: update.lote_id ?? null,
+            });
+          }
+        }
+
+        onSalvar?.({ data: dataMedicao, tipoLancamento, medicoes });
+        setSalvando(false);
+        onFechar?.();
+        return;
+      }
+
       // 1) salva medições (se houver)
       if (payload.length > 0) {
-        const { error } = await supabase
+        const { data: rows, error } = await supabase
           .from("medicoes_leite")
-          .upsert(payload, { onConflict: "user_id,animal_id,data_medicao" });
+          .upsert(payload, { onConflict: "user_id,animal_id,data_medicao" })
+          .select(
+            "id, user_id, animal_id, data_medicao, tipo_lancamento, litros_manha, litros_tarde, litros_terceira, litros_total"
+          );
 
         if (error) {
           console.error("Erro ao salvar medições:", error);
@@ -952,6 +1072,10 @@ export default function ModalMedicaoLeite({
           setSalvando(false);
           return;
         }
+
+        const cacheAtual = normalizeCacheList(await kvGet(CACHE_MEDICOES_KEY));
+        const cacheAtualizado = upsertMedicoesCache(cacheAtual, rows || []);
+        await kvSet(CACHE_MEDICOES_KEY, cacheAtualizado);
       }
 
       // 2) atualiza lotes dos animais (para refletir contagem)
