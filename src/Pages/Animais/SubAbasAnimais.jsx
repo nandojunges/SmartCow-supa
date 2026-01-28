@@ -12,7 +12,7 @@ const TABS = [
   { id: "preparto_parto", label: "Pré-parto / Parto" },
 ];
 
-export default function SubAbasAnimais({ animais = [], onRefresh }) {
+export default function SubAbasAnimais({ animais = [], onRefresh, isOnline }) {
   const [tab, setTab] = useState(() => {
     try {
       return localStorage.getItem(LS_LAST_TAB) || "plantel";
@@ -136,6 +136,7 @@ export default function SubAbasAnimais({ animais = [], onRefresh }) {
             animais={animais}
             onAtualizado={onRefresh}
             onCountChange={() => {}}
+            isOnline={isOnline}
           />
         )}
 
