@@ -9,7 +9,10 @@ import "../../styles/tabelaModerna.css";
 import "../../styles/botoes.css";
 
 import { supabase } from "../../lib/supabaseClient";
+import { enqueue, kvGet, kvSet } from "../../offline/localDB";
 import ModalDieta from "./ModalDieta";
+
+const CACHE_DIETA_KEY = "cache:dieta:list";
 
 function dateOnlyToISO(d) {
   // d vem como "YYYY-MM-DD" (DATE do Postgres)
@@ -31,6 +34,18 @@ export default function Dieta({ onCountChange }) {
 
   const [modal, setModal] = useState({ open: false, dieta: null });
   const [excluir, setExcluir] = useState({ open: false, dieta: null });
+
+  const normalizeDietaCache = useCallback((cache) => {
+    return Array.isArray(cache) ? cache : [];
+  }, []);
+
+  const updateCache = useCallback(
+    async (nextList) => {
+      setDietas(nextList);
+      await kvSet(CACHE_DIETA_KEY, nextList);
+    },
+    []
+  );
 
   useEffect(() => onCountChange?.(dietas.length), [dietas.length, onCountChange]);
 
@@ -117,6 +132,13 @@ export default function Dieta({ onCountChange }) {
     setLoading(true);
     setErro("");
 
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      const cache = normalizeDietaCache(await kvGet(CACHE_DIETA_KEY));
+      setDietas(cache);
+      setLoading(false);
+      return;
+    }
+
     const { data: sess } = await supabase.auth.getSession();
     const uid = sess?.session?.user?.id;
 
@@ -167,9 +189,9 @@ export default function Dieta({ onCountChange }) {
       observacao: r.observacao || "",
     }));
 
-    setDietas(list);
+    await updateCache(list);
     setLoading(false);
-  }, []);
+  }, [normalizeDietaCache, updateCache]);
 
   useEffect(() => {
     loadDietas();
@@ -192,6 +214,31 @@ export default function Dieta({ onCountChange }) {
 
   const abrirEditar = useCallback(
     async (dietaRow) => {
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        const ingredientes = Array.isArray(dietaRow?.ingredientes) && dietaRow.ingredientes.length
+          ? dietaRow.ingredientes
+          : null;
+
+        if (!ingredientes) {
+          setErro("Sem itens da dieta em cache para edição offline.");
+          return;
+        }
+
+        setModal({
+          open: true,
+          dieta: {
+            id: dietaRow.id,
+            lote_id: dietaRow.lote_id,
+            lote_nome: dietaRow.lote,
+            numVacas: dietaRow.numVacas,
+            data: dietaRow.data,
+            observacao: dietaRow.observacao || "",
+            ingredientes,
+          },
+        });
+        return;
+      }
+
       setLoading(true);
       setErro("");
 
@@ -233,11 +280,27 @@ export default function Dieta({ onCountChange }) {
   );
 
   /** ===================== SALVOU NO MODAL ===================== */
-  const salvar = useCallback(async () => {
-    // ModalDieta já salvou no banco; aqui só recarrega a tabela
-    setModal({ open: false, dieta: null });
-    await loadDietas();
-  }, [loadDietas]);
+  const salvar = useCallback(
+    async (saved) => {
+      setModal({ open: false, dieta: null });
+      if (saved?.offline) {
+        const nextList = (() => {
+          const base = Array.isArray(dietas) ? [...dietas] : [];
+          const idx = base.findIndex((d) => String(d.id) === String(saved.id));
+          if (idx >= 0) {
+            base[idx] = { ...base[idx], ...saved };
+          } else {
+            base.push(saved);
+          }
+          return base.sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
+        })();
+        await updateCache(nextList);
+        return;
+      }
+      await loadDietas();
+    },
+    [dietas, loadDietas, updateCache]
+  );
 
   /** ===================== EXCLUIR ===================== */
   const pedirExclusao = (dietaRow) => setExcluir({ open: true, dieta: dietaRow });
@@ -245,6 +308,14 @@ export default function Dieta({ onCountChange }) {
   const confirmarExclusao = useCallback(async () => {
     const d = excluir.dieta;
     if (!d?.id) {
+      setExcluir({ open: false, dieta: null });
+      return;
+    }
+
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      const nextList = (dietas || []).filter((item) => String(item.id) !== String(d.id));
+      await updateCache(nextList);
+      await enqueue("dieta.delete", { id: d.id });
       setExcluir({ open: false, dieta: null });
       return;
     }
@@ -269,7 +340,7 @@ export default function Dieta({ onCountChange }) {
     } finally {
       setLoading(false);
     }
-  }, [excluir.dieta, loadDietas]);
+  }, [dietas, excluir.dieta, loadDietas, updateCache]);
 
   return (
     <section className="w-full py-6">

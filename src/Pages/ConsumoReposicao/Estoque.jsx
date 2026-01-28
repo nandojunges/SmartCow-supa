@@ -2,6 +2,8 @@
 import React, { useMemo, useState, useEffect, useCallback } from "react";
 import Select from "react-select";
 import { supabase } from "../../lib/supabaseClient";
+import { enqueue, kvGet, kvSet } from "../../offline/localDB";
+import { getOfflineSession } from "../../offline/offlineAuth";
 
 import "../../styles/tabelaModerna.css";
 import "../../styles/botoes.css";
@@ -59,6 +61,29 @@ const rsStylesCompact = {
   menu: (base) => ({ ...base, zIndex: 100000 }),
 };
 
+const CACHE_ESTOQUE_KEY = "cache:estoque:list";
+
+function normalizeEstoqueCache(cache) {
+  return Array.isArray(cache) ? cache : [];
+}
+
+function generateLocalId() {
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+  } catch {
+    // fallback abaixo
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+}
+
+function sortProdutosByNome(list) {
+  return [...(Array.isArray(list) ? list : [])].sort((a, b) =>
+    String(a.nomeComercial || "").localeCompare(String(b.nomeComercial || ""))
+  );
+}
+
 export default function Estoque({ onCountChange }) {
   const categoriasFixas = useMemo(
     () => [
@@ -99,6 +124,11 @@ export default function Estoque({ onCountChange }) {
   const [produtoParaExcluir, setProdutoParaExcluir] = useState(null);
   const [editar, setEditar] = useState({ abrir: false, item: null });
 
+  const updateCache = useCallback(async (nextList) => {
+    setProdutos(nextList);
+    await kvSet(CACHE_ESTOQUE_KEY, nextList);
+  }, []);
+
   /* ===================== HELPERS DE PAYLOAD DO MODAL ===================== */
   function splitPayload(payload) {
     // aceita:
@@ -127,6 +157,17 @@ export default function Estoque({ onCountChange }) {
     const { data, error } = await supabase.auth.getUser();
     if (error) throw error;
     return data?.user?.id || null;
+  }
+
+  async function resolveUserId() {
+    try {
+      const { data, error } = await supabase.auth.getUser();
+      if (!error && data?.user?.id) return data.user.id;
+    } catch {
+      // segue fallback offline
+    }
+    const offlineSession = await getOfflineSession();
+    return offlineSession?.userId || null;
   }
 
   // ✅ Busca rápida do produto (nome + unidade) para descrever a compra no Financeiro
@@ -210,6 +251,13 @@ export default function Estoque({ onCountChange }) {
       try {
         setLoading(true);
         setErro("");
+
+        if (typeof navigator !== "undefined" && !navigator.onLine) {
+          const cache = normalizeEstoqueCache(await kvGet(CACHE_ESTOQUE_KEY));
+          setProdutos(cache);
+          setLoading(false);
+          return;
+        }
 
         const { data: produtosDb, error: errP } = await supabase
           .from("estoque_produtos")
@@ -350,7 +398,7 @@ export default function Estoque({ onCountChange }) {
           lista = lista.filter((p) => p.categoria === categoriaOpt.value);
         }
 
-        setProdutos(lista);
+        await updateCache(lista);
       } catch (e) {
         console.error(e);
         setErro("Erro ao carregar estoque (Supabase).");
@@ -359,7 +407,7 @@ export default function Estoque({ onCountChange }) {
         setLoading(false);
       }
     },
-    [categoriaSelecionada, tourosBase]
+    [categoriaSelecionada, tourosBase, updateCache]
   );
 
   useEffect(() => {
@@ -468,6 +516,41 @@ export default function Estoque({ onCountChange }) {
   async function salvarNovoProduto(produtoUi) {
     const db = uiToDbProduto(produtoUi);
 
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      const localId = generateLocalId();
+      const uid = await resolveUserId();
+      const payload = {
+        id: localId,
+        ...db,
+        ...(uid ? { user_id: uid } : {}),
+      };
+
+      const novoItem = {
+        id: localId,
+        nomeComercial: produtoUi?.nomeComercial || "",
+        categoria: produtoUi?.categoria || "",
+        unidade: produtoUi?.unidade || "",
+        apresentacao: produtoUi?.apresentacao || "",
+        tipoFarmacia: produtoUi?.tipoFarmacia || "",
+        carenciaLeiteDias: produtoUi?.carenciaLeiteDias || "",
+        carenciaCarneDias: produtoUi?.carenciaCarneDias || "",
+        semCarenciaLeite: !!produtoUi?.semCarenciaLeite,
+        semCarenciaCarne: !!produtoUi?.semCarenciaCarne,
+        compradoTotal: 0,
+        quantidade: 0,
+        valorTotal: 0,
+        validade: null,
+        consumoDiaKg: null,
+        prevTerminoDias: null,
+        meta: {},
+      };
+
+      const nextList = sortProdutosByNome([...produtos, novoItem]);
+      await updateCache(nextList);
+      await enqueue("estoque.produto.insert", { produto: payload });
+      return localId;
+    }
+
     const uid = await getAuthUid();
 
     let resp = await supabase
@@ -491,12 +574,44 @@ export default function Estoque({ onCountChange }) {
   async function salvarEdicaoProduto(id, produtoUi) {
     const db = uiToDbProduto(produtoUi);
 
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      const nextList = sortProdutosByNome(
+        produtos.map((p) => {
+          if (p.id !== id) return p;
+          return {
+            ...p,
+            nomeComercial: produtoUi?.nomeComercial ?? p.nomeComercial,
+            categoria: produtoUi?.categoria ?? p.categoria,
+            unidade: produtoUi?.unidade ?? p.unidade,
+            apresentacao: produtoUi?.apresentacao ?? p.apresentacao,
+            tipoFarmacia: produtoUi?.tipoFarmacia ?? p.tipoFarmacia,
+            carenciaLeiteDias: produtoUi?.carenciaLeiteDias ?? p.carenciaLeiteDias,
+            carenciaCarneDias: produtoUi?.carenciaCarneDias ?? p.carenciaCarneDias,
+            semCarenciaLeite:
+              produtoUi?.semCarenciaLeite != null ? !!produtoUi.semCarenciaLeite : p.semCarenciaLeite,
+            semCarenciaCarne:
+              produtoUi?.semCarenciaCarne != null ? !!produtoUi.semCarenciaCarne : p.semCarenciaCarne,
+          };
+        })
+      );
+      await updateCache(nextList);
+      await enqueue("estoque.produto.update", { id, payload: db });
+      return true;
+    }
+
     const { error } = await supabase.from("estoque_produtos").update(db).eq("id", id);
     if (error) throw error;
     return true;
   }
 
   async function excluirProduto(id) {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      const nextList = produtos.filter((p) => p.id !== id);
+      await updateCache(nextList);
+      await enqueue("estoque.produto.delete", { id });
+      return true;
+    }
+
     const { error } = await supabase.from("estoque_produtos").delete().eq("id", id);
     if (error) throw error;
     return true;
@@ -511,6 +626,62 @@ export default function Estoque({ onCountChange }) {
     const validade = lote.validade ? toDateOnly(lote.validade) : null;
 
     if (!Number.isFinite(quantidade) || quantidade <= 0) return;
+
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      const loteId = generateLocalId();
+      const nextList = produtos.map((p) => {
+        if (p.id !== produtoId) return p;
+        const compradoTotal = Number(p.compradoTotal || 0) + quantidade;
+        const quantidadeAtual = Number(p.quantidade || 0) + quantidade;
+        const valorTotalAtual = Number(p.valorTotal || 0) + (Number.isFinite(valorTotal) ? valorTotal : 0);
+        const validadeAtual = p.validade ? new Date(p.validade) : null;
+        const validadeNova = validade ? new Date(validade) : null;
+        const validadeAtualOk =
+          validadeAtual && !Number.isNaN(validadeAtual.getTime()) ? validadeAtual : null;
+        const validadeNovaOk = validadeNova && !Number.isNaN(validadeNova.getTime()) ? validadeNova : null;
+        const validadeFinalDate =
+          validadeAtualOk && validadeNovaOk
+            ? validadeNovaOk < validadeAtualOk
+              ? validadeNovaOk
+              : validadeAtualOk
+            : validadeNovaOk || validadeAtualOk;
+        const validadeFinal = validadeFinalDate ? validadeFinalDate.toISOString() : p.validade || null;
+        const prevDias =
+          p.consumoDiaKg && quantidadeAtual > 0 ? Math.floor(quantidadeAtual / Number(p.consumoDiaKg || 0)) : p.prevTerminoDias;
+
+        return {
+          ...p,
+          compradoTotal,
+          quantidade: quantidadeAtual,
+          valorTotal: valorTotalAtual,
+          validade: validadeFinal,
+          prevTerminoDias: prevDias,
+        };
+      });
+
+      await updateCache(nextList);
+
+      await enqueue("estoque.lote.insert", {
+        lote: {
+          id: loteId,
+          produto_id: produtoId,
+          data_entrada: toDateOnly(new Date()),
+          validade,
+          quantidade_inicial: quantidade,
+          quantidade_atual: quantidade,
+          valor_total: Number.isFinite(valorTotal) ? valorTotal : 0,
+        },
+        movimento: {
+          produto_id: produtoId,
+          lote_id: loteId,
+          tipo: "entrada",
+          quantidade,
+          valor_total: Number.isFinite(valorTotal) ? valorTotal : 0,
+          data_movimento: toDateOnly(new Date()),
+        },
+      });
+      return;
+    }
 
     const { data: loteCriado, error } = await supabase
       .from("estoque_lotes")
