@@ -98,7 +98,7 @@ function formatProducao(valor) {
 }
 
 export default function Plantel() {
-  const CACHE_KEY = "cache:animais:plantel:v1";
+  const CACHE_KEY = "cache:animais:list";
   const [animais, setAnimais] = useState([]);
   const [racaMap, setRacaMap] = useState({});
   const [carregando, setCarregando] = useState(true);
@@ -219,10 +219,15 @@ export default function Plantel() {
   const carregarDoCache = useCallback(async () => {
     const cache = await kvGet(CACHE_KEY);
     if (!cache) return false;
-    setAnimais(Array.isArray(cache.animais) ? cache.animais : []);
-    setLotes(Array.isArray(cache.lotes) ? cache.lotes : []);
-    setRacaMap(cache.racas || {});
-    return true;
+    if (Array.isArray(cache)) {
+      setAnimais(cache);
+      return true;
+    }
+    if (Array.isArray(cache.animais)) {
+      setAnimais(cache.animais);
+      return true;
+    }
+    return false;
   }, [CACHE_KEY]);
 
   useEffect(() => {
@@ -239,7 +244,7 @@ export default function Plantel() {
           const cacheOk = await carregarDoCache();
           if (!cacheOk) {
             setOfflineAviso(
-              "Sem dados offline ainda (conecte uma vez para baixar)."
+              "Sem dados offline ainda. Conecte na internet uma vez para baixar os animais."
             );
           }
           return;
@@ -259,19 +264,14 @@ export default function Plantel() {
           carregarRacas(user.id),
         ]);
 
-        await kvSet(CACHE_KEY, {
-          animais: animaisData,
-          lotes: lotesData,
-          racas: racasData,
-          updatedAt: new Date().toISOString(),
-        });
+        await kvSet(CACHE_KEY, animaisData);
       } catch (e) {
         console.error("Erro ao carregar plantel:", e);
         if (!ativo) return;
         const cacheOk = await carregarDoCache();
         if (!cacheOk) {
-          setOfflineAviso(
-            "Sem dados offline ainda (conecte uma vez para baixar)."
+          setErro(
+            "Não foi possível carregar os animais. Sem dados offline ainda. Conecte na internet uma vez para baixar os animais."
           );
         }
       } finally {

@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { supabase } from "./lib/supabaseClient";
-import { syncPending } from "./offline/sync";
+import { syncAnimaisSeed, syncPending } from "./offline/sync";
 
 // Telas
 import Login from "./Auth/Login";
@@ -46,9 +46,19 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (navigator.onLine) {
+    const handleOnline = () => {
       syncPending();
+      syncAnimaisSeed();
+    };
+
+    if (navigator.onLine) {
+      handleOnline();
     }
+
+    window.addEventListener("online", handleOnline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+    };
   }, []);
 
   if (loading) {

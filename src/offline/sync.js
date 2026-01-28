@@ -1,5 +1,5 @@
 import { supabase } from "../lib/supabaseClient";
-import { listPending, markDone, markFailed } from "./localDB";
+import { kvSet, listPending, markDone, markFailed } from "./localDB";
 
 function dispatchSyncStatus(detail) {
   if (typeof window === "undefined") return;
@@ -52,5 +52,19 @@ export async function syncPending() {
         total,
       });
     }
+  }
+}
+
+export async function syncAnimaisSeed() {
+  if (typeof navigator !== "undefined" && !navigator.onLine) {
+    return;
+  }
+
+  try {
+    const { data, error } = await supabase.from("animais").select("*");
+    if (error) throw error;
+    await kvSet("cache:animais:list", Array.isArray(data) ? data : []);
+  } catch (error) {
+    console.error("[sync] Falha ao seedar animais:", error);
   }
 }
