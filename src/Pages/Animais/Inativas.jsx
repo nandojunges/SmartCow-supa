@@ -63,6 +63,11 @@ export default function Inativas({
   const reativar = async (animal) => {
     const { id, saida_id } = animal || {};
     if (!id) return;
+    if (!navigator.onLine) {
+      setOkMsg("⚠️ Sem conexão. Conecte para reativar o animal.");
+      setTimeout(() => setOkMsg(""), 2500);
+      return;
+    }
 
     setLoadingId(id);
     try {
