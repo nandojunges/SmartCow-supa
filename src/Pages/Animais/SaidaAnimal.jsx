@@ -7,6 +7,28 @@ import React, {
 } from "react";
 import Select from "react-select";
 import { supabase } from "../../lib/supabaseClient";
+import { enqueue, kvGet, kvSet } from "../../offline/localDB";
+
+const CACHE_ANIMAIS_KEY = "cache:animais:list";
+const CACHE_SAIDAS_KEY = "cache:saidas_animais:list";
+
+function gerarUUID() {
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+  } catch (error) {
+    console.warn("Falha ao gerar UUID nativo:", error);
+  }
+  const randomPart = () => Math.random().toString(16).slice(2, 10);
+  return `${Date.now().toString(16)}-${randomPart()}-${randomPart()}`;
+}
+
+function extrairListaCache(cache) {
+  if (Array.isArray(cache)) return [...cache];
+  if (Array.isArray(cache?.animais)) return [...cache.animais];
+  return [];
+}
 
 export default function SaidaAnimal({ onAtualizar }) {
   const [animalSelecionado, setAnimalSelecionado] = useState(null);
@@ -98,6 +120,15 @@ export default function SaidaAnimal({ onAtualizar }) {
 
   const carregarAnimais = useCallback(async () => {
     try {
+      if (!navigator.onLine) {
+        const cache = await kvGet(CACHE_ANIMAIS_KEY);
+        const lista = extrairListaCache(cache).filter(
+          (animal) => animal?.ativo !== false
+        );
+        setAnimais(lista);
+        return;
+      }
+
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -138,6 +169,53 @@ export default function SaidaAnimal({ onAtualizar }) {
 
       const valorNumerico =
         tipo === "venda" ? parseMoedaToNumber(valor) : null;
+
+      if (!navigator.onLine) {
+        const saidaId = gerarUUID();
+        const payload = {
+          id: saidaId,
+          user_id: user.id,
+          animal_id: animalSelecionado.value,
+          tipo_saida: tipo,
+          motivo_saida: motivo,
+          data_saida: dataISO,
+          valor_venda: valorNumerico,
+          observacao: observacao,
+        };
+
+        const cacheSaidas = await kvGet(CACHE_SAIDAS_KEY);
+        const saidasAtualizadas = Array.isArray(cacheSaidas)
+          ? [...cacheSaidas, payload]
+          : [payload];
+        await kvSet(CACHE_SAIDAS_KEY, saidasAtualizadas);
+
+        const cacheAnimais = await kvGet(CACHE_ANIMAIS_KEY);
+        const animaisAtualizados = extrairListaCache(cacheAnimais).map(
+          (animal) =>
+            animal?.id === animalSelecionado.value
+              ? { ...animal, ativo: false }
+              : animal
+        );
+        await kvSet(CACHE_ANIMAIS_KEY, animaisAtualizados);
+
+        await enqueue("saidas_animais.insert", payload);
+        await enqueue("animais.setAtivoFalse", {
+          animal_id: animalSelecionado.value,
+        });
+
+        onAtualizar?.();
+        setOk("✅ Saída registrada offline. Será sincronizada ao reconectar.");
+        setTimeout(() => setOk(""), 3000);
+
+        setAnimalSelecionado(null);
+        setTipo("");
+        setMotivo("");
+        setData("");
+        setObservacao("");
+        setValor("");
+        setErros({});
+        return;
+      }
 
       const { error: insertError } = await supabase
         .from("saidas_animais")
