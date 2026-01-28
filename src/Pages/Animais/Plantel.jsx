@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import Select from "react-select";
 import { supabase } from "../../lib/supabaseClient";
+import { kvGet, kvSet } from "../../offline/localDB";
 import "../../styles/tabelaModerna.css";
 import FichaAnimal from "./FichaAnimal/FichaAnimal";
 
@@ -97,10 +98,12 @@ function formatProducao(valor) {
 }
 
 export default function Plantel() {
+  const CACHE_KEY = "cache:animais:plantel:v1";
   const [animais, setAnimais] = useState([]);
   const [racaMap, setRacaMap] = useState({});
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
+  const [offlineAviso, setOfflineAviso] = useState("");
   const [lotes, setLotes] = useState([]);
   const [loteAviso, setLoteAviso] = useState("");
   const [hoveredRowId, setHoveredRowId] = useState(null);
@@ -168,7 +171,9 @@ export default function Plantel() {
       .order("numero", { ascending: true });
 
     if (error) throw error;
-    setAnimais(Array.isArray(data) ? data : []);
+    const lista = Array.isArray(data) ? data : [];
+    setAnimais(lista);
+    return lista;
   }, []);
 
   const carregarLotes = useCallback(async (userId) => {
@@ -187,10 +192,12 @@ export default function Plantel() {
     if (error) {
       console.error("Erro ao carregar lotes:", error);
       setLotes([]);
-      return;
+      return [];
     }
 
-    setLotes(Array.isArray(data) ? data : []);
+    const lista = Array.isArray(data) ? data : [];
+    setLotes(lista);
+    return lista;
   }, []);
 
   const carregarRacas = useCallback(async (userId) => {
@@ -206,7 +213,17 @@ export default function Plantel() {
       map[r.id] = r.nome;
     });
     setRacaMap(map);
+    return map;
   }, []);
+
+  const carregarDoCache = useCallback(async () => {
+    const cache = await kvGet(CACHE_KEY);
+    if (!cache) return false;
+    setAnimais(Array.isArray(cache.animais) ? cache.animais : []);
+    setLotes(Array.isArray(cache.lotes) ? cache.lotes : []);
+    setRacaMap(cache.racas || {});
+    return true;
+  }, [CACHE_KEY]);
 
   useEffect(() => {
     let ativo = true;
@@ -215,8 +232,19 @@ export default function Plantel() {
       setCarregando(true);
       setErro("");
       setLoteAviso("");
+      setOfflineAviso("");
 
       try {
+        if (!navigator.onLine) {
+          const cacheOk = await carregarDoCache();
+          if (!cacheOk) {
+            setOfflineAviso(
+              "Sem dados offline ainda (conecte uma vez para baixar)."
+            );
+          }
+          return;
+        }
+
         const {
           data: { user },
           error: userErr,
@@ -225,15 +253,27 @@ export default function Plantel() {
         if (userErr || !user) throw new Error("Usuário não autenticado.");
         if (!ativo) return;
 
-        await Promise.all([
+        const [animaisData, lotesData, racasData] = await Promise.all([
           carregarAnimais(user.id),
           carregarLotes(user.id),
           carregarRacas(user.id),
         ]);
+
+        await kvSet(CACHE_KEY, {
+          animais: animaisData,
+          lotes: lotesData,
+          racas: racasData,
+          updatedAt: new Date().toISOString(),
+        });
       } catch (e) {
         console.error("Erro ao carregar plantel:", e);
         if (!ativo) return;
-        setErro("Não foi possível carregar a lista de animais.");
+        const cacheOk = await carregarDoCache();
+        if (!cacheOk) {
+          setOfflineAviso(
+            "Sem dados offline ainda (conecte uma vez para baixar)."
+          );
+        }
       } finally {
         if (ativo) setCarregando(false);
       }
@@ -243,12 +283,16 @@ export default function Plantel() {
     return () => {
       ativo = false;
     };
-  }, [carregarAnimais, carregarLotes, carregarRacas]);
+  }, [carregarAnimais, carregarDoCache, carregarLotes, carregarRacas]);
 
   useEffect(() => {
     let ativo = true;
 
     async function carregarUltimaProducao() {
+      if (!navigator.onLine) {
+        if (ativo) setUltProducao({});
+        return;
+      }
       if (!Array.isArray(animais) || animais.length === 0) {
         if (ativo) setUltProducao({});
         return;
@@ -921,6 +965,7 @@ export default function Plantel() {
     <section className="w-full">
       {erro && <div className="st-alert st-alert--danger">{erro}</div>}
       {loteAviso && <div className="st-alert st-alert--warning">{loteAviso}</div>}
+      {offlineAviso && <div className="st-filter-hint">{offlineAviso}</div>}
 
       {filtrosAtivos.length > 0 && (
         <div
