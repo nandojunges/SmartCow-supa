@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState, useCallback, useLayoutEffect } from "react";
 import Select from "react-select";
 import { supabase } from "../../lib/supabaseClient";
+import { enqueue, kvGet, kvSet } from "../../offline/localDB";
 
 import "../../styles/tabelamoderna.css";
 import "../../styles/botoes.css";
@@ -27,6 +28,8 @@ const CATEGORIAS_PADRAO = [
   { value: "Impostos/Taxas", label: "Impostos/Taxas" },
   { value: "Outros", label: "Outros" },
 ];
+
+const CACHE_FINANCEIRO_KEY = "cache:financeiro:lancamentos:list";
 
 const ORIGENS_PADRAO = [
   { value: "Manual", label: "Manual" },
@@ -77,6 +80,57 @@ function firstLastOfMonth(refISO) {
   const ini = new Date(y, m, 1);
   const fim = new Date(y, m + 1, 0);
   return { ini: toISODateInput(ini), fim: toISODateInput(fim) };
+}
+
+function gerarUUID() {
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+  } catch (error) {
+    console.warn("Falha ao gerar UUID nativo:", error);
+  }
+  const randomPart = () => Math.random().toString(16).slice(2, 10);
+  return `${Date.now().toString(16)}-${randomPart()}-${randomPart()}`;
+}
+
+function normalizeCacheList(cache) {
+  return Array.isArray(cache) ? cache : Array.isArray(cache?.registros) ? cache.registros : [];
+}
+
+function upsertFinanceiroCache(list, item) {
+  const next = [...list];
+  const idx = next.findIndex((c) => String(c?.id || "") === String(item?.id || ""));
+  if (idx >= 0) {
+    next[idx] = { ...next[idx], ...item };
+  } else {
+    next.push(item);
+  }
+  return next;
+}
+
+function mergeFinanceiroCache(cacheAtual, fetched) {
+  const base = Array.isArray(fetched) ? [...fetched] : [];
+  const ids = new Set(base.map((row) => String(row?.id || "")));
+  (Array.isArray(cacheAtual) ? cacheAtual : []).forEach((row) => {
+    const id = String(row?.id || "");
+    if (id && !ids.has(id)) {
+      base.push(row);
+    }
+  });
+  return base;
+}
+
+function filtrarPorPeriodo(list, periodo) {
+  const ini = String(periodo?.ini || "");
+  const fim = String(periodo?.fim || "");
+  return (Array.isArray(list) ? list : []).filter((r) => {
+    const data = String(r?.data || "");
+    if (!data) return false;
+    if (ini && data < ini) return false;
+    if (fim && data > fim) return false;
+    return true;
+  });
 }
 
 // ✅ define se o lançamento mexe no caixa
@@ -231,6 +285,12 @@ export default function Financeiro() {
   const carregarLancamentos = useCallback(async () => {
     setLoading(true);
     try {
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        const cache = normalizeCacheList(await kvGet(CACHE_FINANCEIRO_KEY));
+        setLancamentos(filtrarPorPeriodo(cache, periodo).map((r) => ({ ...r })));
+        return;
+      }
+
       // ✅ tenta buscar com impacta_caixa (novo)
       let data = null;
 
@@ -263,7 +323,12 @@ export default function Financeiro() {
         data = (resp2.data || []).map((r) => ({ ...r, impacta_caixa: true })); // comportamento antigo
       }
 
-      setLancamentos((data || []).map((r) => ({ ...r })));
+      const lista = (data || []).map((r) => ({ ...r }));
+      setLancamentos(lista);
+
+      const cacheAtual = normalizeCacheList(await kvGet(CACHE_FINANCEIRO_KEY));
+      const merged = mergeFinanceiroCache(cacheAtual, lista);
+      await kvSet(CACHE_FINANCEIRO_KEY, merged);
     } catch (e) {
       console.error("Financeiro: erro ao carregar:", e);
       setLancamentos([]);
@@ -311,12 +376,52 @@ export default function Financeiro() {
         impacta_caixa: payload.impacta_caixa !== false, // default true
       };
 
+      const selectCols =
+        "id, data, tipo, categoria, origem, descricao, quantidade, unidade, valor_unitario, valor_total, observacao, impacta_caixa, created_at";
+
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        const cacheAtual = normalizeCacheList(await kvGet(CACHE_FINANCEIRO_KEY));
+        const id = payload.id || gerarUUID();
+        const existente = cacheAtual.find((item) => String(item?.id || "") === String(id));
+        const novo = {
+          ...base,
+          id,
+          created_at: existente?.created_at || new Date().toISOString(),
+        };
+        const atualizado = upsertFinanceiroCache(cacheAtual, novo);
+        await kvSet(CACHE_FINANCEIRO_KEY, atualizado);
+        await enqueue("financeiro.insert", novo);
+
+        setLancamentos(filtrarPorPeriodo(atualizado, periodo).map((r) => ({ ...r })));
+        setModalAberto(false);
+        setEditando(null);
+        return;
+      }
+
+      let saved = null;
       if (payload.id) {
-        const { error } = await supabase.from("financeiro_lancamentos").update(base).eq("id", payload.id);
+        const { data, error } = await supabase
+          .from("financeiro_lancamentos")
+          .update(base)
+          .eq("id", payload.id)
+          .select(selectCols)
+          .single();
         if (error) throw error;
+        saved = data;
       } else {
-        const { error } = await supabase.from("financeiro_lancamentos").insert([base]);
+        const { data, error } = await supabase
+          .from("financeiro_lancamentos")
+          .insert([base])
+          .select(selectCols)
+          .single();
         if (error) throw error;
+        saved = data;
+      }
+
+      if (saved) {
+        const cacheAtual = normalizeCacheList(await kvGet(CACHE_FINANCEIRO_KEY));
+        const atualizado = upsertFinanceiroCache(cacheAtual, saved);
+        await kvSet(CACHE_FINANCEIRO_KEY, atualizado);
       }
 
       setModalAberto(false);
