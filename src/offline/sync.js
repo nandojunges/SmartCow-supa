@@ -242,6 +242,19 @@ export async function syncPending() {
         continue;
       }
 
+      if (item.action === "financeiro.insert") {
+        const payload = item.payload || {};
+        const rows = Array.isArray(payload) ? payload : [payload];
+        if (rows.length > 0) {
+          const { error } = await supabase
+            .from("financeiro_lancamentos")
+            .upsert(rows, { onConflict: "id" });
+          if (error) throw error;
+        }
+        await markDone(item.id);
+        continue;
+      }
+
       await markFailed(item.id, `Ação não suportada: ${item.action}`);
     } catch (error) {
       console.error("[sync] Falha ao processar item:", item, error);
