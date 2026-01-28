@@ -1,6 +1,7 @@
 // src/pages/Leite/AbaCCS.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
+import { enqueue, kvGet, kvSet } from "../../offline/localDB";
 import Select from "react-select";
 import {
   LineChart,
@@ -39,6 +40,45 @@ const toInt = (s) => {
   return Number.isFinite(n) ? n : 0;
 };
 const toPtBRNumber = (n) => Number(n || 0).toLocaleString("pt-BR");
+
+const CACHE_CCS_KEY = "cache:leite:ccs:list";
+
+function gerarUUID() {
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+  } catch (error) {
+    console.warn("Falha ao gerar UUID nativo:", error);
+  }
+  const randomPart = () => Math.random().toString(16).slice(2, 10);
+  return `${Date.now().toString(16)}-${randomPart()}-${randomPart()}`;
+}
+
+function normalizeCacheList(cache) {
+  return Array.isArray(cache)
+    ? cache
+    : Array.isArray(cache?.registros)
+    ? cache.registros
+    : [];
+}
+
+function upsertCcsCache(list, item) {
+  const next = [...list];
+  const idx = next.findIndex((c) => {
+    if (item?.id && c?.id) return String(item.id) === String(c.id);
+    return (
+      String(c?.animal_id || "") === String(item?.animal_id || "") &&
+      String(c?.dia || "").slice(0, 10) === String(item?.dia || "").slice(0, 10)
+    );
+  });
+  if (idx >= 0) {
+    next[idx] = { ...next[idx], ...item };
+  } else {
+    next.push(item);
+  }
+  return next;
+}
 
 /* ===================== react-select styles ===================== */
 const selectBaseStyles = {
@@ -203,6 +243,14 @@ export default function AbaCCS({ vaca }) {
     setErro("");
     setCarregando(true);
 
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      const cache = normalizeCacheList(await kvGet(CACHE_CCS_KEY));
+      const filtrado = cache.filter((h) => String(h?.animal_id || "") === String(vaca.id));
+      setHistorico(filtrado);
+      setCarregando(false);
+      return;
+    }
+
     const { data, error } = await supabase
       .from("leite_ccs_registros")
       .select(
@@ -231,6 +279,9 @@ export default function AbaCCS({ vaca }) {
     }
 
     setHistorico(data || []);
+    const cacheAtual = normalizeCacheList(await kvGet(CACHE_CCS_KEY));
+    const atualizado = (data || []).reduce((acc, item) => upsertCcsCache(acc, item), cacheAtual);
+    await kvSet(CACHE_CCS_KEY, atualizado);
     setCarregando(false);
   };
 
@@ -417,6 +468,38 @@ export default function AbaCCS({ vaca }) {
     };
 
     try {
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        const cacheAtual = normalizeCacheList(await kvGet(CACHE_CCS_KEY));
+        const existente = cacheAtual.find(
+          (h) =>
+            String(h?.animal_id || "") === String(vaca.id) &&
+            String(h?.dia || "").slice(0, 10) === String(dia)
+        );
+        const registroId = registroEditandoId || existente?.id || gerarUUID();
+
+        const registroLocal = {
+          ...payload,
+          id: registroId,
+          leite_laboratorios: labSel
+            ? { id: labSel.value, nome: labSel.label }
+            : existente?.leite_laboratorios || null,
+          leite_responsaveis: respSel
+            ? { id: respSel.value, nome: respSel.label }
+            : existente?.leite_responsaveis || null,
+        };
+
+        const cacheAtualizado = upsertCcsCache(cacheAtual, registroLocal);
+        await kvSet(CACHE_CCS_KEY, cacheAtualizado);
+        await enqueue("leite_ccs_registros.upsert", { ...payload, id: registroId });
+
+        setRegistroEditandoId(registroId);
+        setHistorico(
+          cacheAtualizado.filter((h) => String(h?.animal_id || "") === String(vaca.id))
+        );
+        setSalvando(false);
+        return;
+      }
+
       const { data, error } = await supabase
         .from("leite_ccs_registros")
         .upsert(payload, { onConflict: "animal_id,dia" })

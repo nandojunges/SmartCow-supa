@@ -69,6 +69,47 @@ export async function syncPending() {
         continue;
       }
 
+      if (item.action === "medicoes_leite.upsert") {
+        const payload = item.payload || {};
+        const rows = Array.isArray(payload) ? payload : [payload];
+        if (rows.length > 0) {
+          const { error } = await supabase
+            .from("medicoes_leite")
+            .upsert(rows, { onConflict: "id" });
+          if (error) throw error;
+        }
+        await markDone(item.id);
+        continue;
+      }
+
+      if (item.action === "leite_cmt_testes.upsert") {
+        const { teste, quartos } = item.payload || {};
+        if (teste) {
+          const { error } = await supabase
+            .from("leite_cmt_testes")
+            .upsert(teste, { onConflict: "id" });
+          if (error) throw error;
+        }
+        if (Array.isArray(quartos) && quartos.length > 0) {
+          const { error } = await supabase
+            .from("leite_cmt_quartos")
+            .upsert(quartos, { onConflict: "teste_id,quarto" });
+          if (error) throw error;
+        }
+        await markDone(item.id);
+        continue;
+      }
+
+      if (item.action === "leite_ccs_registros.upsert") {
+        const payload = item.payload || {};
+        const { error } = await supabase
+          .from("leite_ccs_registros")
+          .upsert(payload, { onConflict: "id" });
+        if (error) throw error;
+        await markDone(item.id);
+        continue;
+      }
+
       await markFailed(item.id, `Ação não suportada: ${item.action}`);
     } catch (error) {
       console.error("[sync] Falha ao processar item:", item, error);
