@@ -1,11 +1,29 @@
 // src/pages/ConsumoReposicao/Lotes.jsx
 import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { supabase } from "../../lib/supabaseClient";
+import { enqueue, kvGet, kvSet } from "../../offline/localDB";
 
 import "../../styles/tabelaModerna.css";
 import "../../styles/botoes.css";
 
 import { ModalLoteCadastro, ModalLoteInfo, ModalConfirmarExclusao } from "./ModalLote";
+
+const CACHE_LOTES_KEY = "cache:lotes:list";
+
+function normalizeLotesCache(cache) {
+  return Array.isArray(cache) ? cache : [];
+}
+
+function generateLocalId() {
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+  } catch {
+    // fallback abaixo
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+}
 
 /* ===================== helpers (map modal <-> banco) ===================== */
 // Banco usa: nivel_produtivo
@@ -58,6 +76,11 @@ export default function Lotes() {
   const [info, setInfo] = useState(null);
   const [excluirId, setExcluirId] = useState(null);
 
+  const updateCache = useCallback(async (nextList) => {
+    setLotes(nextList);
+    await kvSet(CACHE_LOTES_KEY, nextList);
+  }, []);
+
   const colunas = useMemo(
     () => ["Nome", "Nº de Vacas", "Função", "Nível Produtivo", "Status", "Ação"],
     []
@@ -104,6 +127,13 @@ export default function Lotes() {
     setLoading(true);
     setErro("");
 
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      const cache = normalizeLotesCache(await kvGet(CACHE_LOTES_KEY));
+      setLotes(cache);
+      setLoading(false);
+      return;
+    }
+
     // View que você criou: v_lotes_com_contagem
     const { data, error } = await supabase
       .from("v_lotes_com_contagem")
@@ -118,9 +148,9 @@ export default function Lotes() {
       return;
     }
 
-    setLotes((data || []).map(dbToUiLote));
+    await updateCache((data || []).map(dbToUiLote));
     setLoading(false);
-  }, []);
+  }, [updateCache]);
 
   useEffect(() => {
     carregar();
@@ -162,6 +192,36 @@ export default function Lotes() {
     const payload = uiToDbPayload(loteFinal);
 
     try {
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        const localId = loteFinal?.id || generateLocalId();
+        const loteUi = {
+          ...loteFinal,
+          id: localId,
+          nivelProducao: loteFinal?.nivelProducao || loteFinal?.nivel_produtivo || "",
+          nivel_produtivo:
+            loteFinal?.funcao === "Lactação"
+              ? String(loteFinal?.nivelProducao || loteFinal?.nivel_produtivo || "").trim() || null
+              : null,
+        };
+
+        const nextList = (
+          loteFinal?.id
+            ? lotes.map((l) => (String(l.id) === String(loteFinal.id) ? { ...l, ...loteUi } : l))
+            : [...lotes, loteUi]
+        ).sort((a, b) => String(a.nome || "").localeCompare(String(b.nome || "")));
+
+        await updateCache(nextList);
+
+        await enqueue(loteFinal?.id ? "lotes.update" : "lotes.insert", {
+          id: localId,
+          payload: { ...payload, id: localId },
+        });
+
+        setCad({ open: false, index: null, lote: null });
+        setLoading(false);
+        return;
+      }
+
       if (loteFinal?.id) {
         const { error } = await supabase.from("lotes").update(payload).eq("id", loteFinal.id);
         if (error) throw error;
@@ -186,6 +246,16 @@ export default function Lotes() {
     setErro("");
 
     try {
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        const nextList = lotes.map((l) =>
+          String(l.id) === String(loteId) ? { ...l, ativo: !ativoAtual } : l
+        );
+        await updateCache(nextList);
+        await enqueue("lotes.update", { id: loteId, payload: { ativo: !ativoAtual } });
+        setLoading(false);
+        return;
+      }
+
       const { error } = await supabase.from("lotes").update({ ativo: !ativoAtual }).eq("id", loteId);
       if (error) throw error;
       await carregar();
@@ -203,6 +273,15 @@ export default function Lotes() {
     setErro("");
 
     try {
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        const nextList = lotes.filter((l) => String(l.id) !== String(excluirId));
+        await updateCache(nextList);
+        await enqueue("lotes.delete", { id: excluirId });
+        setExcluirId(null);
+        setLoading(false);
+        return;
+      }
+
       const { error } = await supabase.from("lotes").delete().eq("id", excluirId);
       if (error) throw error;
 
