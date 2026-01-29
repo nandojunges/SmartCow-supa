@@ -6,9 +6,10 @@ import { supabase } from "../../lib/supabaseClient";
 import { useFazenda } from "../../context/FazendaContext";
 
 const STATUS_LABELS = {
-  PENDENTE: { label: "Pendente", tone: "warning" },
-  ACEITO: { label: "Aceito", tone: "success" },
-  RECUSADO: { label: "Recusado", tone: "neutral" },
+  pendente: { label: "Pendente", tone: "warning" },
+  aceito: { label: "Aceito", tone: "success" },
+  recusado: { label: "Recusado", tone: "neutral" },
+  revogado: { label: "Revogado", tone: "neutral" },
 };
 
 export default function TecnicoHome() {
@@ -26,7 +27,7 @@ export default function TecnicoHome() {
     try {
       const [acessosResp, convitesResp] = await Promise.all([
         supabase.rpc("listar_fazendas_com_acesso"),
-        supabase.rpc("listar_meus_convites"),
+        supabase.rpc("listar_convites_pendentes"),
       ]);
 
       if (acessosResp.error) {
@@ -81,13 +82,13 @@ export default function TecnicoHome() {
   const convitesPendentes = useMemo(
     () =>
       convites.filter(
-        (convite) => (convite.status ?? "PENDENTE").toUpperCase() === "PENDENTE"
+        (convite) => (convite.status ?? "pendente").toLowerCase() === "pendente"
       ),
     [convites]
   );
 
   const acessosAtivos = useMemo(
-    () => acessos.filter((acesso) => (acesso.status ?? "ATIVO") === "ATIVO"),
+    () => acessos.filter((acesso) => (acesso.status ?? "ativo") === "ativo"),
     [acessos]
   );
 
@@ -97,12 +98,28 @@ export default function TecnicoHome() {
     setProcessandoId(convite.id);
 
     try {
-      const { error } = await supabase.rpc("aceitar_convite_acesso", {
-        p_token: convite.token,
-      });
+      const { error: acessoError } = await supabase.from("fazenda_acessos").upsert(
+        {
+          fazenda_id: convite.fazenda_id,
+          user_id: usuario.id,
+          status: "ativo",
+          profissional_tipo: convite.profissional_tipo ?? null,
+          profissional_nome: convite.profissional_nome ?? null,
+        },
+        { onConflict: "fazenda_id,user_id" }
+      );
 
-      if (error) {
-        throw error;
+      if (acessoError) {
+        throw acessoError;
+      }
+
+      const { error: conviteError } = await supabase
+        .from("convites_acesso")
+        .update({ status: "aceito", accepted_at: new Date().toISOString() })
+        .eq("id", convite.id);
+
+      if (conviteError) {
+        throw conviteError;
       }
 
       toast.success("Convite aceito! A fazenda já está disponível para você.");
@@ -151,8 +168,8 @@ export default function TecnicoHome() {
         ) : (
           <div style={styles.list}>
             {convitesPendentes.map((convite) => {
-              const statusKey = (convite.status ?? "PENDENTE").toUpperCase();
-              const statusInfo = STATUS_LABELS[statusKey] || STATUS_LABELS.PENDENTE;
+              const statusKey = (convite.status ?? "pendente").toLowerCase();
+              const statusInfo = STATUS_LABELS[statusKey] || STATUS_LABELS.pendente;
 
               return (
                 <div key={convite.id} style={styles.listItem}>

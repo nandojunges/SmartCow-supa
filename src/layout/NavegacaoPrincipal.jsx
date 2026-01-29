@@ -72,7 +72,8 @@ export default function NavegacaoPrincipal({ tipoConta }) {
   const tipoContaAtual = tipoContaPerfil ?? tipoConta;
   const isAssistenteTecnico =
     String(tipoContaAtual ?? "").trim().toUpperCase() === "ASSISTENTE_TECNICO";
-  const usarMenuTecnico = isAssistenteTecnico && !fazendaAtivaId;
+  const usarMenuTecnico =
+    isAssistenteTecnico && !fazendaAtivaId && pathname.startsWith("/tecnico");
   const abas = usarMenuTecnico ? ABAS_TECNICO : ABAS_BASE;
   const abaAtiva = useAbaAtiva(pathname, abas);
 
@@ -229,9 +230,21 @@ export default function NavegacaoPrincipal({ tipoConta }) {
               }
               clearFazendaAtiva();
               await supabase.auth.signOut();
+              if (typeof localStorage !== "undefined") {
+                localStorage.clear();
+              }
+              if (typeof sessionStorage !== "undefined") {
+                sessionStorage.clear();
+              }
               return;
             }
             await supabase.auth.signOut();
+            if (typeof localStorage !== "undefined") {
+              localStorage.clear();
+            }
+            if (typeof sessionStorage !== "undefined") {
+              sessionStorage.clear();
+            }
           }}
           title={
             isAssistenteTecnico
