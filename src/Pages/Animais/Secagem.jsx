@@ -348,11 +348,12 @@ export default function Secagem({ isOnline = navigator.onLine }) {
       >
         <label
           className="st-filter__label"
-          style={{ minWidth: 200, flex: "1 1 220px" }}
+          style={{ maxWidth: 220, flex: "1 1 220px" }}
         >
           Dias antes do parto para secar
           <input
             className="st-filter-input"
+            style={{ width: 90 }}
             type="number"
             min={1}
             placeholder="Ex: 60"
@@ -362,11 +363,12 @@ export default function Secagem({ isOnline = navigator.onLine }) {
         </label>
         <label
           className="st-filter__label"
-          style={{ minWidth: 200, flex: "1 1 220px" }}
+          style={{ maxWidth: 220, flex: "1 1 220px" }}
         >
           Avisar/preparar com antecedência
           <input
             className="st-filter-input"
+            style={{ width: 90 }}
             type="number"
             min={0}
             placeholder="Ex: 7"
