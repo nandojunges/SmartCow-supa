@@ -72,8 +72,12 @@ export default function NavegacaoPrincipal({ tipoConta }) {
   const tipoContaAtual = tipoContaPerfil ?? tipoConta;
   const isAssistenteTecnico =
     String(tipoContaAtual ?? "").trim().toUpperCase() === "ASSISTENTE_TECNICO";
+  const isModoConsultor = isAssistenteTecnico && Boolean(fazendaAtualId);
   const usarMenuTecnico = isAssistenteTecnico && !fazendaAtualId;
-  const abas = usarMenuTecnico ? ABAS_TECNICO : ABAS_BASE;
+  const abasBase = isModoConsultor
+    ? ABAS_BASE.filter((aba) => aba.id !== "ajustes")
+    : ABAS_BASE;
+  const abas = usarMenuTecnico ? ABAS_TECNICO : abasBase;
   const abaAtiva = useAbaAtiva(pathname, abas);
 
   // ===== PALETA “AgTech premium” =====

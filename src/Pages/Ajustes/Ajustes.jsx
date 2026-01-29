@@ -1,5 +1,6 @@
 // src/pages/Ajustes.jsx
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Select from "react-select";
 import { toast } from "react-toastify";
 import { supabase } from "../../lib/supabaseClient";
@@ -39,6 +40,7 @@ const selectStyles = {
 };
 
 export default function Ajustes() {
+  const navigate = useNavigate();
   const { fazendaAtualId, setFazendaAtualId } = useFazenda();
   const [email, setEmail] = useState("");
   const [profissionalTipo, setProfissionalTipo] = useState(null);
@@ -53,10 +55,17 @@ export default function Ajustes() {
   const [acessos, setAcessos] = useState([]);
   const [usuario, setUsuario] = useState(null);
   const [avisoSemFazenda, setAvisoSemFazenda] = useState("");
+  const [tipoConta, setTipoConta] = useState(null);
 
   const emailNormalizado = useMemo(() => email.trim().toLowerCase(), [email]);
   const fazendaId = fazendaAtiva?.id ?? null;
   const fazendaNome = fazendaAtiva?.nome ?? "";
+  const tipoContaNormalizada = useMemo(
+    () => (tipoConta ? String(tipoConta).trim().toUpperCase() : null),
+    [tipoConta]
+  );
+  const isAssistenteTecnico = tipoContaNormalizada === "ASSISTENTE_TECNICO";
+  const modoConsultor = isAssistenteTecnico && Boolean(fazendaAtualId);
 
   const carregarListas = useCallback(async (fazendaIdAtual) => {
     if (!fazendaIdAtual) return;
@@ -150,6 +159,33 @@ export default function Ajustes() {
           return;
         }
 
+        const { data: perfilData, error: perfilError } = await supabase
+          .from("profiles")
+          .select("tipo_conta")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (perfilError && import.meta.env.DEV) {
+          console.warn("Erro ao carregar tipo de conta:", perfilError.message);
+        }
+
+        const tipoContaRaw =
+          perfilData?.tipo_conta ??
+          user.user_metadata?.tipo_conta ??
+          user.user_metadata?.tipoConta;
+        const tipoContaFinal = tipoContaRaw
+          ? String(tipoContaRaw).trim().toUpperCase()
+          : "PRODUTOR";
+
+        if (isMounted) {
+          setTipoConta(tipoContaFinal);
+          setUsuario(user);
+        }
+
+        if (tipoContaFinal === "ASSISTENTE_TECNICO") {
+          return;
+        }
+
         const { fazenda, fazendas: fazendasOrdenadas } = await ensureFazendaDoProdutor(
           user.id
         );
@@ -185,6 +221,12 @@ export default function Ajustes() {
       isMounted = false;
     };
   }, [carregarListas]);
+
+  useEffect(() => {
+    if (modoConsultor) {
+      navigate("/inicio", { replace: true });
+    }
+  }, [modoConsultor, navigate]);
 
   const convitesPendentes = useMemo(
     () =>
@@ -331,6 +373,19 @@ export default function Ajustes() {
     } finally {
       setProcessandoId(null);
     }
+  }
+
+  if (modoConsultor) {
+    return (
+      <div style={styles.page}>
+        <section style={styles.card}>
+          <h1 style={styles.title}>Acesso restrito ao proprietário</h1>
+          <p style={styles.subtitle}>
+            O modo consultor não possui permissão para acessar os Ajustes.
+          </p>
+        </section>
+      </div>
+    );
   }
 
   return (
