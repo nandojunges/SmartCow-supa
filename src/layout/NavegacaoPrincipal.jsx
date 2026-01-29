@@ -1,14 +1,9 @@
 // src/layout/NavegacaoPrincipal.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import StatusConexao from "../components/StatusConexao";
 import { useFazenda } from "../context/FazendaContext";
-import {
-  ensureActiveFazenda,
-  listFazendasForUser,
-  setActiveFazendaId,
-} from "../lib/fazendaHelpers";
 
 const ABAS_BASE = [
   { id: "inicio",     label: "Início",            title: "Página inicial" },
@@ -33,10 +28,8 @@ function useAbaAtiva(pathname, abas) {
 export default function NavegacaoPrincipal({ tipoConta }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { fazendaAtualId, setFazendaAtualId, clearFazendaAtualId } = useFazenda();
+  const { fazendaAtualId, clearFazendaAtualId } = useFazenda();
   const [tipoContaPerfil, setTipoContaPerfil] = useState(null);
-  const [fazendas, setFazendas] = useState([]);
-  const [carregandoFazendas, setCarregandoFazendas] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
@@ -76,57 +69,6 @@ export default function NavegacaoPrincipal({ tipoConta }) {
     };
   }, []);
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function carregarFazendas() {
-      try {
-        const { data: sessionData } = await supabase.auth.getSession();
-        const session = sessionData?.session ?? null;
-        if (!session?.user?.id) {
-          return;
-        }
-
-        const lista = await listFazendasForUser(session);
-        if (!isMounted) {
-          return;
-        }
-
-        setFazendas(lista);
-
-        const ensuredId = ensureActiveFazenda(lista);
-        if (ensuredId && String(ensuredId) !== String(fazendaAtualId ?? "")) {
-          setFazendaAtualId(ensuredId);
-        }
-      } catch (error) {
-        if (import.meta.env.DEV) {
-          console.error("Erro ao carregar fazendas no header:", error?.message);
-        }
-      } finally {
-        if (isMounted) {
-          setCarregandoFazendas(false);
-        }
-      }
-    }
-
-    carregarFazendas();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [fazendaAtualId, setFazendaAtualId]);
-
-  const fazendaAtiva = useMemo(() => {
-    if (!fazendas.length) {
-      return null;
-    }
-    return (
-      fazendas.find((fazenda) => String(fazenda.id) === String(fazendaAtualId ?? "")) ??
-      fazendas[0] ??
-      null
-    );
-  }, [fazendaAtualId, fazendas]);
-
   const tipoContaAtual = tipoContaPerfil ?? tipoConta;
   const isAssistenteTecnico =
     String(tipoContaAtual ?? "").trim().toUpperCase() === "ASSISTENTE_TECNICO";
@@ -145,7 +87,6 @@ export default function NavegacaoPrincipal({ tipoConta }) {
   const TXT_MUTED = "rgba(255,255,255,0.72)";
 
   const ativa = abas.find((a) => a.id === abaAtiva);
-  const mostrarDropdown = fazendas.length >= 2;
 
   return (
     <header
@@ -183,82 +124,6 @@ export default function NavegacaoPrincipal({ tipoConta }) {
             >
               SmartCow
             </span>
-            {!carregandoFazendas && fazendaAtiva && (
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 800,
-                    color: TXT_MUTED,
-                    textTransform: "uppercase",
-                    letterSpacing: 0.4,
-                  }}
-                >
-                  Fazenda:
-                </span>
-                {mostrarDropdown ? (
-                  <div style={{ position: "relative", display: "inline-flex" }}>
-                    <select
-                      aria-label="Selecionar fazenda"
-                      value={fazendaAtiva?.id ?? ""}
-                      onChange={(event) => {
-                        const nextId = event.target.value;
-                        setActiveFazendaId(nextId);
-                        setFazendaAtualId(nextId);
-                        window.dispatchEvent(new Event("fazenda:changed"));
-                      }}
-                      style={{
-                        appearance: "none",
-                        background: "rgba(255,255,255,0.12)",
-                        border: "1px solid rgba(255,255,255,0.3)",
-                        color: TXT,
-                        fontWeight: 800,
-                        fontSize: 12,
-                        borderRadius: 10,
-                        padding: "4px 26px 4px 10px",
-                        cursor: "pointer",
-                        maxWidth: 180,
-                      }}
-                    >
-                      {fazendas.map((fazenda) => (
-                        <option key={fazenda.id} value={fazenda.id}>
-                          {fazenda.nome || `Fazenda ${fazenda.id}`}
-                        </option>
-                      ))}
-                    </select>
-                    <span
-                      aria-hidden="true"
-                      style={{
-                        position: "absolute",
-                        right: 8,
-                        top: "50%",
-                        transform: "translateY(-50%)",
-                        pointerEvents: "none",
-                        color: TXT,
-                        fontSize: 10,
-                      }}
-                    >
-                      ▼
-                    </span>
-                  </div>
-                ) : (
-                  <span
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 800,
-                      color: TXT,
-                      maxWidth: 180,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                    title={fazendaAtiva?.nome || `Fazenda ${fazendaAtiva?.id}`}
-                  >
-                    {fazendaAtiva?.nome || `Fazenda ${fazendaAtiva?.id}`}
-                  </span>
-                )}
-              </div>
-            )}
             {isAssistenteTecnico && fazendaAtualId && (
               <span
                 style={{
