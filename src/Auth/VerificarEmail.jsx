@@ -50,6 +50,7 @@ export default function VerificarEmail() {
     setErro("");
 
     try {
+      const tipoConta = cadastro?.tipoConta || "PRODUTOR";
       // 1) Verifica o código recebido por e-mail (OTP)
       const { data, error } = await supabase.auth.verifyOtp({
         email: cadastro.email,
@@ -66,14 +67,20 @@ export default function VerificarEmail() {
       }
 
       // 2) Já autenticado → define a senha e metadata
+      const metadata = {
+        nome: cadastro.nome,
+        phone: cadastro.telefone,
+        cpf: cadastro.cpf,
+        tipoConta,
+      };
+
+      if (tipoConta === "PRODUTOR") {
+        metadata.fazenda = cadastro.fazenda;
+      }
+
       const { error: updateError } = await supabase.auth.updateUser({
         password: cadastro.senha,
-        data: {
-          nome: cadastro.nome,
-          fazenda: cadastro.fazenda,
-          phone: cadastro.telefone,
-          cpf: cadastro.cpf,
-        },
+        data: metadata,
       });
 
       if (updateError) {

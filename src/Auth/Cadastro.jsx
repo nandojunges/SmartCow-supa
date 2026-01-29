@@ -40,6 +40,7 @@ export default function Cadastro() {
     senha: "",
     confirmar: "",
   });
+  const [tipoConta, setTipoConta] = useState("PRODUTOR");
 
   const [erro, setErro] = useState("");
   const [mostrarSenha, setMostrarSenha] = useState(false);
@@ -56,7 +57,11 @@ export default function Cadastro() {
       !form.senha ||
       !form.confirmar
     ) {
-      setErro("Preencha todos os campos obrigatórios.");
+      setErro(
+        tipoConta === "ASSISTENTE_TECNICO"
+          ? "Preencha todos os campos obrigatórios para Assistente Técnico."
+          : "Preencha todos os campos obrigatórios para Produtor."
+      );
       return false;
     }
 
@@ -99,6 +104,7 @@ export default function Cadastro() {
     const emailTrim = form.email.trim().toLowerCase();
     const telDigitos = form.telefone.replace(/\D/g, "");
     const cpfDigitos = form.cpf.replace(/\D/g, "");
+    const fazendaTrim = form.fazenda.trim();
 
     try {
       setErro("");
@@ -106,13 +112,25 @@ export default function Cadastro() {
       // guarda TODOS os dados localmente para usar após o OTP
       const pendingCadastro = {
         nome: form.nome.trim(),
-        fazenda: form.fazenda.trim(),
+        fazenda: tipoConta === "PRODUTOR" ? fazendaTrim : "",
         email: emailTrim,
         telefone: telDigitos,
         cpf: cpfDigitos,
         senha: form.senha, // só será enviada ao Supabase depois da verificação
+        tipoConta,
       };
       localStorage.setItem("pendingCadastro", JSON.stringify(pendingCadastro));
+
+      const metadata = {
+        full_name: form.nome.trim(),
+        phone: telDigitos,
+        cpf: cpfDigitos,
+        tipoConta,
+      };
+
+      if (tipoConta === "PRODUTOR") {
+        metadata.fazenda = fazendaTrim;
+      }
 
       // envia o código de 6 dígitos para o e-mail
       // e já grava os metadados no auth.users.raw_user_meta_data
@@ -120,12 +138,7 @@ export default function Cadastro() {
         email: emailTrim,
         options: {
           shouldCreateUser: true, // cria o usuário caso ainda não exista
-          data: {
-            full_name: form.nome.trim(),
-            phone: telDigitos,
-            cpf: cpfDigitos,
-            fazenda: form.fazenda.trim(),
-          },
+          data: metadata,
         },
       });
 
@@ -217,6 +230,27 @@ export default function Cadastro() {
     padding: 0,
   };
 
+  const seletorContaStyle = {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: 12,
+  };
+
+  const cardBaseStyle = {
+    borderRadius: 14,
+    border: "1px solid #e2e8f0",
+    padding: "12px 14px",
+    background: "#fff",
+    textAlign: "left",
+    cursor: "pointer",
+    boxShadow: "0 1px 2px rgba(0,0,0,0.08)",
+  };
+
+  const cardSelectedStyle = {
+    borderColor: "#1565c0",
+    boxShadow: "0 8px 18px rgba(21,101,192,0.2)",
+  };
+
   return (
     <div style={containerStyle}>
       <div style={panelStyle}>
@@ -262,6 +296,53 @@ export default function Cadastro() {
             gap: 12,
           }}
         >
+          <div>
+            <div style={seletorContaStyle}>
+              <button
+                type="button"
+                onClick={() => setTipoConta("PRODUTOR")}
+                style={{
+                  ...cardBaseStyle,
+                  ...(tipoConta === "PRODUTOR" ? cardSelectedStyle : {}),
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: 14 }}>Produtor</div>
+                <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>
+                  Gestão completa da fazenda.
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setTipoConta("ASSISTENTE_TECNICO");
+                  setForm((f) => ({ ...f, fazenda: "" }));
+                }}
+                style={{
+                  ...cardBaseStyle,
+                  ...(tipoConta === "ASSISTENTE_TECNICO" ? cardSelectedStyle : {}),
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: 14 }}>
+                  Assistente Técnico
+                </div>
+                <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>
+                  Acesso focado em suporte.
+                </div>
+              </button>
+            </div>
+            <p
+              style={{
+                margin: "8px 0 4px",
+                fontSize: 12,
+                color: "#6b7280",
+              }}
+            >
+              {tipoConta === "ASSISTENTE_TECNICO"
+                ? "Você pode seguir sem informar fazenda."
+                : "Cadastre sua fazenda para personalizar o acesso."}
+            </p>
+          </div>
+
           {/* Nome */}
           <div>
             <label style={labelStyle}>Nome *</label>
@@ -278,20 +359,40 @@ export default function Cadastro() {
           </div>
 
           {/* Fazenda + Telefone */}
-          <div style={grid2}>
-            <div>
-              <label style={labelStyle}>Fazenda</label>
-              <input
-                type="text"
-                placeholder="Ex: Fazenda Esperança"
-                value={form.fazenda}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, fazenda: e.target.value }))
-                }
-                style={{ ...inputBase, textTransform: "capitalize" }}
-              />
-            </div>
+          {tipoConta === "PRODUTOR" ? (
+            <div style={grid2}>
+              <div>
+                <label style={labelStyle}>Fazenda</label>
+                <input
+                  type="text"
+                  placeholder="Ex: Fazenda Esperança"
+                  value={form.fazenda}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, fazenda: e.target.value }))
+                  }
+                  style={{ ...inputBase, textTransform: "capitalize" }}
+                />
+              </div>
 
+              <div>
+                <label style={labelStyle}>Telefone *</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="(99) 99999-9999"
+                  value={form.telefone}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      telefone: formatPhone(e.target.value),
+                    }))
+                  }
+                  maxLength={16}
+                  style={inputBase}
+                />
+              </div>
+            </div>
+          ) : (
             <div>
               <label style={labelStyle}>Telefone *</label>
               <input
@@ -309,7 +410,7 @@ export default function Cadastro() {
                 style={inputBase}
               />
             </div>
-          </div>
+          )}
 
           {/* CPF */}
           <div>
