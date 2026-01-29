@@ -3,8 +3,8 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { enqueue, kvGet, kvSet } from "../../offline/localDB";
 import "../../styles/tabelaModerna.css";
-import ModalIniciarPreParto from "ModalIniciarPreParto";
-import ModalRegistrarParto from "ModalRegistrarParto";
+import ModalIniciarPreParto from "./ModalIniciarPreParto";
+import ModalRegistrarParto from "./ModalRegistrarParto";
 
 export const iconePreParto = "/icones/preparto.png";
 export const rotuloPreParto = "Pré-parto/Parto";
