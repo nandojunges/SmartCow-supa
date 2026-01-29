@@ -50,7 +50,7 @@ export default function VerificarEmail() {
     setErro("");
 
     try {
-      const tipoConta = cadastro?.tipoConta || "PRODUTOR";
+      const tipoConta = cadastro?.tipo_conta || cadastro?.tipoConta || "PRODUTOR";
       // 1) Verifica o código recebido por e-mail (OTP)
       const { data, error } = await supabase.auth.verifyOtp({
         email: cadastro.email,
@@ -68,15 +68,12 @@ export default function VerificarEmail() {
 
       // 2) Já autenticado → define a senha e metadata
       const metadata = {
-        nome: cadastro.nome,
+        full_name: cadastro.nome,
         phone: cadastro.telefone,
         cpf: cadastro.cpf,
-        tipoConta,
+        tipo_conta: tipoConta,
+        ...(tipoConta === "PRODUTOR" ? { fazenda: cadastro.fazenda } : {}),
       };
-
-      if (tipoConta === "PRODUTOR") {
-        metadata.fazenda = cadastro.fazenda;
-      }
 
       const { error: updateError } = await supabase.auth.updateUser({
         password: cadastro.senha,
@@ -92,6 +89,34 @@ export default function VerificarEmail() {
         // mesmo com erro de updateUser o login está ativo, então segue pro app
       } else {
         toast.success("Cadastro concluído com sucesso!");
+      }
+
+      const userId = data?.user?.id ?? data?.session?.user?.id;
+
+      if (userId) {
+        const profilePayload = {
+          id: userId,
+          full_name: cadastro.nome,
+          email: cadastro.email,
+          phone: cadastro.telefone,
+          cpf: cadastro.cpf,
+          tipo_conta: tipoConta,
+          fazenda: tipoConta === "PRODUTOR" ? cadastro.fazenda : null,
+        };
+
+        const { error: profileError } = await supabase
+          .from("profiles")
+          .upsert(profilePayload, { onConflict: "id" });
+
+        if (profileError) {
+          console.error("Erro ao salvar profile:", profileError);
+          toast.error(
+            profileError.message ||
+              "Cadastro concluído, mas houve erro ao salvar o perfil."
+          );
+        }
+      } else {
+        console.warn("verifyOtp sem userId para criar profile.");
       }
 
       // limpar storage e seguir para o sistema

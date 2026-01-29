@@ -95,7 +95,10 @@ export default function App() {
     };
   }, [session?.user?.id]);
 
-  const tipoContaRaw = profile?.tipo_conta ?? session?.user?.user_metadata?.tipoConta;
+  const tipoContaRaw =
+    profile?.tipo_conta ??
+    session?.user?.user_metadata?.tipo_conta ??
+    session?.user?.user_metadata?.tipoConta;
   const tipoConta = tipoContaRaw ? String(tipoContaRaw).trim().toUpperCase() : "PRODUTOR";
   const isAssistenteTecnico = tipoConta === "ASSISTENTE_TECNICO";
   const hasFazendaSelecionada = hasFazendaAtiva;
