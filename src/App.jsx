@@ -1,6 +1,6 @@
 // src/App.jsx
 import { useEffect, useState } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { supabase } from "./lib/supabaseClient";
 import { syncAnimaisSeed, syncPending } from "./offline/sync";
 
@@ -28,6 +28,8 @@ import TecnicoHome from "./Pages/Tecnico/TecnicoHome.jsx";
 export default function App() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(false);
 
   // Ouve sessão do Supabase
   useEffect(() => {
@@ -62,6 +64,44 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!session?.user?.id) {
+      setProfile(null);
+      setProfileLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+    setProfileLoading(true);
+
+    supabase
+      .from("profiles")
+      .select("id, tipo_conta, role")
+      .eq("id", session.user.id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!isMounted) return;
+        if (error) {
+          console.warn("Erro ao carregar perfil:", error.message);
+        }
+        setProfile(data ?? null);
+        setProfileLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [session?.user?.id]);
+
+  const tipoContaRaw = profile?.tipo_conta ?? session?.user?.user_metadata?.tipoConta;
+  const tipoConta = tipoContaRaw ? String(tipoContaRaw).trim().toUpperCase() : "PRODUTOR";
+  const isAssistenteTecnico = tipoConta === "ASSISTENTE_TECNICO";
+  const hasFazendaSelecionada =
+    typeof localStorage !== "undefined" &&
+    Boolean(
+      localStorage.getItem("fazendaSelecionadaId") || localStorage.getItem("fazendaSelecionada")
+    );
+
   if (loading) {
     return null; // ou um spinner de "Carregando..."
   }
@@ -93,16 +133,26 @@ export default function App() {
 
             {/* 🟦 DEMAIS PÁGINAS DENTRO DO SISTEMABASE (com menu azul) */}
             <Route element={<SistemaBase />}>
-              <Route path="/inicio" element={<Inicio />} />
-              <Route path="/animais" element={<Animais />} />
-              <Route path="/bezerras" element={<Bezerras />} />
-              <Route path="/reproducao" element={<Reproducao />} />
-              <Route path="/leite" element={<Leite />} />
-              <Route path="/saude" element={<Saude />} />
-              <Route path="/consumo" element={<ConsumoReposicao />} />
-              <Route path="/financeiro" element={<Financeiro />} />
-              <Route path="/calendario" element={<Calendario />} />
-              <Route path="/ajustes" element={<Ajustes />} />
+              <Route
+                element={
+                  <AssistenteGuard
+                    isAssistenteTecnico={isAssistenteTecnico}
+                    hasFazendaSelecionada={hasFazendaSelecionada}
+                    loading={profileLoading}
+                  />
+                }
+              >
+                <Route path="/inicio" element={<Inicio />} />
+                <Route path="/animais" element={<Animais />} />
+                <Route path="/bezerras" element={<Bezerras />} />
+                <Route path="/reproducao" element={<Reproducao />} />
+                <Route path="/leite" element={<Leite />} />
+                <Route path="/saude" element={<Saude />} />
+                <Route path="/consumo" element={<ConsumoReposicao />} />
+                <Route path="/financeiro" element={<Financeiro />} />
+                <Route path="/calendario" element={<Calendario />} />
+                <Route path="/ajustes" element={<Ajustes />} />
+              </Route>
               <Route path="/tecnico" element={<TecnicoHome />} />
 
               {/* qualquer rota desconhecida volta para /inicio */}
@@ -113,4 +163,16 @@ export default function App() {
       </Routes>
     </>
   );
+}
+
+function AssistenteGuard({ isAssistenteTecnico, hasFazendaSelecionada, loading }) {
+  if (loading) {
+    return null;
+  }
+
+  if (isAssistenteTecnico && !hasFazendaSelecionada) {
+    return <Navigate to="/tecnico" replace />;
+  }
+
+  return <Outlet />;
 }

@@ -127,7 +127,7 @@ export default function Login() {
       // 3) Busca o perfil pela COLUNA id (auth.uid() == profiles.id)
       const { data: perfil, error: perfilError } = await supabase
         .from("profiles")
-        .select("id, role, email")
+        .select("id, role, email, tipo_conta")
         .eq("id", userId)
         .maybeSingle(); // não explode se não achar
 
@@ -135,11 +135,11 @@ export default function Login() {
         console.warn("Erro ao buscar perfil:", perfilError.message);
       }
 
-      let role = "usuario";
-
-      if (perfil && perfil.role) {
-        role = String(perfil.role).trim().toLowerCase();
-      }
+      const role = perfil?.role ? String(perfil.role).trim().toLowerCase() : "usuario";
+      const tipoContaPerfil = perfil?.tipo_conta ?? user?.user_metadata?.tipoConta;
+      const tipoConta = tipoContaPerfil
+        ? String(tipoContaPerfil).trim().toUpperCase()
+        : "PRODUTOR";
 
       // 🔍 DEBUG: ver o que está vindo
       console.log("DEBUG LOGIN:", {
@@ -147,6 +147,7 @@ export default function Login() {
         emailAuth: user.email,
         perfilRecebido: perfil,
         roleCalculado: role,
+        tipoConta,
       });
       // isso é só provisório pra você ver na tela
       alert(
@@ -155,9 +156,11 @@ export default function Login() {
         }`
       );
 
-      // 4) Decide rota com base no role
+      // 4) Decide rota com base no role e tipo de conta
       if (role === "admin") {
         navigate("/admin", { replace: true });
+      } else if (tipoConta === "ASSISTENTE_TECNICO") {
+        navigate("/tecnico", { replace: true });
       } else {
         navigate("/inicio", { replace: true });
       }
