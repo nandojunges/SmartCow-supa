@@ -2,6 +2,109 @@ import { isMissingColumnError, selectByEmailWithFallback } from "../utils/supaba
 import { supabase } from "./supabaseClient";
 
 const CONVITE_EMAIL_COL = "email_convidado";
+const STORAGE_KEY = "smartcow:fazenda_id";
+const LEGACY_KEYS = ["smartcow:fazendaAtualId", "fazendaAtualId", "fazendaSelecionadaId", "fazendaSelecionada"];
+
+export async function listFazendasForUser(session) {
+  const userId = session?.user?.id;
+  if (!userId) {
+    return [];
+  }
+
+  const tipoContaRaw =
+    session?.user?.user_metadata?.tipo_conta ??
+    session?.user?.user_metadata?.tipoConta ??
+    session?.user?.user_metadata?.tipo;
+  const tipoConta = tipoContaRaw ? String(tipoContaRaw).trim().toUpperCase() : "PRODUTOR";
+  const isConsultor = tipoConta === "ASSISTENTE_TECNICO";
+
+  if (isConsultor) {
+    const { data, error } = await supabase
+      .from("fazenda_acessos")
+      .select("fazenda_id, status, fazendas (id, nome, owner_user_id, created_at)")
+      .eq("user_id", userId)
+      .eq("status", "ATIVO")
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      throw error;
+    }
+
+    return (data ?? [])
+      .map((row) => row?.fazendas ?? null)
+      .filter(Boolean);
+  }
+
+  const { data, error } = await supabase
+    .from("fazendas")
+    .select("id, nome, owner_user_id, created_at")
+    .eq("owner_user_id", userId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw error;
+  }
+
+  return data ?? [];
+}
+
+export function getActiveFazendaId() {
+  if (typeof localStorage === "undefined") {
+    return null;
+  }
+
+  const stored = localStorage.getItem(STORAGE_KEY);
+  if (stored) {
+    return stored;
+  }
+
+  for (const key of LEGACY_KEYS) {
+    const legacyValue = localStorage.getItem(key);
+    if (legacyValue) {
+      return legacyValue;
+    }
+  }
+
+  return null;
+}
+
+export function setActiveFazendaId(id) {
+  if (typeof localStorage === "undefined") {
+    return;
+  }
+
+  if (!id) {
+    localStorage.removeItem(STORAGE_KEY);
+    return;
+  }
+
+  localStorage.setItem(STORAGE_KEY, String(id));
+  LEGACY_KEYS.forEach((key) => localStorage.removeItem(key));
+}
+
+export function ensureActiveFazenda(fazendas) {
+  const lista = fazendas ?? [];
+  if (!lista.length) {
+    setActiveFazendaId(null);
+    return null;
+  }
+
+  const currentId = getActiveFazendaId();
+  const found = currentId
+    ? lista.find((fazenda) => String(fazenda.id) === String(currentId))
+    : null;
+  if (found) {
+    return found.id;
+  }
+
+  const next = lista.length === 1 ? lista[0] : lista[0];
+  if (next?.id) {
+    setActiveFazendaId(next.id);
+    return next.id;
+  }
+
+  return null;
+}
 
 export async function getFazendaDoProdutor(userId) {
   if (!userId) {
