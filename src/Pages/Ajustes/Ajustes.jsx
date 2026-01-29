@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Select from "react-select";
 import { toast } from "react-toastify";
 import { supabase } from "../../lib/supabaseClient";
-import { getOrCreateFazendaDoOwner } from "../../lib/fazendaHelpers";
 
 const PROFISSIONAIS_OPTIONS = [
   { value: "Veterinário (Reprodução)", label: "Veterinário (Reprodução)" },
@@ -43,6 +42,7 @@ export default function Ajustes() {
   const [processandoId, setProcessandoId] = useState(null);
   const [convites, setConvites] = useState([]);
   const [acessos, setAcessos] = useState([]);
+  const [usuario, setUsuario] = useState(null);
 
   const emailNormalizado = useMemo(() => email.trim().toLowerCase(), [email]);
   const profissionalTipoLabel = profissionalTipo?.value ?? null;
@@ -103,7 +103,7 @@ export default function Ajustes() {
           ...acesso,
           email: perfil?.email ?? "",
           nome: perfil?.full_name ?? "",
-          status: (acesso.status ?? "ATIVO").toUpperCase(),
+          status: (acesso.status ?? "ativo").toLowerCase(),
         };
       });
 
@@ -134,10 +134,36 @@ export default function Ajustes() {
           return;
         }
 
-        const fazendaIdCarregada = await getOrCreateFazendaDoOwner(user.id);
+        const { data: fazendas, error: fazendasError } = await supabase
+          .from("fazendas")
+          .select("id")
+          .eq("owner_id", user.id)
+          .order("created_at", { ascending: true })
+          .limit(1);
+
+        if (fazendasError) {
+          throw fazendasError;
+        }
+
+        let fazendaIdCarregada = fazendas?.[0]?.id ?? null;
+
+        if (!fazendaIdCarregada) {
+          const { data: novaFazenda, error: insertError } = await supabase
+            .from("fazendas")
+            .insert({ owner_id: user.id, nome: "Minha Fazenda" })
+            .select("id")
+            .single();
+
+          if (insertError) {
+            throw insertError;
+          }
+
+          fazendaIdCarregada = novaFazenda?.id ?? null;
+        }
 
         if (isMounted) {
           setFazendaId(fazendaIdCarregada);
+          setUsuario(user);
         }
 
         await carregarListas(fazendaIdCarregada);
@@ -161,18 +187,18 @@ export default function Ajustes() {
   const convitesPendentes = useMemo(
     () =>
       convites.filter(
-        (convite) => (convite.status ?? "PENDENTE").toUpperCase() === "PENDENTE"
+        (convite) => (convite.status ?? "pendente").toLowerCase() === "pendente"
       ),
     [convites]
   );
 
   const acessosAtivos = useMemo(
-    () => acessos.filter((acesso) => (acesso.status ?? "ATIVO") === "ATIVO"),
+    () => acessos.filter((acesso) => (acesso.status ?? "ativo") === "ativo"),
     [acessos]
   );
 
   const acessosBloqueados = useMemo(
-    () => acessos.filter((acesso) => (acesso.status ?? "ATIVO") === "BLOQUEADO"),
+    () => acessos.filter((acesso) => (acesso.status ?? "ativo") === "bloqueado"),
     [acessos]
   );
 
@@ -193,21 +219,22 @@ export default function Ajustes() {
     }
 
     try {
+      if (!usuario?.id) {
+        toast.error("Não foi possível validar o usuário logado.");
+        return;
+      }
       setEnviando(true);
-      const { data, error } = await supabase.rpc("criar_convite_acesso", {
-        p_fazenda_id: fazendaId,
-        p_email: emailNormalizado,
-        p_role: profissionalTipoLabel,
-        p_nome: nomeNormalizado || null,
+      const { error } = await supabase.from("convites_acesso").insert({
+        fazenda_id: fazendaId,
+        invited_by: usuario.id,
+        convidado_email: emailNormalizado,
+        profissional_tipo: profissionalTipoLabel,
+        profissional_nome: nomeNormalizado || null,
+        status: "pendente",
       });
 
       if (error) {
         throw error;
-      }
-
-      if (!data?.length) {
-        toast.error("Não foi possível registrar o convite.");
-        return;
       }
 
       setEmail("");
@@ -228,12 +255,15 @@ export default function Ajustes() {
 
     try {
       setProcessandoId(`reenviar-${convite.id}`);
-      const { error } = await supabase.rpc("criar_convite_acesso", {
-        p_fazenda_id: fazendaId,
-        p_email: convite.convidado_email,
-        p_role: convite.profissional_tipo ?? null,
-        p_nome: convite.profissional_nome ?? null,
-      });
+      const { error } = await supabase
+        .from("convites_acesso")
+        .update({
+          status: "pendente",
+          profissional_tipo: convite.profissional_tipo ?? null,
+          profissional_nome: convite.profissional_nome ?? null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", convite.id);
 
       if (error) {
         throw error;
@@ -278,11 +308,11 @@ export default function Ajustes() {
 
     try {
       setProcessandoId(`bloquear-${acesso.id}`);
-      const { error } = await supabase.rpc("bloquear_acesso", {
-        p_fazenda_id: fazendaId,
-        p_user_id: acesso.user_id,
-        p_bloquear: bloquear,
-      });
+      const novoStatus = bloquear ? "bloqueado" : "ativo";
+      const { error } = await supabase
+        .from("fazenda_acessos")
+        .update({ status: novoStatus })
+        .eq("id", acesso.id);
 
       if (error) {
         throw error;
@@ -305,16 +335,29 @@ export default function Ajustes() {
 
     try {
       setProcessandoId(`remover-${acesso.id}`);
-      const { error } = await supabase.rpc("remover_acesso", {
-        p_fazenda_id: fazendaId,
-        p_user_id: acesso.user_id,
-      });
+      const convidadoEmail = acesso.email?.trim().toLowerCase();
+      if (convidadoEmail) {
+        const { error: revokeError } = await supabase
+          .from("convites_acesso")
+          .update({ status: "revogado", revoked_at: new Date().toISOString() })
+          .eq("fazenda_id", fazendaId)
+          .eq("convidado_email", convidadoEmail);
+
+        if (revokeError) {
+          throw revokeError;
+        }
+      }
+
+      const { error } = await supabase
+        .from("fazenda_acessos")
+        .delete()
+        .eq("id", acesso.id);
 
       if (error) {
         throw error;
       }
 
-      toast.success("Acesso removido com sucesso.");
+      toast.success("Acesso revogado com sucesso.");
       await carregarListas(fazendaId);
     } catch (err) {
       console.error("Erro ao remover acesso:", err.message);
@@ -498,8 +541,8 @@ export default function Ajustes() {
                     disabled={processandoId === `remover-${acesso.id}`}
                   >
                     {processandoId === `remover-${acesso.id}`
-                      ? "Removendo..."
-                      : "Remover"}
+                      ? "Revogando..."
+                      : "Revogar"}
                   </button>
                 </div>
               </div>
@@ -560,8 +603,8 @@ export default function Ajustes() {
                     disabled={processandoId === `remover-${acesso.id}`}
                   >
                     {processandoId === `remover-${acesso.id}`
-                      ? "Removendo..."
-                      : "Remover"}
+                      ? "Revogando..."
+                      : "Revogar"}
                   </button>
                 </div>
               </div>

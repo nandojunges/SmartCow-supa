@@ -5,20 +5,6 @@ export async function getOrCreateFazendaDoOwner(userId) {
     throw new Error("Usuário inválido para recuperar fazenda.");
   }
 
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("fazenda_id, fazenda")
-    .eq("id", userId)
-    .maybeSingle();
-
-  if (profileError) {
-    throw profileError;
-  }
-
-  if (profile?.fazenda_id) {
-    return profile.fazenda_id;
-  }
-
   const { data: fazendas, error: fazendasError } = await supabase
     .from("fazendas")
     .select("id, nome")
@@ -33,7 +19,7 @@ export async function getOrCreateFazendaDoOwner(userId) {
   let fazendaId = fazendas?.[0]?.id ?? null;
 
   if (!fazendaId) {
-    const nome = profile?.fazenda?.trim() || "Minha Fazenda";
+    const nome = "Minha Fazenda";
     const { data: novaFazenda, error: insertError } = await supabase
       .from("fazendas")
       .insert({
@@ -52,15 +38,6 @@ export async function getOrCreateFazendaDoOwner(userId) {
 
   if (!fazendaId) {
     throw new Error("Não foi possível criar a fazenda.");
-  }
-
-  const { error: updateError } = await supabase
-    .from("profiles")
-    .update({ fazenda_id: fazendaId })
-    .eq("id", userId);
-
-  if (updateError) {
-    throw updateError;
   }
 
   return fazendaId;

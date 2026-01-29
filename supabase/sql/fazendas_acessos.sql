@@ -24,11 +24,13 @@ create table if not exists public.convites_acesso (
   fazenda_id uuid not null references public.fazendas(id) on delete cascade,
   invited_by uuid not null references auth.users(id) on delete cascade,
   convidado_email text not null,
-  status text not null default 'PENDENTE',
+  status text not null default 'pendente',
   token uuid not null default gen_random_uuid(),
   profissional_tipo text,
   profissional_nome text,
   created_at timestamptz not null default now(),
+  accepted_at timestamptz,
+  revoked_at timestamptz,
   updated_at timestamptz not null default now(),
   unique (fazenda_id, convidado_email),
   unique (token)
@@ -40,23 +42,25 @@ alter table public.fazenda_acessos
   add column if not exists profissional_nome text;
 
 alter table public.convites_acesso
-  add column if not exists status text not null default 'PENDENTE',
+  add column if not exists status text not null default 'pendente',
   add column if not exists profissional_tipo text,
   add column if not exists profissional_nome text,
+  add column if not exists accepted_at timestamptz,
+  add column if not exists revoked_at timestamptz,
   add column if not exists updated_at timestamptz not null default now();
 
 alter table public.fazenda_acessos
   alter column status set default 'ATIVO';
 
 alter table public.convites_acesso
-  alter column status set default 'PENDENTE';
+  alter column status set default 'pendente';
 
 update public.fazenda_acessos
 set status = 'ATIVO'
 where status is null;
 
 update public.convites_acesso
-set status = upper(status)
+set status = lower(status)
 where status is not null;
 
 alter table public.fazendas enable row level security;
@@ -259,27 +263,33 @@ begin
     profissional_tipo,
     profissional_nome,
     created_at,
+    accepted_at,
+    revoked_at,
     updated_at
   )
   values (
     p_fazenda_id,
     auth.uid(),
     v_email,
-    'PENDENTE',
+    'pendente',
     gen_random_uuid(),
     p_role,
     p_nome,
     now(),
+    null,
+    null,
     now()
   )
   on conflict (fazenda_id, convidado_email)
   do update set
     invited_by = excluded.invited_by,
-    status = 'PENDENTE',
+    status = 'pendente',
     token = gen_random_uuid(),
     profissional_tipo = excluded.profissional_tipo,
     profissional_nome = excluded.profissional_nome,
     created_at = now(),
+    accepted_at = null,
+    revoked_at = null,
     updated_at = now()
   returning id, status, token;
 end;
@@ -342,7 +352,10 @@ begin
     profissional_nome = excluded.profissional_nome;
 
   update public.convites_acesso
-  set status = 'ACEITO', updated_at = now()
+  set status = 'aceito',
+      accepted_at = now(),
+      revoked_at = null,
+      updated_at = now()
   where id = v_convite.id;
 
   return v_convite.fazenda_id;
@@ -433,6 +446,8 @@ returns table (
   profissional_tipo text,
   profissional_nome text,
   created_at timestamptz,
+  accepted_at timestamptz,
+  revoked_at timestamptz,
   updated_at timestamptz
 )
 language plpgsql
@@ -464,10 +479,12 @@ begin
     convites.profissional_tipo,
     convites.profissional_nome,
     convites.created_at,
+    convites.accepted_at,
+    convites.revoked_at,
     convites.updated_at
   from public.convites_acesso convites
   join public.fazendas fazendas on fazendas.id = convites.fazenda_id
-  where convites.status = 'PENDENTE'
+  where convites.status = 'pendente'
     and (
       convites.convidado_email = v_email
       or convites.convidado_email = coalesce(v_profile_email, '')
@@ -509,6 +526,59 @@ begin
   from public.fazenda_acessos acessos
   join public.fazendas fazendas on fazendas.id = acessos.fazenda_id
   where acessos.user_id = auth.uid()
+    and lower(acessos.status) = 'ativo'
   order by acessos.created_at desc;
+end;
+$$;
+
+create or replace function public.listar_convites_pendentes()
+returns table (
+  id uuid,
+  fazenda_id uuid,
+  fazenda_nome text,
+  convidado_email text,
+  status text,
+  profissional_tipo text,
+  profissional_nome text,
+  created_at timestamptz,
+  invited_by uuid
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_email text;
+  v_profile_email text;
+begin
+  if auth.uid() is null then
+    raise exception 'Usuário não autenticado';
+  end if;
+
+  v_email := lower(coalesce(auth.email(), ''));
+
+  select lower(email) into v_profile_email
+  from public.profiles
+  where id = auth.uid();
+
+  return query
+  select
+    convites.id,
+    convites.fazenda_id,
+    fazendas.nome,
+    convites.convidado_email,
+    convites.status,
+    convites.profissional_tipo,
+    convites.profissional_nome,
+    convites.created_at,
+    convites.invited_by
+  from public.convites_acesso convites
+  join public.fazendas fazendas on fazendas.id = convites.fazenda_id
+  where convites.status = 'pendente'
+    and (
+      convites.convidado_email = v_email
+      or convites.convidado_email = coalesce(v_profile_email, '')
+    )
+  order by convites.created_at desc;
 end;
 $$;
