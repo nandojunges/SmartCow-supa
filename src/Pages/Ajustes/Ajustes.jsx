@@ -41,6 +41,7 @@ export default function Ajustes() {
   const [profissionalTipo, setProfissionalTipo] = useState(null);
   const [profissionalNome, setProfissionalNome] = useState("");
   const [fazendaId, setFazendaId] = useState(null);
+  const [fazendaNome, setFazendaNome] = useState("");
   const [carregando, setCarregando] = useState(true);
   const [carregandoListas, setCarregandoListas] = useState(false);
   const [enviando, setEnviando] = useState(false);
@@ -48,6 +49,7 @@ export default function Ajustes() {
   const [convites, setConvites] = useState([]);
   const [acessos, setAcessos] = useState([]);
   const [usuario, setUsuario] = useState(null);
+  const [avisoSemFazenda, setAvisoSemFazenda] = useState("");
 
   const emailNormalizado = useMemo(() => email.trim().toLowerCase(), [email]);
   const profissionalTipoLabel = profissionalTipo?.value ?? null;
@@ -119,9 +121,16 @@ export default function Ajustes() {
 
         const fazenda = await getFazendaDoProdutor(user.id);
         const fazendaIdCarregada = fazenda?.id ?? null;
+        const fazendaNomeCarregada = fazenda?.nome ?? "";
 
         if (isMounted) {
           setFazendaId(fazendaIdCarregada);
+          setFazendaNome(fazendaNomeCarregada);
+          setAvisoSemFazenda(
+            fazendaIdCarregada
+              ? ""
+              : "Nenhuma fazenda encontrada para este usuário. Cadastre uma fazenda primeiro."
+          );
           setUsuario(user);
         }
 
@@ -168,7 +177,6 @@ export default function Ajustes() {
     event.preventDefault();
 
     if (!fazendaId) {
-      toast.error("Não encontramos a fazenda vinculada ao seu perfil.");
       return;
     }
 
@@ -289,6 +297,7 @@ export default function Ajustes() {
         <p style={styles.subtitle}>
           Gerencie quem pode acessar seus dados e acompanhar sua fazenda.
         </p>
+        {fazendaNome && <p style={styles.helperText}>Fazenda atual: {fazendaNome}</p>}
       </div>
 
       <section style={styles.card}>
@@ -341,6 +350,9 @@ export default function Ajustes() {
 
         {carregando && (
           <p style={styles.helperText}>Carregando informações da fazenda...</p>
+        )}
+        {!carregando && avisoSemFazenda && (
+          <p style={styles.warningText}>{avisoSemFazenda}</p>
         )}
       </section>
 
@@ -630,6 +642,12 @@ const styles = {
     margin: 0,
     fontSize: 12,
     color: "#94a3b8",
+  },
+  warningText: {
+    margin: 0,
+    fontSize: 12,
+    color: "#b45309",
+    fontWeight: 600,
   },
   sectionHeader: {
     display: "flex",
