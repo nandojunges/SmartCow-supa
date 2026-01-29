@@ -1,11 +1,7 @@
 import { supabase } from "../lib/supabaseClient";
 
 export const EMAIL_COLS = [
-  "convidado_email",
   "email_convidado",
-  "email",
-  "convidado",
-  "email_profissional",
 ];
 
 export function isMissingColumnError(err, col) {
