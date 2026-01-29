@@ -9,6 +9,8 @@ import "../../styles/tabelaModerna.css";
 import "../../styles/botoes.css";
 
 import { supabase } from "../../lib/supabaseClient";
+import { withFazendaId } from "../../lib/fazendaScope";
+import { useFazendaAtiva } from "../../context/FazendaAtivaContext";
 import { enqueue, kvGet, kvSet } from "../../offline/localDB";
 import ModalDieta from "./ModalDieta";
 
@@ -22,6 +24,7 @@ function dateOnlyToISO(d) {
 }
 
 export default function Dieta({ onCountChange }) {
+  const { fazendaAtivaId } = useFazendaAtiva();
   const [dietas, setDietas] = useState([]);
   const [hoveredRowId, setHoveredRowId] = useState(null);
   const [hoveredColKey, setHoveredColKey] = useState(null);
@@ -139,20 +142,18 @@ export default function Dieta({ onCountChange }) {
       return;
     }
 
-    const { data: sess } = await supabase.auth.getSession();
-    const uid = sess?.session?.user?.id;
-
-    if (!uid) {
+    if (!fazendaAtivaId) {
       setDietas([]);
       setLoading(false);
-      setErro("Sessão expirada. Faça login novamente.");
+      setErro("Selecione uma fazenda para carregar as dietas.");
       return;
     }
 
-    const { data, error } = await supabase
-      .from("dietas")
-      .select(
-        `
+    const { data, error } = await withFazendaId(
+      supabase
+        .from("dietas")
+        .select(
+          `
         id,
         lote_id,
         dia,
@@ -163,9 +164,9 @@ export default function Dieta({ onCountChange }) {
         created_at,
         lotes ( nome )
       `
-      )
-      .eq("user_id", uid) // ajuda mesmo com RLS
-      .order("dia", { ascending: false });
+        ),
+      fazendaAtivaId
+    ).order("dia", { ascending: false });
 
     if (error) {
       console.error("Erro loadDietas:", error);
@@ -191,7 +192,7 @@ export default function Dieta({ onCountChange }) {
 
     await updateCache(list);
     setLoading(false);
-  }, [normalizeDietaCache, updateCache]);
+  }, [fazendaAtivaId, normalizeDietaCache, updateCache]);
 
   useEffect(() => {
     loadDietas();
@@ -244,9 +245,10 @@ export default function Dieta({ onCountChange }) {
 
       try {
         // busca itens para preencher o modal
-        const { data: itens, error: eItens } = await supabase
-          .from("dietas_itens")
-          .select("produto_id, quantidade_kg_vaca")
+        const { data: itens, error: eItens } = await withFazendaId(
+          supabase.from("dietas_itens").select("produto_id, quantidade_kg_vaca"),
+          fazendaAtivaId
+        )
           .eq("dieta_id", dietaRow.id)
           .order("created_at", { ascending: true });
 
@@ -276,7 +278,7 @@ export default function Dieta({ onCountChange }) {
         setLoading(false);
       }
     },
-    []
+    [fazendaAtivaId]
   );
 
   /** ===================== SALVOU NO MODAL ===================== */
@@ -325,10 +327,16 @@ export default function Dieta({ onCountChange }) {
 
     try {
       // primeiro itens (caso não tenha FK cascade)
-      const { error: eItens } = await supabase.from("dietas_itens").delete().eq("dieta_id", d.id);
+      const { error: eItens } = await withFazendaId(
+        supabase.from("dietas_itens").delete(),
+        fazendaAtivaId
+      ).eq("dieta_id", d.id);
       if (eItens) throw eItens;
 
-      const { error: eDiet } = await supabase.from("dietas").delete().eq("id", d.id);
+      const { error: eDiet } = await withFazendaId(
+        supabase.from("dietas").delete(),
+        fazendaAtivaId
+      ).eq("id", d.id);
       if (eDiet) throw eDiet;
 
       setExcluir({ open: false, dieta: null });
@@ -340,7 +348,7 @@ export default function Dieta({ onCountChange }) {
     } finally {
       setLoading(false);
     }
-  }, [dietas, excluir.dieta, loadDietas, updateCache]);
+  }, [dietas, excluir.dieta, fazendaAtivaId, loadDietas, updateCache]);
 
   return (
     <section className="w-full py-6">

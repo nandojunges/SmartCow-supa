@@ -1,11 +1,12 @@
 // src/App.jsx
 import { useEffect, useState } from "react";
 import { Routes, Route, Navigate, Outlet } from "react-router-dom";
-import { ToastContainer } from "react-toastify";
+import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { supabase } from "./lib/supabaseClient";
 import { syncAnimaisSeed, syncPending } from "./offline/sync";
-import { useFazenda } from "./context/FazendaContext";
+import { useFazendaAtiva } from "./context/FazendaAtivaContext";
+import { ensureFazendaDoProdutor } from "./services/acessos";
 
 // Telas
 import Login from "./Auth/Login";
@@ -33,7 +34,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
-  const { hasFazendaAtiva } = useFazenda();
+  const { fazendaAtivaId, hasFazendaAtiva, setFazendaAtiva } = useFazendaAtiva();
 
   // Ouve sessão do Supabase
   useEffect(() => {
@@ -105,6 +106,51 @@ export default function App() {
   const isAssistenteTecnico = tipoConta === "ASSISTENTE_TECNICO";
   const hasFazendaSelecionada = hasFazendaAtiva;
 
+  useEffect(() => {
+    let isMounted = true;
+
+    async function carregarFazendaProdutor() {
+      if (!session?.user?.id) {
+        return;
+      }
+
+      if (tipoConta !== "PRODUTOR") {
+        return;
+      }
+
+      if (fazendaAtivaId) {
+        return;
+      }
+
+      try {
+        const { fazenda } = await ensureFazendaDoProdutor(session.user.id);
+        if (!fazenda?.id) {
+          if (isMounted) {
+            toast.info("Cadastre sua fazenda para continuar.");
+          }
+          return;
+        }
+
+        if (isMounted) {
+          setFazendaAtiva({ id: fazenda.id, nome: fazenda.nome });
+        }
+      } catch (error) {
+        if (import.meta.env.DEV) {
+          console.error("Erro ao definir fazenda ativa:", error?.message);
+        }
+        if (isMounted) {
+          toast.error("Não foi possível localizar sua fazenda.");
+        }
+      }
+    }
+
+    carregarFazendaProdutor();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [fazendaAtivaId, setFazendaAtiva, session?.user?.id, tipoConta]);
+
   if (loading) {
     return null; // ou um spinner de "Carregando..."
   }
@@ -170,6 +216,15 @@ export default function App() {
 }
 
 function AssistenteGuard({ isAssistenteTecnico, hasFazendaSelecionada, loading }) {
+  useEffect(() => {
+    if (loading) {
+      return;
+    }
+    if (isAssistenteTecnico && !hasFazendaSelecionada) {
+      toast.info("Selecione uma fazenda para acessar.");
+    }
+  }, [hasFazendaSelecionada, isAssistenteTecnico, loading]);
+
   if (loading) {
     return null;
   }

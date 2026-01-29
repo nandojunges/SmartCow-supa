@@ -2,6 +2,8 @@
 import React, { useEffect, useMemo, useState, useCallback, useLayoutEffect } from "react";
 import Select from "react-select";
 import { supabase } from "../../lib/supabaseClient";
+import { withFazendaId } from "../../lib/fazendaScope";
+import { useFazendaAtiva } from "../../context/FazendaAtivaContext";
 import { enqueue, kvGet, kvSet } from "../../offline/localDB";
 
 import "../../styles/tabelamoderna.css";
@@ -243,6 +245,7 @@ const btnFecharInfo = {
 
 /* ===================== PÁGINA FINANCEIRO ===================== */
 export default function Financeiro() {
+  const { fazendaAtivaId } = useFazendaAtiva();
   const hojeISO = useMemo(() => toISODateInput(new Date()), []);
   const periodoPadrao = useMemo(() => firstLastOfMonth(hojeISO), [hojeISO]);
 
@@ -291,17 +294,25 @@ export default function Financeiro() {
         return;
       }
 
+      if (!fazendaAtivaId) {
+        setLancamentos([]);
+        return;
+      }
+
       // ✅ tenta buscar com impacta_caixa (novo)
       let data = null;
 
       try {
-        const resp = await supabase
-          .from("financeiro_lancamentos")
-          .select(
-            "id, data, tipo, categoria, origem, descricao, quantidade, unidade, valor_unitario, valor_total, observacao, impacta_caixa, created_at"
-          )
-          .gte("data", periodo.ini)
-          .lte("data", periodo.fim)
+        const resp = await withFazendaId(
+          supabase
+            .from("financeiro_lancamentos")
+            .select(
+              "id, data, tipo, categoria, origem, descricao, quantidade, unidade, valor_unitario, valor_total, observacao, impacta_caixa, created_at"
+            )
+            .gte("data", periodo.ini)
+            .lte("data", periodo.fim),
+          fazendaAtivaId
+        )
           .order("data", { ascending: true })
           .order("created_at", { ascending: true });
 
@@ -309,13 +320,16 @@ export default function Financeiro() {
         data = resp.data || [];
       } catch (e) {
         // ✅ fallback: tabela ainda sem impacta_caixa
-        const resp2 = await supabase
-          .from("financeiro_lancamentos")
-          .select(
-            "id, data, tipo, categoria, origem, descricao, quantidade, unidade, valor_unitario, valor_total, observacao, created_at"
-          )
-          .gte("data", periodo.ini)
-          .lte("data", periodo.fim)
+        const resp2 = await withFazendaId(
+          supabase
+            .from("financeiro_lancamentos")
+            .select(
+              "id, data, tipo, categoria, origem, descricao, quantidade, unidade, valor_unitario, valor_total, observacao, created_at"
+            )
+            .gte("data", periodo.ini)
+            .lte("data", periodo.fim),
+          fazendaAtivaId
+        )
           .order("data", { ascending: true })
           .order("created_at", { ascending: true });
 
@@ -335,7 +349,7 @@ export default function Financeiro() {
     } finally {
       setLoading(false);
     }
-  }, [periodo.ini, periodo.fim]);
+  }, [fazendaAtivaId, periodo.ini, periodo.fim]);
 
   // auto-carrega quando muda o período
   useEffect(() => {
@@ -362,7 +376,13 @@ export default function Financeiro() {
     try {
       setLoading(true);
 
+      if (!fazendaAtivaId) {
+        alert("Selecione uma fazenda para salvar lançamentos.");
+        return;
+      }
+
       const base = {
+        fazenda_id: fazendaAtivaId,
         data: payload.data,
         tipo: payload.tipo,
         categoria: payload.categoria,
@@ -400,9 +420,10 @@ export default function Financeiro() {
 
       let saved = null;
       if (payload.id) {
-        const { data, error } = await supabase
-          .from("financeiro_lancamentos")
-          .update(base)
+        const { data, error } = await withFazendaId(
+          supabase.from("financeiro_lancamentos").update(base),
+          fazendaAtivaId
+        )
           .eq("id", payload.id)
           .select(selectCols)
           .single();
@@ -443,7 +464,10 @@ export default function Financeiro() {
 
     try {
       setLoading(true);
-      const { error } = await supabase.from("financeiro_lancamentos").delete().eq("id", id);
+      const { error } = await withFazendaId(
+        supabase.from("financeiro_lancamentos").delete(),
+        fazendaAtivaId
+      ).eq("id", id);
       if (error) throw error;
       await carregarLancamentos();
     } catch (e) {

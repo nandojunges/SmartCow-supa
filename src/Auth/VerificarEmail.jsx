@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { toast } from "react-toastify";
-import { useFazenda } from "../context/FazendaContext";
+import { useFazendaAtiva } from "../context/FazendaAtivaContext";
 
 export default function VerificarEmail() {
   const [email, setEmail] = useState("");
@@ -11,7 +11,7 @@ export default function VerificarEmail() {
   const [erro, setErro] = useState("");
   const [cadastro, setCadastro] = useState(null); // dados salvos no localStorage
   const navigate = useNavigate();
-  const { clearFazendaAtiva } = useFazenda();
+  const { clearFazendaAtiva } = useFazendaAtiva();
 
   useEffect(() => {
     const salvo = localStorage.getItem("pendingCadastro");

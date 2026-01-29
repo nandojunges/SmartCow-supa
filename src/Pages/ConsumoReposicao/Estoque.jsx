@@ -2,8 +2,9 @@
 import React, { useMemo, useState, useEffect, useCallback } from "react";
 import Select from "react-select";
 import { supabase } from "../../lib/supabaseClient";
+import { withFazendaId } from "../../lib/fazendaScope";
+import { useFazendaAtiva } from "../../context/FazendaAtivaContext";
 import { enqueue, kvGet, kvSet } from "../../offline/localDB";
-import { getOfflineSession } from "../../offline/offlineAuth";
 
 import "../../styles/tabelaModerna.css";
 import "../../styles/botoes.css";
@@ -85,6 +86,7 @@ function sortProdutosByNome(list) {
 }
 
 export default function Estoque({ onCountChange }) {
+  const { fazendaAtivaId } = useFazendaAtiva();
   const categoriasFixas = useMemo(
     () => [
       { value: "Todos", label: "Todos" },
@@ -153,31 +155,23 @@ export default function Estoque({ onCountChange }) {
     return `${yyyy}-${mm}-${dd}`;
   }
 
-  async function getAuthUid() {
-    const { data, error } = await supabase.auth.getUser();
-    if (error) throw error;
-    return data?.user?.id || null;
-  }
-
-  async function resolveUserId() {
-    try {
-      const { data, error } = await supabase.auth.getUser();
-      if (!error && data?.user?.id) return data.user.id;
-    } catch {
-      // segue fallback offline
+  function requireFazendaId() {
+    if (!fazendaAtivaId) {
+      throw new Error("Selecione uma fazenda para continuar.");
     }
-    const offlineSession = await getOfflineSession();
-    return offlineSession?.userId || null;
+    return fazendaAtivaId;
   }
 
   // ✅ Busca rápida do produto (nome + unidade) para descrever a compra no Financeiro
   async function getProdutoInfo(produtoId) {
     try {
-      const { data, error } = await supabase
-        .from("estoque_produtos")
-        .select("id, nome_comercial, unidade, categoria")
-        .eq("id", produtoId)
-        .single();
+      const { data, error } = await withFazendaId(
+        supabase
+          .from("estoque_produtos")
+          .select("id, nome_comercial, unidade, categoria")
+          .eq("id", produtoId),
+        requireFazendaId()
+      ).single();
 
       if (error) throw error;
 
@@ -205,6 +199,7 @@ export default function Estoque({ onCountChange }) {
     const unit = qtd > 0 ? vTotal / qtd : null;
 
     const payloadBase = {
+      fazenda_id: requireFazendaId(),
       data: toDateOnly(new Date()),
       tipo: "SAIDA",
       categoria: "Estoque (Compra)",
@@ -259,10 +254,15 @@ export default function Estoque({ onCountChange }) {
           return;
         }
 
-        const { data: produtosDb, error: errP } = await supabase
-          .from("estoque_produtos")
-          .select(
-            `
+        if (!fazendaAtivaId) {
+          throw new Error("Selecione uma fazenda para carregar o estoque.");
+        }
+
+        const { data: produtosDb, error: errP } = await withFazendaId(
+          supabase
+            .from("estoque_produtos")
+            .select(
+              `
             id,
             nome_comercial,
             categoria,
@@ -276,8 +276,9 @@ export default function Estoque({ onCountChange }) {
             created_at,
             updated_at
           `
-          )
-          .order("nome_comercial", { ascending: true });
+            ),
+          fazendaAtivaId
+        ).order("nome_comercial", { ascending: true });
 
         if (errP) throw errP;
 
@@ -288,10 +289,11 @@ export default function Estoque({ onCountChange }) {
         let lotes = [];
 
         if (ids.length > 0) {
-          const { data: lotesDb, error: errL } = await supabase
-            .from("estoque_lotes")
-            .select(
-              `
+          const { data: lotesDb, error: errL } = await withFazendaId(
+            supabase
+              .from("estoque_lotes")
+              .select(
+                `
               id,
               produto_id,
               data_entrada,
@@ -300,8 +302,9 @@ export default function Estoque({ onCountChange }) {
               quantidade_atual,
               valor_total
             `
-            )
-            .in("produto_id", ids);
+              ),
+            fazendaAtivaId
+          ).in("produto_id", ids);
 
           if (errL) throw errL;
           lotes = Array.isArray(lotesDb) ? lotesDb : [];
@@ -315,9 +318,10 @@ export default function Estoque({ onCountChange }) {
         */
         let consumoDiaPorProduto = {}; // {produto_id: kg/dia}
         try {
-          const { data: dietasDb, error: eD } = await supabase
-            .from("dietas")
-            .select("id, lote_id, dia, numvacas_snapshot")
+          const { data: dietasDb, error: eD } = await withFazendaId(
+            supabase.from("dietas").select("id, lote_id, dia, numvacas_snapshot"),
+            fazendaAtivaId
+          )
             .order("dia", { ascending: false })
             .limit(200);
 
@@ -331,10 +335,10 @@ export default function Estoque({ onCountChange }) {
             const dietaIds = Array.from(lastByLote.values()).map((d) => d.id).filter(Boolean);
 
             if (dietaIds.length) {
-              const { data: itensDb, error: eI } = await supabase
-                .from("dietas_itens")
-                .select("dieta_id, produto_id, quantidade_kg_vaca")
-                .in("dieta_id", dietaIds);
+              const { data: itensDb, error: eI } = await withFazendaId(
+                supabase.from("dietas_itens").select("dieta_id, produto_id, quantidade_kg_vaca"),
+                fazendaAtivaId
+              ).in("dieta_id", dietaIds);
 
               if (!eI && Array.isArray(itensDb)) {
                 const numVacasByDieta = {};
@@ -407,13 +411,13 @@ export default function Estoque({ onCountChange }) {
         setLoading(false);
       }
     },
-    [categoriaSelecionada, tourosBase, updateCache]
+    [categoriaSelecionada, fazendaAtivaId, tourosBase, updateCache]
   );
 
   useEffect(() => {
     carregar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categoriaSelecionada?.value]);
+  }, [categoriaSelecionada?.value, fazendaAtivaId]);
 
   useEffect(() => {
     onCountChange?.(produtos.length || 0);
@@ -518,11 +522,11 @@ export default function Estoque({ onCountChange }) {
 
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       const localId = generateLocalId();
-      const uid = await resolveUserId();
+      const fazendaId = fazendaAtivaId;
       const payload = {
         id: localId,
         ...db,
-        ...(uid ? { user_id: uid } : {}),
+        ...(fazendaId ? { fazenda_id: fazendaId } : {}),
       };
 
       const novoItem = {
@@ -551,18 +555,18 @@ export default function Estoque({ onCountChange }) {
       return localId;
     }
 
-    const uid = await getAuthUid();
+    const fazendaId = requireFazendaId();
 
     let resp = await supabase
       .from("estoque_produtos")
-      .insert({ ...db, user_id: uid })
+      .insert({ ...db, fazenda_id: fazendaId })
       .select("id")
       .single();
 
     if (resp.error) {
       resp = await supabase
         .from("estoque_produtos")
-        .insert({ ...db, eu_ia: uid })
+        .insert({ ...db, fazenda_id: fazendaId })
         .select("id")
         .single();
     }
@@ -599,7 +603,10 @@ export default function Estoque({ onCountChange }) {
       return true;
     }
 
-    const { error } = await supabase.from("estoque_produtos").update(db).eq("id", id);
+    const { error } = await withFazendaId(
+      supabase.from("estoque_produtos").update(db),
+      requireFazendaId()
+    ).eq("id", id);
     if (error) throw error;
     return true;
   }
@@ -612,7 +619,10 @@ export default function Estoque({ onCountChange }) {
       return true;
     }
 
-    const { error } = await supabase.from("estoque_produtos").delete().eq("id", id);
+    const { error } = await withFazendaId(
+      supabase.from("estoque_produtos").delete(),
+      requireFazendaId()
+    ).eq("id", id);
     if (error) throw error;
     return true;
   }
@@ -664,6 +674,7 @@ export default function Estoque({ onCountChange }) {
       await enqueue("estoque.lote.insert", {
         lote: {
           id: loteId,
+          fazenda_id: fazendaAtivaId || null,
           produto_id: produtoId,
           data_entrada: toDateOnly(new Date()),
           validade,
@@ -672,6 +683,7 @@ export default function Estoque({ onCountChange }) {
           valor_total: Number.isFinite(valorTotal) ? valorTotal : 0,
         },
         movimento: {
+          fazenda_id: fazendaAtivaId || null,
           produto_id: produtoId,
           lote_id: loteId,
           tipo: "entrada",
@@ -686,6 +698,7 @@ export default function Estoque({ onCountChange }) {
     const { data: loteCriado, error } = await supabase
       .from("estoque_lotes")
       .insert({
+        fazenda_id: requireFazendaId(),
         produto_id: produtoId,
         data_entrada: toDateOnly(new Date()),
         validade,
@@ -700,6 +713,7 @@ export default function Estoque({ onCountChange }) {
 
     try {
       await supabase.from("estoque_movimentos").insert({
+        fazenda_id: requireFazendaId(),
         produto_id: produtoId,
         lote_id: loteCriado?.id || null,
         tipo: "entrada",

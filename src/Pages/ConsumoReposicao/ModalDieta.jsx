@@ -11,8 +11,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Select from "react-select";
 import { supabase } from "../../lib/supabaseClient";
+import { withFazendaId } from "../../lib/fazendaScope";
+import { useFazendaAtiva } from "../../context/FazendaAtivaContext";
 import { enqueue, kvGet } from "../../offline/localDB";
-import { getOfflineSession } from "../../offline/offlineAuth";
 import "../../styles/botoes.css";
 
 /** ✅ Categoria usada no seu banco para ingredientes de dieta */
@@ -151,6 +152,7 @@ function withCosts(d, pricesMap) {
 
 /** =================== Componente =================== */
 export default function ModalDieta({ title = "Cadastro de Dieta", value, onCancel, onSave }) {
+  const { fazendaAtivaId } = useFazendaAtiva();
   const wrapRef = useRef(null);
 
   // -------------------- lotes (Supabase) --------------------
@@ -172,15 +174,20 @@ export default function ModalDieta({ title = "Cadastro de Dieta", value, onCance
       return;
     }
 
-    const { data, error } = await supabase
-      .from("lotes")
-      .select("id, nome")
-      .eq("ativo", true)
-      .order("nome", { ascending: true });
+    if (!fazendaAtivaId) {
+      setLotesDb([]);
+      setLotesLoading(false);
+      return;
+    }
+
+    const { data, error } = await withFazendaId(
+      supabase.from("lotes").select("id, nome").eq("ativo", true),
+      fazendaAtivaId
+    ).order("nome", { ascending: true });
 
     if (!error) setLotesDb(Array.isArray(data) ? data : []);
     setLotesLoading(false);
-  }, []);
+  }, [fazendaAtivaId]);
 
   useEffect(() => {
     loadLotes();
@@ -223,11 +230,20 @@ export default function ModalDieta({ title = "Cadastro de Dieta", value, onCance
       return;
     }
 
-    const { data: produtos, error: eProd } = await supabase
-      .from("estoque_produtos")
-      .select("id, nome_comercial, categoria, unidade, apresentacao")
-      .ilike("categoria", CATEGORIA_INGREDIENTE)
-      .order("nome_comercial", { ascending: true });
+    if (!fazendaAtivaId) {
+      setProdutosCozinha([]);
+      setPrecosMap({});
+      setProdutosLoading(false);
+      return;
+    }
+
+    const { data: produtos, error: eProd } = await withFazendaId(
+      supabase
+        .from("estoque_produtos")
+        .select("id, nome_comercial, categoria, unidade, apresentacao")
+        .ilike("categoria", CATEGORIA_INGREDIENTE),
+      fazendaAtivaId
+    ).order("nome_comercial", { ascending: true });
 
     if (eProd) {
       console.error("Erro loadProdutosIngredientes (produtos):", eProd);
@@ -249,10 +265,10 @@ export default function ModalDieta({ title = "Cadastro de Dieta", value, onCance
     // 2) Tenta via VIEW (se existir): vw_dieta_ingredientes
     let viewPrices = null;
     try {
-      const { data: viewData, error: eView } = await supabase
-        .from("vw_dieta_ingredientes")
-        .select("id, preco_unitario")
-        .in("id", list.map((p) => p.id));
+      const { data: viewData, error: eView } = await withFazendaId(
+        supabase.from("vw_dieta_ingredientes").select("id, preco_unitario"),
+        fazendaAtivaId
+      ).in("id", list.map((p) => p.id));
 
       if (!eView && Array.isArray(viewData)) {
         const mp = {};
@@ -274,12 +290,10 @@ export default function ModalDieta({ title = "Cadastro de Dieta", value, onCance
     // 3) Fallback: movimentos ENTRADA
     const nextPrices = {};
     for (const p of list) {
-      const { data: movs, error: eMov } = await supabase
-        .from("estoque_movimentos")
-        .select("*")
-        .eq("produto_id", p.id)
-        .in("tipo", TIPOS_ENTRADA)
-        .limit(50);
+      const { data: movs, error: eMov } = await withFazendaId(
+        supabase.from("estoque_movimentos").select("*").eq("produto_id", p.id).in("tipo", TIPOS_ENTRADA),
+        fazendaAtivaId
+      ).limit(50);
 
       if (eMov) {
         console.warn("Erro estoque_movimentos para produto:", p?.nome_comercial, eMov);
@@ -293,7 +307,7 @@ export default function ModalDieta({ title = "Cadastro de Dieta", value, onCance
 
     setPrecosMap(nextPrices);
     setProdutosLoading(false);
-  }, []);
+  }, [fazendaAtivaId]);
 
   useEffect(() => {
     loadProdutosIngredientes();
@@ -347,11 +361,15 @@ export default function ModalDieta({ title = "Cadastro de Dieta", value, onCance
 
     setNumVacasLoading(true);
 
-    const { count, error } = await supabase
-      .from("animais")
-      .select("id", { count: "exact", head: true })
-      .eq("ativo", true)
-      .eq("lote_id", loteId);
+    if (!fazendaAtivaId) {
+      setNumVacasLoading(false);
+      return 0;
+    }
+
+    const { count, error } = await withFazendaId(
+      supabase.from("animais").select("id", { count: "exact", head: true }).eq("ativo", true),
+      fazendaAtivaId
+    ).eq("lote_id", loteId);
 
     setNumVacasLoading(false);
 
@@ -360,7 +378,7 @@ export default function ModalDieta({ title = "Cadastro de Dieta", value, onCance
       return 0;
     }
     return Number(count || 0);
-  }, []);
+  }, [fazendaAtivaId]);
 
   // -------------------- setters --------------------
   const setLote = useCallback(
@@ -497,7 +515,7 @@ export default function ModalDieta({ title = "Cadastro de Dieta", value, onCance
   }, [form]);
 
   const buildItensForDb = useCallback(
-    (dietaId, uid) => {
+    (dietaId, fazendaId) => {
       const numVacas = Number(form.numVacas || 0) || 0;
 
       return (form.ingredientes || [])
@@ -509,7 +527,7 @@ export default function ModalDieta({ title = "Cadastro de Dieta", value, onCance
           const custo_parcial_snapshot = numVacas * quantidade_kg_vaca * preco_unitario_snapshot;
 
           return {
-            user_id: uid, // ✅ evita 409 quando auth.uid() não chega no DEFAULT
+            fazenda_id: fazendaId,
             dieta_id: dietaId,
             produto_id,
             quantidade_kg_vaca,
@@ -534,14 +552,10 @@ export default function ModalDieta({ title = "Cadastro de Dieta", value, onCance
 
     setSaving(true);
 
-    // ✅ garante sessão / uid para preencher user_id explicitamente
-    const { data: sess } = await supabase.auth.getSession();
-    const uid = sess?.session?.user?.id;
-    const offlineSession = uid ? null : await getOfflineSession();
-    const resolvedUserId = uid || offlineSession?.userId || null;
+    const resolvedFazendaId = fazendaAtivaId || null;
 
-    if (!resolvedUserId) {
-      alert("Sessão expirada (sem usuário autenticado). Faça login novamente.");
+    if (!resolvedFazendaId) {
+      alert("Selecione uma fazenda antes de salvar a dieta.");
       setSaving(false);
       return;
     }
@@ -549,7 +563,7 @@ export default function ModalDieta({ title = "Cadastro de Dieta", value, onCance
     const dia = isoToDateOnly(form.data);
 
     const payloadDieta = {
-      user_id: resolvedUserId, // ✅ evita dependência do DEFAULT auth.uid()
+      fazenda_id: resolvedFazendaId,
       lote_id: form.lote_id,
       dia,
       numvacas_snapshot: Number(form.numVacas || 0) || 0,
@@ -561,7 +575,7 @@ export default function ModalDieta({ title = "Cadastro de Dieta", value, onCance
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       const dietaId = form.id || generateLocalId();
       const dietaPayload = { ...payloadDieta, id: dietaId };
-      const itens = buildItensForDb(dietaId, resolvedUserId);
+      const itens = buildItensForDb(dietaId, resolvedFazendaId);
 
       await enqueue(form.id ? "dieta.update" : "dieta.insert", {
         dieta: dietaPayload,
@@ -596,25 +610,23 @@ export default function ModalDieta({ title = "Cadastro de Dieta", value, onCance
         const dietaId = form.id;
 
         // 1) update dieta (garante que pertence ao usuário)
-        const { error: eUp } = await supabase
-          .from("dietas")
-          .update(payloadDieta)
-          .eq("id", dietaId)
-          .eq("user_id", resolvedUserId);
+        const { error: eUp } = await withFazendaId(
+          supabase.from("dietas").update(payloadDieta),
+          resolvedFazendaId
+        ).eq("id", dietaId);
 
         if (eUp) throw eUp;
 
         // 2) remove itens antigos (do usuário)
-        const { error: eDel } = await supabase
-          .from("dietas_itens")
-          .delete()
-          .eq("dieta_id", dietaId)
-          .eq("user_id", resolvedUserId);
+        const { error: eDel } = await withFazendaId(
+          supabase.from("dietas_itens").delete(),
+          resolvedFazendaId
+        ).eq("dieta_id", dietaId);
 
         if (eDel) throw eDel;
 
         // 3) insere itens novos
-        const itens = buildItensForDb(dietaId, resolvedUserId);
+        const itens = buildItensForDb(dietaId, resolvedFazendaId);
         if (itens.length) {
           const { error: eInsItens } = await supabase.from("dietas_itens").insert(itens);
           if (eInsItens) throw eInsItens;
@@ -641,12 +653,15 @@ export default function ModalDieta({ title = "Cadastro de Dieta", value, onCance
       if (!dietaId) throw new Error("Falha ao obter id da dieta criada.");
 
       // 2) cria itens
-      const itens = buildItensForDb(dietaId, resolvedUserId);
+      const itens = buildItensForDb(dietaId, resolvedFazendaId);
       if (itens.length) {
         const { error: eInsItens } = await supabase.from("dietas_itens").insert(itens);
         if (eInsItens) {
           // rollback simples: apaga dieta (itens falharam)
-          await supabase.from("dietas").delete().eq("id", dietaId).eq("user_id", resolvedUserId);
+          await withFazendaId(
+            supabase.from("dietas").delete(),
+            resolvedFazendaId
+          ).eq("id", dietaId);
           throw eInsItens;
         }
       }

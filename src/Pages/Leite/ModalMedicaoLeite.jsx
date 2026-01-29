@@ -2,6 +2,8 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import Select from "react-select";
 import { supabase } from "../../lib/supabaseClient";
+import { withFazendaId } from "../../lib/fazendaScope";
+import { useFazendaAtiva } from "../../context/FazendaAtivaContext";
 import "../../styles/tabelaModerna.css";
 
 /* ===== helpers ===== */
@@ -54,9 +56,11 @@ function writeLeitePending(nextQueue) {
   localStorage.setItem(LEITE_PENDING_KEY, JSON.stringify(nextQueue));
 }
 
-function resolveCachedUserId(cache) {
-  const animal = (cache.lastAnimals || []).find((item) => item?.user_id || item?.userId);
-  return animal?.user_id || animal?.userId || null;
+function resolveCachedFazendaId(cache) {
+  const animal = (cache.lastAnimals || []).find(
+    (item) => item?.fazenda_id || item?.fazendaId
+  );
+  return animal?.fazenda_id || animal?.fazendaId || null;
 }
 
 function updateLeiteCache({ dateISO, medicoesDia, ultimaMedicaoPorAnimal, vacas, lotes }) {
@@ -108,7 +112,7 @@ function upsertMedicoesCache(list, itens) {
     const idx = next.findIndex((c) => {
       if (item?.id && c?.id) return String(item.id) === String(c.id);
       return (
-        String(c?.user_id || "") === String(item?.user_id || "") &&
+        String(c?.fazenda_id || "") === String(item?.fazenda_id || "") &&
         String(c?.animal_id || "") === String(item?.animal_id || "") &&
         String(c?.data_medicao || "") === String(item?.data_medicao || "")
       );
@@ -698,6 +702,7 @@ export default function ModalMedicaoLeite({
   onFechar,
   onSalvar,
 }) {
+  const { fazendaAtivaId } = useFazendaAtiva();
   const [dataMedicao, setDataMedicao] = useState(dataInicial);
   const [tipoLancamento, setTipoLancamento] = useState("2"); // padrão: 2 ordenhas
 
@@ -705,7 +710,7 @@ export default function ModalMedicaoLeite({
   const [salvando, setSalvando] = useState(false);
   const inputRefs = useRef({});
 
-  const [userId, setUserId] = useState(null);
+  const [resolvedFazendaId, setResolvedFazendaId] = useState(null);
 
   // ✅ lotes de Lactação (Alta/Média/Baixa) do banco
   const [lotesLeite, setLotesLeite] = useState([]);
@@ -776,7 +781,7 @@ export default function ModalMedicaoLeite({
     return () => window.removeEventListener("keydown", onKey);
   }, [aberto, onFechar]);
 
-  // ✅ pega userId ao abrir
+  // ✅ resolve fazenda ao abrir
   useEffect(() => {
     if (!aberto) return;
     let ativo = true;
@@ -786,30 +791,23 @@ export default function ModalMedicaoLeite({
       if (offline) {
         const cache = readLeiteCache();
         if (!ativo) return;
-        setUserId(resolveCachedUserId(cache));
+        setResolvedFazendaId(resolveCachedFazendaId(cache));
         return;
       }
 
-      const { data: authData, error } = await supabase.auth.getUser();
       if (!ativo) return;
-
-      if (error || !authData?.user) {
-        console.error("Erro ao obter usuário:", error);
-        setUserId(null);
-        return;
-      }
-      setUserId(authData.user.id);
+      setResolvedFazendaId(fazendaAtivaId || null);
     })();
 
     return () => {
       ativo = false;
     };
-  }, [aberto]);
+  }, [aberto, fazendaAtivaId]);
 
   // ✅ carrega lotes do banco ao abrir (apenas Lactação com nível e ativo)
   useEffect(() => {
     if (!aberto) return;
-    if (!userId) return;
+    if (!resolvedFazendaId) return;
 
     let ativo = true;
     const offline = typeof navigator !== "undefined" && !navigator.onLine;
@@ -824,13 +822,15 @@ export default function ModalMedicaoLeite({
         return;
       }
 
-      const { data, error } = await supabase
-        .from("lotes")
-        .select("id,nome,funcao,nivel_produtivo,ativo")
-        .eq("funcao", "Lactação")
-        .eq("ativo", true)
-        .not("nivel_produtivo", "is", null)
-        .order("nome", { ascending: true });
+      const { data, error } = await withFazendaId(
+        supabase
+          .from("lotes")
+          .select("id,nome,funcao,nivel_produtivo,ativo")
+          .eq("funcao", "Lactação")
+          .eq("ativo", true)
+          .not("nivel_produtivo", "is", null),
+        resolvedFazendaId
+      ).order("nome", { ascending: true });
 
       if (!ativo) return;
 
@@ -848,7 +848,7 @@ export default function ModalMedicaoLeite({
     return () => {
       ativo = false;
     };
-  }, [aberto, userId]);
+  }, [aberto, resolvedFazendaId]);
 
   // ✅ ao abrir: define data e carrega medições iniciais (se vierem)
   useEffect(() => {
@@ -884,7 +884,7 @@ export default function ModalMedicaoLeite({
   const carregarMedicoesDaData = useCallback(
     async (dataISO) => {
       if (!aberto) return;
-      if (!userId) return;
+      if (!resolvedFazendaId) return;
 
       const ids = (vacas || []).map((v) => v.id).filter(Boolean);
       const baseVazio = criarMapaVazio();
@@ -923,12 +923,14 @@ export default function ModalMedicaoLeite({
         return;
       }
 
-      const { data: rows, error } = await supabase
-        .from("medicoes_leite")
-        .select(
-          "id, user_id, animal_id, data_medicao, litros_manha, litros_tarde, litros_terceira, litros_total, tipo_lancamento"
-        )
-        .eq("user_id", userId)
+      const { data: rows, error } = await withFazendaId(
+        supabase
+          .from("medicoes_leite")
+          .select(
+            "id, fazenda_id, animal_id, data_medicao, litros_manha, litros_tarde, litros_terceira, litros_total, tipo_lancamento"
+          ),
+        resolvedFazendaId
+      )
         .eq("data_medicao", dataISO)
         .in("animal_id", ids);
 
@@ -972,7 +974,7 @@ export default function ModalMedicaoLeite({
         });
       }
     },
-    [aberto, userId, vacas, criarMapaVazio, lotesLeite]
+    [aberto, resolvedFazendaId, vacas, criarMapaVazio, lotesLeite]
   );
 
   // ✅ dispara o carregamento quando a data mudar
@@ -1048,9 +1050,9 @@ export default function ModalMedicaoLeite({
   };
 
   // ✅ helper: monta payload SEM mandar null desnecessário
-  const montarPayloadLinha = ({ userId, vaca, dados }) => {
+  const montarPayloadLinha = ({ fazendaId, vaca, dados }) => {
     const base = {
-      user_id: userId,
+      fazenda_id: fazendaId,
       animal_id: vaca.id,
       data_medicao: dataMedicao,
       tipo_lancamento: tipoLancamento,
@@ -1077,24 +1079,21 @@ export default function ModalMedicaoLeite({
       setSalvando(true);
 
       const offline = typeof navigator !== "undefined" && !navigator.onLine;
-      let resolvedUserId = null;
+      let resolvedFazendaId = null;
 
       if (offline) {
         const cache = readLeiteCache();
-        resolvedUserId = resolveCachedUserId(cache);
-        if (!resolvedUserId) {
-          alert("Offline: não foi possível identificar o usuário nos dados salvos.");
+        resolvedFazendaId = resolveCachedFazendaId(cache);
+        if (!resolvedFazendaId) {
+          alert("Offline: não foi possível identificar a fazenda nos dados salvos.");
           setSalvando(false);
           return;
         }
       } else {
-        const { data: authData, error: userError } = await supabase.auth.getUser();
-        const user = authData?.user;
-        resolvedUserId = user?.id || null;
+        resolvedFazendaId = fazendaAtivaId || null;
 
-        if (userError || !resolvedUserId) {
-          console.error("Erro ao obter usuário:", userError);
-          alert("Não foi possível identificar o usuário logado.");
+        if (!resolvedFazendaId) {
+          alert("Não foi possível identificar a fazenda ativa.");
           setSalvando(false);
           return;
         }
@@ -1118,7 +1117,7 @@ export default function ModalMedicaoLeite({
 
         // sempre que tiver valor (medição), salva registro
         if (temAlgumValor) {
-          payload.push(montarPayloadLinha({ userId: resolvedUserId, vaca, dados }));
+          payload.push(montarPayloadLinha({ fazendaId: resolvedFazendaId, vaca, dados }));
         }
 
         // se mudou o lote_id, atualiza animal.lote_id (para contar nos Lotes)
@@ -1137,7 +1136,7 @@ export default function ModalMedicaoLeite({
           payloadComIds = payload.map((item) => {
             const existente = payloadExistente.find(
               (c) =>
-                String(c?.user_id || "") === String(item?.user_id || "") &&
+                String(c?.fazenda_id || "") === String(item?.fazenda_id || "") &&
                 String(c?.animal_id || "") === String(item?.animal_id || "") &&
                 String(c?.data_medicao || "") === String(item?.data_medicao || "")
             );
@@ -1213,9 +1212,9 @@ export default function ModalMedicaoLeite({
       if (payload.length > 0) {
         const { data: rows, error } = await supabase
           .from("medicoes_leite")
-          .upsert(payload, { onConflict: "user_id,animal_id,data_medicao" })
+          .upsert(payload, { onConflict: "fazenda_id,animal_id,data_medicao" })
           .select(
-            "id, user_id, animal_id, data_medicao, tipo_lancamento, litros_manha, litros_tarde, litros_terceira, litros_total"
+            "id, fazenda_id, animal_id, data_medicao, tipo_lancamento, litros_manha, litros_tarde, litros_terceira, litros_total"
           );
 
         if (error) {
@@ -1237,7 +1236,12 @@ export default function ModalMedicaoLeite({
       // 2) atualiza lotes dos animais (para refletir contagem)
       if (updatesAnimais.length > 0) {
         const results = await Promise.all(
-          updatesAnimais.map((u) => supabase.from("animais").update({ lote_id: u.lote_id }).eq("id", u.animal_id))
+          updatesAnimais.map((u) =>
+            withFazendaId(supabase.from("animais").update({ lote_id: u.lote_id }), resolvedFazendaId).eq(
+              "id",
+              u.animal_id
+            )
+          )
         );
 
         const algumErro = results.find((r) => r.error);

@@ -2,6 +2,8 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import Select from "react-select";
 import { supabase } from "../../lib/supabaseClient";
+import { withFazendaId } from "../../lib/fazendaScope";
+import { useFazendaAtiva } from "../../context/FazendaAtivaContext";
 import ModalMedicaoLeite from "./ModalMedicaoLeite";
 import FichaLeiteira from "./FichaLeiteira";
 import ResumoLeiteDia from "./ResumoLeiteDia";
@@ -678,6 +680,7 @@ function updateLeiteCache({ dateISO, vacas, lotes, medicoesDia, ultimaMedicaoPor
 }
 
 export default function Leite() {
+  const { fazendaAtivaId } = useFazendaAtiva();
   const [vacas, setVacas] = useState([]);
   const [ultimaMedicaoPorAnimal, setUltimaMedicaoPorAnimal] = useState({});
   const [isOffline, setIsOffline] = useState(
@@ -788,15 +791,14 @@ export default function Leite() {
   }, []);
 
   const fetchUltimaDataOnline = useCallback(async () => {
-    const { data: authData, error: authError } = await supabase.auth.getUser();
-    if (authError || !authData?.user) {
-      return { data: null, error: authError || new Error("Usuário não encontrado") };
+    if (!fazendaAtivaId) {
+      return { data: null, error: new Error("Fazenda ativa não encontrada") };
     }
 
-    const { data, error } = await supabase
-      .from("medicoes_leite")
-      .select("data_medicao")
-      .eq("user_id", authData.user.id)
+    const { data, error } = await withFazendaId(
+      supabase.from("medicoes_leite").select("data_medicao"),
+      fazendaAtivaId
+    )
       .order("data_medicao", { ascending: false })
       .limit(1);
 
@@ -805,7 +807,7 @@ export default function Leite() {
     }
 
     return { data: data?.[0]?.data_medicao || null, error: null };
-  }, []);
+  }, [fazendaAtivaId]);
 
   const loadData = useCallback(
     async (dateISO) => {
@@ -842,35 +844,40 @@ export default function Leite() {
 
       try {
         setLoadingLotes(true);
-        const { data: authData, error: authError } = await supabase.auth.getUser();
-        if (authError || !authData?.user) {
-          console.error("Erro ao obter usuário:", authError);
+        if (!fazendaAtivaId) {
+          console.error("Fazenda ativa não definida.");
           setLoadingLotes(false);
           return;
         }
 
-        const userId = authData.user.id;
-
         const [animaisRes, lotesRes, medicoesRes, ultimaRes] = await Promise.all([
-          supabase.from("animais").select("*").eq("user_id", userId),
-          supabase
-            .from("lotes")
-            .select("id,nome,funcao,nivel_produtivo,ativo")
-            .eq("funcao", "Lactação")
-            .eq("ativo", true)
-            .not("nivel_produtivo", "is", null)
-            .order("nome", { ascending: true }),
-          supabase
-            .from("medicoes_leite")
-            .select(
-              "id, user_id, animal_id, data_medicao, tipo_lancamento, litros_manha, litros_tarde, litros_terceira, litros_total"
-            )
-            .eq("user_id", userId)
+          withFazendaId(supabase.from("animais").select("*"), fazendaAtivaId),
+          withFazendaId(
+            supabase
+              .from("lotes")
+              .select("id,nome,funcao,nivel_produtivo,ativo")
+              .eq("funcao", "Lactação")
+              .eq("ativo", true)
+              .not("nivel_produtivo", "is", null),
+            fazendaAtivaId
+          ).order("nome", { ascending: true }),
+          withFazendaId(
+            supabase
+              .from("medicoes_leite")
+              .select(
+                "id, fazenda_id, animal_id, data_medicao, tipo_lancamento, litros_manha, litros_tarde, litros_terceira, litros_total"
+              ),
+            fazendaAtivaId
+          )
             .eq("data_medicao", dateISO),
-          supabase
-            .from("medicoes_leite")
-            .select("animal_id, data_medicao, litros_manha, litros_tarde, litros_terceira, litros_total")
-            .eq("user_id", userId)
+          withFazendaId(
+            supabase
+              .from("medicoes_leite")
+              .select(
+                "animal_id, data_medicao, litros_manha, litros_tarde, litros_terceira, litros_total"
+              ),
+            fazendaAtivaId
+          )
             .order("data_medicao", { ascending: false })
             .limit(2000),
         ]);
@@ -919,7 +926,7 @@ export default function Leite() {
         setLoadingLotes(false);
       }
     },
-    [isOffline, montarMapaMedicoes]
+    [fazendaAtivaId, isOffline, montarMapaMedicoes]
   );
 
   /* ===== Resumo do dia (baseado na DATA DA TABELA) ===== */
@@ -1131,8 +1138,7 @@ export default function Leite() {
 
       setSalvandoLotes(true);
 
-      const { data: authData, error: authError } = await supabase.auth.getUser();
-      if (authError || !authData?.user) {
+      if (!fazendaAtivaId) {
         setSalvandoLotes(false);
         return;
       }
@@ -1156,7 +1162,12 @@ export default function Leite() {
 
       if (updatesAnimais.length > 0) {
         const results = await Promise.all(
-          updatesAnimais.map((u) => supabase.from("animais").update({ lote_id: u.lote_id }).eq("id", u.animal_id))
+          updatesAnimais.map((u) =>
+            withFazendaId(supabase.from("animais").update({ lote_id: u.lote_id }), fazendaAtivaId).eq(
+              "id",
+              u.animal_id
+            )
+          )
         );
         const algumErro = results.find((r) => r.error);
         if (algumErro?.error) {

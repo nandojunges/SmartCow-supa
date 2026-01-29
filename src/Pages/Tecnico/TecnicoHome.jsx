@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { supabase } from "../../lib/supabaseClient";
-import { useFazenda } from "../../context/FazendaContext";
+import { useFazendaAtiva } from "../../context/FazendaAtivaContext";
 import { aceitarConvite, getEmailDoUsuario } from "../../lib/fazendaHelpers";
 import { listarConvitesPendentesTecnico } from "../../services/acessos";
 
@@ -16,7 +16,7 @@ const STATUS_LABELS = {
 
 export default function TecnicoHome() {
   const navigate = useNavigate();
-  const { setFazendaAtiva } = useFazenda();
+  const { setFazendaAtiva, fazendaAtivaNome } = useFazendaAtiva();
   const [carregando, setCarregando] = useState(true);
   const [usuario, setUsuario] = useState(null);
   const [emailTecnico, setEmailTecnico] = useState("");
@@ -179,8 +179,8 @@ export default function TecnicoHome() {
     }
   }
 
-  function handleAcessarFazenda(fazendaId) {
-    setFazendaAtiva(fazendaId);
+  function handleAcessarFazenda(fazendaId, fazendaNome) {
+    setFazendaAtiva({ id: fazendaId, nome: fazendaNome });
     navigate("/inicio", { replace: true });
   }
 
@@ -192,6 +192,9 @@ export default function TecnicoHome() {
           Aqui aparecem as fazendas que convidaram seu e-mail
           {emailTecnico ? ` (${emailTecnico})` : ""}.
         </p>
+        {fazendaAtivaNome && (
+          <p style={styles.activeHint}>Acessando: {fazendaAtivaNome}</p>
+        )}
       </div>
 
       <section style={styles.card}>
@@ -293,7 +296,7 @@ export default function TecnicoHome() {
                   <button
                     type="button"
                     style={styles.secondaryButton}
-                    onClick={() => handleAcessarFazenda(acesso.fazenda_id)}
+                    onClick={() => handleAcessarFazenda(acesso.fazenda_id, acesso.fazenda_nome)}
                   >
                     Acessar
                   </button>
@@ -462,5 +465,11 @@ const styles = {
     margin: 0,
     fontSize: 12,
     color: "#94a3b8",
+  },
+  activeHint: {
+    margin: 0,
+    fontSize: 12,
+    color: "#2563eb",
+    fontWeight: 600,
   },
 };
