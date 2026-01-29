@@ -5,7 +5,7 @@ import { toast } from "react-toastify";
 import { supabase } from "../../lib/supabaseClient";
 import { useFazenda } from "../../context/FazendaContext";
 import { aceitarConvite, getEmailDoUsuario } from "../../lib/fazendaHelpers";
-import { selectByEmailWithFallback } from "../../utils/supabaseFallback";
+import { listarConvitesPendentesTecnico } from "../../services/acessos";
 
 const STATUS_LABELS = {
   pendente: { label: "Pendente", tone: "warning" },
@@ -35,19 +35,7 @@ export default function TecnicoHome() {
       let convitesPendentes = [];
 
       if (email) {
-        const { data, error } = await selectByEmailWithFallback({
-          table: "convites_acesso",
-          select: "id, fazenda_id, status, created_at, tipo_profissional, nome_profissional",
-          email,
-          extraFilters: (query) =>
-            query.eq("status", "pendente").order("created_at", { ascending: false }),
-        });
-
-        if (error) {
-          throw error;
-        }
-
-        convitesPendentes = data ?? [];
+        convitesPendentes = await listarConvitesPendentesTecnico(email);
       }
 
       const { data: acessosData, error: acessosError } = await supabase
