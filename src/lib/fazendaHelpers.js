@@ -76,7 +76,9 @@ export async function listAcessosDaFazenda(fazendaId) {
 
   const { data, error } = await supabase
     .from("fazenda_acessos")
-    .select("id, user_id, created_at, status, permissoes, profiles (id, email, full_name, tipo_conta)")
+    .select(
+      "id, user_id, created_at, status, permissoes, tipo_profissional, nome_profissional, profiles (id, email, full_name, tipo_conta)"
+    )
     .eq("fazenda_id", fazendaId)
     .eq("status", "ATIVO")
     .order("created_at", { ascending: false });
@@ -136,7 +138,11 @@ export async function aceitarConvite(convite, userId) {
   if (acessoExistente?.id) {
     const { error: updateError } = await supabase
       .from("fazenda_acessos")
-      .update({ ativo: true })
+      .update({
+        ativo: true,
+        tipo_profissional: convite.tipo_profissional ?? null,
+        nome_profissional: convite.nome_profissional ?? null,
+      })
       .eq("id", acessoExistente.id);
 
     if (updateError) {
@@ -147,6 +153,8 @@ export async function aceitarConvite(convite, userId) {
       fazenda_id: convite.fazenda_id,
       user_id: userId,
       ativo: true,
+      tipo_profissional: convite.tipo_profissional ?? null,
+      nome_profissional: convite.nome_profissional ?? null,
     });
 
     if (insertError) {
