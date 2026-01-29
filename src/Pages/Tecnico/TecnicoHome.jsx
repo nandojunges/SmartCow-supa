@@ -4,11 +4,8 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { supabase } from "../../lib/supabaseClient";
 import { useFazenda } from "../../context/FazendaContext";
-import {
-  aceitarConvite,
-  getEmailDoUsuario,
-  listConvitesDoTecnico,
-} from "../../lib/fazendaHelpers";
+import { aceitarConvite, getEmailDoUsuario } from "../../lib/fazendaHelpers";
+import { selectByEmailWithFallback } from "../../utils/supabaseFallback";
 
 const STATUS_LABELS = {
   pendente: { label: "Pendente", tone: "warning" },
@@ -35,7 +32,23 @@ export default function TecnicoHome() {
       const email = (perfil?.email ?? "").trim().toLowerCase();
       setEmailTecnico(email);
 
-      const convitesPendentes = email ? await listConvitesDoTecnico(email) : [];
+      let convitesPendentes = [];
+
+      if (email) {
+        const { data, error } = await selectByEmailWithFallback({
+          table: "convites_acesso",
+          select: "id, fazenda_id, status, created_at, tipo_profissional, nome_profissional",
+          email,
+          extraFilters: (query) =>
+            query.eq("status", "pendente").order("created_at", { ascending: false }),
+        });
+
+        if (error) {
+          throw error;
+        }
+
+        convitesPendentes = data ?? [];
+      }
 
       const { data: acessosData, error: acessosError } = await supabase
         .from("fazenda_acessos")
@@ -83,7 +96,9 @@ export default function TecnicoHome() {
       setAcessos(acessosComFazenda);
       setConvites(convitesComFazenda);
     } catch (err) {
-      console.error("Erro ao carregar dados do técnico:", err.message);
+      if (import.meta.env.DEV) {
+        console.error("Erro ao carregar dados do técnico:", err.message);
+      }
       toast.error(err.message || "Não foi possível carregar suas fazendas no momento.");
     } finally {
       setCarregando(false);
@@ -107,7 +122,9 @@ export default function TecnicoHome() {
 
         await carregarDados(user);
       } catch (err) {
-        console.error("Erro ao carregar dados do técnico:", err.message);
+        if (import.meta.env.DEV) {
+          console.error("Erro ao carregar dados do técnico:", err.message);
+        }
         toast.error(err.message || "Não foi possível carregar seus dados.");
         setCarregando(false);
       }
@@ -142,7 +159,9 @@ export default function TecnicoHome() {
 
       await carregarDados(usuario);
     } catch (err) {
-      console.error("Erro ao aceitar convite:", err.message);
+      if (import.meta.env.DEV) {
+        console.error("Erro ao aceitar convite:", err.message);
+      }
       toast.error(err.message || "Não foi possível aceitar o convite.");
     } finally {
       setProcessandoId(null);
@@ -164,7 +183,9 @@ export default function TecnicoHome() {
       toast.success("Convite recusado.");
       await carregarDados(usuario);
     } catch (err) {
-      console.error("Erro ao recusar convite:", err.message);
+      if (import.meta.env.DEV) {
+        console.error("Erro ao recusar convite:", err.message);
+      }
       toast.error(err.message || "Não foi possível recusar o convite.");
     } finally {
       setProcessandoId(null);

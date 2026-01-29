@@ -3,11 +3,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Select from "react-select";
 import { toast } from "react-toastify";
 import { supabase } from "../../lib/supabaseClient";
-import {
-  getFazendaDoProdutor,
-  listAcessosDaFazenda,
-  listConvitesDaFazenda,
-} from "../../lib/fazendaHelpers";
+import { listAcessosDaFazenda, listConvitesDaFazenda } from "../../lib/fazendaHelpers";
+import { insertWithEmailFallback } from "../../utils/supabaseFallback";
 
 const PROFISSIONAIS_OPTIONS = [
   { value: "Veterinário (Reprodução)", label: "Veterinário (Reprodução)" },
@@ -40,8 +37,8 @@ export default function Ajustes() {
   const [email, setEmail] = useState("");
   const [profissionalTipo, setProfissionalTipo] = useState(null);
   const [profissionalNome, setProfissionalNome] = useState("");
-  const [fazendaId, setFazendaId] = useState(null);
-  const [fazendaNome, setFazendaNome] = useState("");
+  const [fazendas, setFazendas] = useState([]);
+  const [fazendaAtiva, setFazendaAtiva] = useState(null);
   const [carregando, setCarregando] = useState(true);
   const [carregandoListas, setCarregandoListas] = useState(false);
   const [enviando, setEnviando] = useState(false);
@@ -54,6 +51,8 @@ export default function Ajustes() {
   const emailNormalizado = useMemo(() => email.trim().toLowerCase(), [email]);
   const profissionalTipoLabel = profissionalTipo?.value ?? null;
   const nomeNormalizado = useMemo(() => profissionalNome.trim(), [profissionalNome]);
+  const fazendaId = fazendaAtiva?.id ?? null;
+  const fazendaNome = fazendaAtiva?.nome ?? "";
 
   const carregarListas = useCallback(async (fazendaIdAtual) => {
     if (!fazendaIdAtual) return;
@@ -95,12 +94,20 @@ export default function Ajustes() {
       setConvites(convitesData ?? []);
       setAcessos(acessosComPerfil);
     } catch (error) {
-      console.error("Erro ao carregar acessos:", error?.message);
+      if (import.meta.env.DEV) {
+        console.error("Erro ao carregar acessos:", error?.message);
+      }
       toast.error(error?.message || "Não foi possível carregar os acessos.");
     } finally {
       setCarregandoListas(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (!fazendaAtiva && fazendas.length > 0) {
+      setFazendaAtiva(fazendas[0]);
+    }
+  }, [fazendaAtiva, fazendas]);
 
   useEffect(() => {
     let isMounted = true;
@@ -119,24 +126,35 @@ export default function Ajustes() {
           return;
         }
 
-        const fazenda = await getFazendaDoProdutor(user.id);
-        const fazendaIdCarregada = fazenda?.id ?? null;
-        const fazendaNomeCarregada = fazenda?.nome ?? "";
+        const { data: fazendasData, error: fazendasError } = await supabase
+          .from("fazendas")
+          .select("id, nome, owner_user_id, created_at")
+          .eq("owner_user_id", user.id)
+          .order("created_at", { ascending: true });
+
+        if (fazendasError) {
+          throw fazendasError;
+        }
+
+        const fazendasOrdenadas = fazendasData ?? [];
+        const fazendaInicial = fazendasOrdenadas[0] ?? null;
 
         if (isMounted) {
-          setFazendaId(fazendaIdCarregada);
-          setFazendaNome(fazendaNomeCarregada);
+          setFazendas(fazendasOrdenadas);
+          setFazendaAtiva(fazendaInicial);
           setAvisoSemFazenda(
-            fazendaIdCarregada
-              ? ""
-              : "Nenhuma fazenda encontrada para este usuário. Cadastre uma fazenda primeiro."
+            fazendasOrdenadas.length === 0
+              ? "Nenhuma fazenda encontrada para este usuário. Cadastre uma fazenda primeiro."
+              : ""
           );
           setUsuario(user);
         }
 
-        await carregarListas(fazendaIdCarregada);
+        await carregarListas(fazendaInicial?.id ?? null);
       } catch (err) {
-        console.error("Erro ao carregar dados do produtor:", err.message);
+        if (import.meta.env.DEV) {
+          console.error("Erro ao carregar dados do produtor:", err.message);
+        }
         toast.error(err.message || "Não foi possível carregar seus dados.");
       } finally {
         if (isMounted) {
@@ -171,17 +189,28 @@ export default function Ajustes() {
   );
 
   const conviteBloqueado =
-    enviando || carregando || !emailNormalizado || !fazendaId || !validarEmail(emailNormalizado);
+    enviando ||
+    carregando ||
+    !emailNormalizado ||
+    !profissionalTipoLabel ||
+    !fazendaId ||
+    !validarEmail(emailNormalizado);
 
   async function handleConvidar(event) {
     event.preventDefault();
 
     if (!fazendaId) {
+      toast.error("Cadastre uma fazenda antes de convidar um profissional.");
       return;
     }
 
     if (!emailNormalizado || !validarEmail(emailNormalizado)) {
       toast.error("Informe um e-mail válido para o profissional.");
+      return;
+    }
+
+    if (!profissionalTipoLabel) {
+      toast.error("Selecione o tipo do profissional.");
       return;
     }
 
@@ -191,12 +220,15 @@ export default function Ajustes() {
         return;
       }
       setEnviando(true);
-      const { error } = await supabase.from("convites_acesso").insert({
-        fazenda_id: fazendaId,
-        convidado_email: emailNormalizado,
-        tipo_profissional: profissionalTipoLabel,
-        nome_profissional: nomeNormalizado || null,
-        status: "pendente",
+      const { error } = await insertWithEmailFallback({
+        table: "convites_acesso",
+        email: emailNormalizado,
+        payloadBase: {
+          fazenda_id: fazendaId,
+          tipo_profissional: profissionalTipoLabel,
+          nome_profissional: nomeNormalizado || null,
+          status: "pendente",
+        },
       });
 
       if (error) {
@@ -209,7 +241,9 @@ export default function Ajustes() {
       toast.success("Convite enviado! O profissional verá ao acessar.");
       await carregarListas(fazendaId);
     } catch (err) {
-      console.error("Erro ao enviar convite:", err.message);
+      if (import.meta.env.DEV) {
+        console.error("Erro ao enviar convite:", err.message);
+      }
       toast.error(err.message || "Não foi possível enviar o convite.");
     } finally {
       setEnviando(false);
@@ -233,7 +267,9 @@ export default function Ajustes() {
       toast.success("Convite cancelado.");
       await carregarListas(fazendaId);
     } catch (err) {
-      console.error("Erro ao cancelar convite:", err.message);
+      if (import.meta.env.DEV) {
+        console.error("Erro ao cancelar convite:", err.message);
+      }
       toast.error(err.message || "Não foi possível cancelar o convite.");
     } finally {
       setProcessandoId(null);
@@ -259,7 +295,9 @@ export default function Ajustes() {
       );
       await carregarListas(fazendaId);
     } catch (err) {
-      console.error("Erro ao atualizar acesso:", err.message);
+      if (import.meta.env.DEV) {
+        console.error("Erro ao atualizar acesso:", err.message);
+      }
       toast.error(err.message || "Não foi possível atualizar o acesso.");
     } finally {
       setProcessandoId(null);
@@ -283,7 +321,9 @@ export default function Ajustes() {
       toast.success("Acesso revogado com sucesso.");
       await carregarListas(fazendaId);
     } catch (err) {
-      console.error("Erro ao remover acesso:", err.message);
+      if (import.meta.env.DEV) {
+        console.error("Erro ao remover acesso:", err.message);
+      }
       toast.error(err.message || "Não foi possível remover o acesso.");
     } finally {
       setProcessandoId(null);
@@ -376,7 +416,9 @@ export default function Ajustes() {
             {convitesPendentes.map((convite) => (
               <div key={convite.id} style={styles.listItem}>
                 <div style={styles.listInfo}>
-                  <span style={styles.listTitle}>{convite.convidado_email}</span>
+                  <span style={styles.listTitle}>
+                    {convite.email_convite || "E-mail não disponível"}
+                  </span>
                   <span style={styles.listMeta}>
                     {convite.tipo_profissional || "Tipo não informado"}
                     {convite.nome_profissional
