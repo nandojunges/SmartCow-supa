@@ -12,17 +12,18 @@ import EsqueciSenha from "./Auth/EsqueciSenha";
 import SistemaBase from "./layout/SistemaBase";
 
 // Páginas
-import Inicio from "./pages/Inicio/Inicio.jsx";
-import Animais from "./pages/Animais/Animais.jsx";
-import Bezerras from "./pages/Bezerras/Bezerras.jsx";
-import Reproducao from "./pages/Reproducao/Reproducao.jsx";
-import Leite from "./pages/Leite/Leite.jsx";
-import Saude from "./pages/Saude/Saude.jsx";
-import ConsumoReposicao from "./pages/ConsumoReposicao/ConsumoReposicao.jsx";
-import Financeiro from "./pages/Financeiro/Financeiro.jsx";
-import Calendario from "./pages/Calendario/Calendario.jsx";
-import Ajustes from "./pages/Ajustes/Ajustes.jsx";
-import Admin from "./pages/Admin/Admin.jsx";
+import Inicio from "./Pages/Inicio/Inicio.jsx";
+import Animais from "./Pages/Animais/Animais.jsx";
+import Bezerras from "./Pages/Bezerras/Bezerras.jsx";
+import Reproducao from "./Pages/Reproducao/Reproducao.jsx";
+import Leite from "./Pages/Leite/Leite.jsx";
+import Saude from "./Pages/Saude/Saude.jsx";
+import ConsumoReposicao from "./Pages/ConsumoReposicao/ConsumoReposicao.jsx";
+import Financeiro from "./Pages/Financeiro/Financeiro.jsx";
+import Calendario from "./Pages/Calendario/Calendario.jsx";
+import Ajustes from "./Pages/Ajustes/Ajustes.jsx";
+import Admin from "./Pages/Admin/Admin.jsx";
+import TecnicoHome from "./Pages/Tecnico/TecnicoHome.jsx";
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -102,6 +103,7 @@ export default function App() {
               <Route path="/financeiro" element={<Financeiro />} />
               <Route path="/calendario" element={<Calendario />} />
               <Route path="/ajustes" element={<Ajustes />} />
+              <Route path="/tecnico" element={<TecnicoHome />} />
 
               {/* qualquer rota desconhecida volta para /inicio */}
               <Route path="*" element={<Navigate to="/inicio" replace />} />
