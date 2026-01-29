@@ -228,7 +228,7 @@ export default function Secagem({ isOnline = navigator.onLine }) {
       }
       return "Offline: sem dados salvos no computador";
     }
-    return "Online: dados atualizados";
+    return "";
   }, [cacheMetadata, hasCache, isOnline]);
 
   const linhasOrdenadas = useMemo(() => {
@@ -346,32 +346,37 @@ export default function Secagem({ isOnline = navigator.onLine }) {
           marginBottom: 12,
         }}
       >
-        <label className="st-filter__label" style={{ minWidth: 200 }}>
-          Secar X dias antes do parto
+        <label
+          className="st-filter__label"
+          style={{ minWidth: 200, flex: "1 1 220px" }}
+        >
+          Dias antes do parto para secar
           <input
             className="st-filter-input"
             type="number"
             min={1}
+            placeholder="Ex: 60"
             value={diasAntes}
             onChange={(event) => setDiasAntes(Number(event.target.value || 0))}
           />
         </label>
-        <label className="st-filter__label" style={{ minWidth: 200 }}>
-          Avisar/preparar Y dias antes
+        <label
+          className="st-filter__label"
+          style={{ minWidth: 200, flex: "1 1 220px" }}
+        >
+          Avisar/preparar com antecedência
           <input
             className="st-filter-input"
             type="number"
             min={0}
+            placeholder="Ex: 7"
             value={diasAviso}
             onChange={(event) => setDiasAviso(Number(event.target.value || 0))}
           />
         </label>
       </div>
 
-      <div className="st-filter-hint">{statusSyncTexto}</div>
-      <div className="st-filter-hint">
-        Dica: acompanhe a data ideal de secagem e prepare os lotes com antecedência.
-      </div>
+      {statusSyncTexto && <div className="st-filter-hint">{statusSyncTexto}</div>}
 
       <div className="st-table-container">
         <div className="st-table-wrap">

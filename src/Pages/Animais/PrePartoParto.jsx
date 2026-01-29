@@ -229,7 +229,7 @@ export default function PrePartoParto({ isOnline = navigator.onLine }) {
       }
       return "Offline: sem dados salvos no computador";
     }
-    return "Online: dados atualizados";
+    return "";
   }, [cacheMetadata, hasCache, isOnline]);
 
   const linhasOrdenadas = useMemo(() => {
@@ -358,7 +358,7 @@ export default function PrePartoParto({ isOnline = navigator.onLine }) {
         </label>
       </div>
 
-      <div className="st-filter-hint">{statusSyncTexto}</div>
+      {statusSyncTexto && <div className="st-filter-hint">{statusSyncTexto}</div>}
       <div className="st-filter-hint">
         Dica: acompanhe a proximidade do parto para agir no momento certo.
       </div>
