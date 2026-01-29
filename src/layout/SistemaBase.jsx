@@ -2,7 +2,7 @@
 import NavegacaoPrincipal from "./NavegacaoPrincipal";
 import { Outlet } from "react-router-dom";
 
-export default function SistemaBase() {
+export default function SistemaBase({ tipoConta }) {
   return (
     <div
       style={{
@@ -23,7 +23,7 @@ export default function SistemaBase() {
         }}
       >
         {/* Agora sem maxWidth, ocupa toda a tela */}
-        <NavegacaoPrincipal />
+        <NavegacaoPrincipal tipoConta={tipoConta} />
       </header>
 
       {/* CONTEÚDO DAS PÁGINAS */}

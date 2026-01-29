@@ -1,6 +1,8 @@
 // src/Pages/Tecnico/TecnicoHome.jsx
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
+import { useFazenda } from "../../context/FazendaContext";
 
 const STATUS_LABELS = {
   PENDENTE: { label: "Pendente", tone: "warning" },
@@ -9,6 +11,8 @@ const STATUS_LABELS = {
 };
 
 export default function TecnicoHome() {
+  const navigate = useNavigate();
+  const { definirFazendaAtiva } = useFazenda();
   const [carregando, setCarregando] = useState(true);
   const [usuario, setUsuario] = useState(null);
   const [acessos, setAcessos] = useState([]);
@@ -153,6 +157,11 @@ export default function TecnicoHome() {
     }
   }
 
+  function handleAcessarFazenda(fazendaId) {
+    definirFazendaAtiva(fazendaId);
+    navigate("/inicio", { replace: true });
+  }
+
   return (
     <div style={styles.page}>
       <div style={styles.header}>
@@ -255,6 +264,13 @@ export default function TecnicoHome() {
                 </div>
                 <div style={styles.listActions}>
                   <span style={{ ...styles.status, ...styles.statussuccess }}>Ativo</span>
+                  <button
+                    type="button"
+                    style={styles.secondaryButton}
+                    onClick={() => handleAcessarFazenda(acesso.fazenda_id)}
+                  >
+                    Acessar
+                  </button>
                 </div>
               </div>
             ))}
@@ -387,6 +403,15 @@ const styles = {
     border: "none",
     background: "#2563eb",
     color: "#fff",
+    fontWeight: 600,
+    padding: "8px 14px",
+    cursor: "pointer",
+  },
+  secondaryButton: {
+    borderRadius: 12,
+    border: "1px solid #cbd5f5",
+    background: "#eef2ff",
+    color: "#1e3a8a",
     fontWeight: 600,
     padding: "8px 14px",
     cursor: "pointer",
