@@ -1,5 +1,5 @@
 // src/layout/NavegacaoPrincipal.jsx
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import StatusConexao from "../components/StatusConexao";
@@ -18,17 +18,63 @@ const ABAS_BASE = [
   { id: "ajustes",    label: "Ajustes",           title: "Configurações" },
 ];
 
-function useAbaAtiva(pathname) {
-  const seg = pathname.split("/")[1] || "inicio";
-  return ABAS_BASE.some((a) => a.id === seg) ? seg : "inicio";
+const ABAS_TECNICO = [{ id: "tecnico", label: "Fazendas", title: "Fazendas autorizadas" }];
+
+function useAbaAtiva(pathname, abas) {
+  const seg = pathname.split("/")[1] || abas[0]?.id || "inicio";
+  return abas.some((a) => a.id === seg) ? seg : abas[0]?.id || "inicio";
 }
 
 export default function NavegacaoPrincipal({ tipoConta }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const abaAtiva = useAbaAtiva(pathname);
-  const { limparFazendaAtiva } = useFazenda();
-  const isAssistenteTecnico = String(tipoConta ?? "").trim().toUpperCase() === "ASSISTENTE_TECNICO";
+  const { fazendaAtivaId, clearFazendaAtiva } = useFazenda();
+  const [tipoContaPerfil, setTipoContaPerfil] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function carregarPerfil() {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError) {
+        console.warn("Erro ao carregar usuário:", authError.message);
+        return;
+      }
+
+      const userId = authData?.user?.id;
+      if (!userId) {
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("tipo_conta")
+        .eq("id", userId)
+        .maybeSingle();
+
+      if (error) {
+        console.warn("Erro ao carregar perfil:", error.message);
+        return;
+      }
+
+      if (isMounted) {
+        setTipoContaPerfil(data?.tipo_conta ?? null);
+      }
+    }
+
+    carregarPerfil();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const tipoContaAtual = tipoContaPerfil ?? tipoConta;
+  const isAssistenteTecnico =
+    String(tipoContaAtual ?? "").trim().toUpperCase() === "ASSISTENTE_TECNICO";
+  const usarMenuTecnico = isAssistenteTecnico && !fazendaAtivaId;
+  const abas = usarMenuTecnico ? ABAS_TECNICO : ABAS_BASE;
+  const abaAtiva = useAbaAtiva(pathname, abas);
 
   // ===== PALETA “AgTech premium” =====
   const NAV_BG = "#0B1F3A";           // navy profundo
@@ -36,7 +82,7 @@ export default function NavegacaoPrincipal({ tipoConta }) {
   const TXT = "rgba(255,255,255,0.92)";
   const TXT_MUTED = "rgba(255,255,255,0.72)";
 
-  const ativa = ABAS_BASE.find((a) => a.id === abaAtiva);
+  const ativa = abas.find((a) => a.id === abaAtiva);
 
   return (
     <header
@@ -74,6 +120,22 @@ export default function NavegacaoPrincipal({ tipoConta }) {
             >
               SmartCow
             </span>
+            {isAssistenteTecnico && fazendaAtivaId && (
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 800,
+                  padding: "2px 6px",
+                  borderRadius: 999,
+                  background: "rgba(25,182,164,0.18)",
+                  color: TXT,
+                  border: "1px solid rgba(25,182,164,0.4)",
+                  textTransform: "uppercase",
+                }}
+              >
+                Modo Consultor
+              </span>
+            )}
           </div>
 
           <span
@@ -110,7 +172,7 @@ export default function NavegacaoPrincipal({ tipoConta }) {
         >
           <style>{`nav::-webkit-scrollbar{height:0px;}`}</style>
 
-          {ABAS_BASE.map((aba) => {
+          {abas.map((aba) => {
             const isAtiva = abaAtiva === aba.id;
 
             return (
@@ -160,13 +222,24 @@ export default function NavegacaoPrincipal({ tipoConta }) {
         <button
           onClick={async () => {
             if (isAssistenteTecnico) {
-              limparFazendaAtiva();
-              navigate("/tecnico");
+              if (fazendaAtivaId) {
+                clearFazendaAtiva();
+                navigate("/tecnico");
+                return;
+              }
+              clearFazendaAtiva();
+              await supabase.auth.signOut();
               return;
             }
             await supabase.auth.signOut();
           }}
-          title={isAssistenteTecnico ? "Sair da fazenda" : "Sair do sistema"}
+          title={
+            isAssistenteTecnico
+              ? fazendaAtivaId
+                ? "Sair da fazenda"
+                : "Sair do sistema"
+              : "Sair do sistema"
+          }
           style={{
             display: "inline-flex",
             alignItems: "center",

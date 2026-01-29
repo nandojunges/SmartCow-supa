@@ -29,7 +29,7 @@ const FazendaContext = createContext(null);
 export function FazendaProvider({ children }) {
   const [fazendaAtivaId, setFazendaAtivaId] = useState(getInitialFazendaAtivaId);
 
-  const definirFazendaAtiva = useCallback((id) => {
+  const setFazendaAtiva = useCallback((id) => {
     if (id === null || id === undefined || id === "") {
       setFazendaAtivaId(null);
       return;
@@ -37,7 +37,7 @@ export function FazendaProvider({ children }) {
     setFazendaAtivaId(String(id));
   }, []);
 
-  const limparFazendaAtiva = useCallback(() => {
+  const clearFazendaAtiva = useCallback(() => {
     setFazendaAtivaId(null);
   }, []);
 
@@ -59,10 +59,12 @@ export function FazendaProvider({ children }) {
     () => ({
       fazendaAtivaId,
       hasFazendaAtiva: Boolean(fazendaAtivaId),
-      definirFazendaAtiva,
-      limparFazendaAtiva,
+      setFazendaAtiva,
+      clearFazendaAtiva,
+      definirFazendaAtiva: setFazendaAtiva,
+      limparFazendaAtiva: clearFazendaAtiva,
     }),
-    [fazendaAtivaId, definirFazendaAtiva, limparFazendaAtiva]
+    [fazendaAtivaId, setFazendaAtiva, clearFazendaAtiva]
   );
 
   return <FazendaContext.Provider value={value}>{children}</FazendaContext.Provider>;

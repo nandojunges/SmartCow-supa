@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { toast } from "react-toastify";
+import { useFazenda } from "../context/FazendaContext";
 
 export default function VerificarEmail() {
   const [email, setEmail] = useState("");
@@ -10,6 +11,7 @@ export default function VerificarEmail() {
   const [erro, setErro] = useState("");
   const [cadastro, setCadastro] = useState(null); // dados salvos no localStorage
   const navigate = useNavigate();
+  const { clearFazendaAtiva } = useFazenda();
 
   useEffect(() => {
     const salvo = localStorage.getItem("pendingCadastro");
@@ -93,6 +95,8 @@ export default function VerificarEmail() {
 
       const userId = data?.user?.id ?? data?.session?.user?.id;
 
+      let tipoContaFinal = tipoConta;
+
       if (userId) {
         const profilePayload = {
           id: userId,
@@ -104,9 +108,11 @@ export default function VerificarEmail() {
           fazenda: tipoConta === "PRODUTOR" ? cadastro.fazenda : null,
         };
 
-        const { error: profileError } = await supabase
+        const { data: perfilAtualizado, error: profileError } = await supabase
           .from("profiles")
-          .upsert(profilePayload, { onConflict: "id" });
+          .upsert(profilePayload, { onConflict: "id" })
+          .select("tipo_conta")
+          .maybeSingle();
 
         if (profileError) {
           console.error("Erro ao salvar profile:", profileError);
@@ -114,6 +120,8 @@ export default function VerificarEmail() {
             profileError.message ||
               "Cadastro concluído, mas houve erro ao salvar o perfil."
           );
+        } else if (perfilAtualizado?.tipo_conta) {
+          tipoContaFinal = perfilAtualizado.tipo_conta;
         }
       } else {
         console.warn("verifyOtp sem userId para criar profile.");
@@ -121,6 +129,12 @@ export default function VerificarEmail() {
 
       // limpar storage e seguir para o sistema
       localStorage.removeItem("pendingCadastro");
+
+      if (String(tipoContaFinal ?? "").trim().toUpperCase() === "ASSISTENTE_TECNICO") {
+        clearFazendaAtiva();
+        navigate("/tecnico", { replace: true });
+        return;
+      }
 
       navigate("/inicio", { replace: true });
     } catch (err) {
