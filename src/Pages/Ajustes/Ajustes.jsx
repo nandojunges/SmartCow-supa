@@ -3,8 +3,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Select from "react-select";
 import { toast } from "react-toastify";
 import { supabase } from "../../lib/supabaseClient";
-import { listAcessosDaFazenda, listConvitesDaFazenda } from "../../lib/fazendaHelpers";
-import { insertWithEmailFallback } from "../../utils/supabaseFallback";
+import { listAcessosDaFazenda } from "../../lib/fazendaHelpers";
+import {
+  criarConvite,
+  ensureFazendaDoProdutor,
+  listarConvitesPendentesProdutor,
+} from "../../services/acessos";
 
 const PROFISSIONAIS_OPTIONS = [
   { value: "Veterinário (Reprodução)", label: "Veterinário (Reprodução)" },
@@ -60,7 +64,7 @@ export default function Ajustes() {
 
     try {
       const [convitesData, acessosData] = await Promise.all([
-        listConvitesDaFazenda(fazendaIdAtual),
+        listarConvitesPendentesProdutor(fazendaIdAtual),
         listAcessosDaFazenda(fazendaIdAtual),
       ]);
       const userIds = acessosData.map((acesso) => acesso.user_id).filter(Boolean);
@@ -126,31 +130,22 @@ export default function Ajustes() {
           return;
         }
 
-        const { data: fazendasData, error: fazendasError } = await supabase
-          .from("fazendas")
-          .select("id, nome, owner_user_id, created_at")
-          .eq("owner_user_id", user.id)
-          .order("created_at", { ascending: true });
-
-        if (fazendasError) {
-          throw fazendasError;
-        }
-
-        const fazendasOrdenadas = fazendasData ?? [];
-        const fazendaInicial = fazendasOrdenadas[0] ?? null;
+        const { fazenda, fazendas: fazendasOrdenadas } = await ensureFazendaDoProdutor(
+          user.id
+        );
 
         if (isMounted) {
-          setFazendas(fazendasOrdenadas);
-          setFazendaAtiva(fazendaInicial);
+          setFazendas(fazendasOrdenadas ?? []);
+          setFazendaAtiva(fazenda);
           setAvisoSemFazenda(
-            fazendasOrdenadas.length === 0
-              ? "Nenhuma fazenda encontrada para este usuário. Cadastre uma fazenda primeiro."
-              : ""
+            fazendasOrdenadas?.length
+              ? ""
+              : "Nenhuma fazenda encontrada para este usuário. Cadastre uma fazenda primeiro."
           );
           setUsuario(user);
         }
 
-        await carregarListas(fazendaInicial?.id ?? null);
+        await carregarListas(fazenda?.id ?? null);
       } catch (err) {
         if (import.meta.env.DEV) {
           console.error("Erro ao carregar dados do produtor:", err.message);
@@ -193,16 +188,10 @@ export default function Ajustes() {
     carregando ||
     !emailNormalizado ||
     !profissionalTipoLabel ||
-    !fazendaId ||
     !validarEmail(emailNormalizado);
 
   async function handleConvidar(event) {
     event.preventDefault();
-
-    if (!fazendaId) {
-      toast.error("Cadastre uma fazenda antes de convidar um profissional.");
-      return;
-    }
 
     if (!emailNormalizado || !validarEmail(emailNormalizado)) {
       toast.error("Informe um e-mail válido para o profissional.");
@@ -214,32 +203,40 @@ export default function Ajustes() {
       return;
     }
 
+    if (enviando) {
+      return;
+    }
+
     try {
       if (!usuario?.id) {
         toast.error("Não foi possível validar o usuário logado.");
         return;
       }
-      setEnviando(true);
-      const { error } = await insertWithEmailFallback({
-        table: "convites_acesso",
-        email: emailNormalizado,
-        payloadBase: {
-          fazenda_id: fazendaId,
-          tipo_profissional: profissionalTipoLabel,
-          nome_profissional: nomeNormalizado || null,
-          status: "pendente",
-        },
-      });
 
-      if (error) {
-        throw error;
+      setEnviando(true);
+      let fazendaIdAtual = fazendaId;
+
+      if (!fazendaIdAtual) {
+        const { fazenda, fazendas: fazendasAtualizadas } =
+          await ensureFazendaDoProdutor(usuario.id);
+        fazendaIdAtual = fazenda?.id ?? null;
+
+        if (!fazendaIdAtual) {
+          toast.error("Não foi possível criar a fazenda para enviar o convite.");
+          return;
+        }
+
+        setFazendas(fazendasAtualizadas ?? []);
+        setFazendaAtiva(fazenda);
       }
+
+      await criarConvite(fazendaIdAtual, emailNormalizado, profissionalTipoLabel, nomeNormalizado);
 
       setEmail("");
       setProfissionalTipo(null);
       setProfissionalNome("");
       toast.success("Convite enviado! O profissional verá ao acessar.");
-      await carregarListas(fazendaId);
+      await carregarListas(fazendaIdAtual);
     } catch (err) {
       if (import.meta.env.DEV) {
         console.error("Erro ao enviar convite:", err.message);

@@ -33,7 +33,7 @@ export async function getEmailDoUsuario(userId) {
     .from("profiles")
     .select("id, email, tipo_conta")
     .eq("id", userId)
-    .single();
+    .maybeSingle();
 
   if (error) {
     throw error;
