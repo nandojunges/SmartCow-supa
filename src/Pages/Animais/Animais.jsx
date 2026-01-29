@@ -9,6 +9,8 @@ import {
   DownloadCloud,
 } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
+import { withFazendaId } from "../../lib/fazendaScope";
+import { useFazendaAtiva } from "../../context/FazendaAtivaContext";
 import { kvGet, kvSet } from "../../offline/localDB";
 
 // Páginas internas
@@ -138,6 +140,7 @@ function BarraLateral({ abaAtiva, setAbaAtiva }) {
 //   COMPONENTE PRINCIPAL
 // =========================
 export default function Animais() {
+  const { fazendaAtivaId } = useFazendaAtiva();
   const [abaAtiva, setAbaAtiva] = useState("todos");
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
@@ -167,11 +170,13 @@ export default function Animais() {
   const carregarAnimalCompleto = useCallback(async (id) => {
     if (!id) return null;
     if (!isOnline) return null;
+    if (!fazendaAtivaId) return null;
 
-    const { data, error } = await supabase
-      .from("animais")
-      .select(
-        `
+    const { data, error } = await withFazendaId(
+      supabase
+        .from("animais")
+        .select(
+          `
         id,
         numero,
         brinco,
@@ -188,9 +193,10 @@ export default function Animais() {
         ultimo_parto,
         ultima_ia
       `
-      )
-      .eq("id", id)
-      .maybeSingle();
+        )
+        .eq("id", id),
+      fazendaAtivaId
+    ).maybeSingle();
 
     if (error || !data) {
       console.error("Erro ao carregar animal completo:", error || "sem dados");
@@ -199,11 +205,10 @@ export default function Animais() {
 
     let racaNome = null;
     if (data.raca_id) {
-      const { data: racaRow, error: errorRaca } = await supabase
-        .from("racas")
-        .select("nome")
-        .eq("id", data.raca_id)
-        .maybeSingle();
+      const { data: racaRow, error: errorRaca } = await withFazendaId(
+        supabase.from("racas").select("nome").eq("id", data.raca_id),
+        fazendaAtivaId
+      ).maybeSingle();
 
       if (!errorRaca && racaRow) {
         racaNome = racaRow.nome;
@@ -216,7 +221,7 @@ export default function Animais() {
     };
 
     return animalCompleto;
-  }, [isOnline]);
+  }, [fazendaAtivaId, isOnline]);
 
   // =========================
   //   CARREGAR ATIVOS + INATIVOS
@@ -262,19 +267,21 @@ export default function Animais() {
 
     console.log("[animais] online -> buscando supabase");
     try {
-      const { data: ativos, error: erroAtivos } = await supabase
-        .from("animais")
-        .select("id, numero, brinco")
-        .eq("ativo", true)
-        .order("numero", { ascending: true });
+      if (!fazendaAtivaId) {
+        throw new Error("Selecione uma fazenda para carregar os animais.");
+      }
+
+      const { data: ativos, error: erroAtivos } = await withFazendaId(
+        supabase.from("animais").select("id, numero, brinco").eq("ativo", true),
+        fazendaAtivaId
+      ).order("numero", { ascending: true });
 
       setAnimaisAtivos(!erroAtivos && ativos ? ativos : []);
 
-      const { data: inativosRaw, error: erroInativos } = await supabase
-        .from("animais")
-        .select("id, numero, brinco")
-        .eq("ativo", false)
-        .order("numero", { ascending: true });
+      const { data: inativosRaw, error: erroInativos } = await withFazendaId(
+        supabase.from("animais").select("id, numero, brinco").eq("ativo", false),
+        fazendaAtivaId
+      ).order("numero", { ascending: true });
 
       if (erroInativos || !inativosRaw) {
         setAnimaisInativos([]);
@@ -293,11 +300,13 @@ export default function Animais() {
       const idsInativos = inativosRaw.map((a) => a.id).filter(Boolean);
 
       const { data: saidas, error: erroSaidas } = idsInativos.length
-        ? await supabase
-            .from("saidas_animais")
-            .select("id, animal_id, tipo_saida, motivo, data_saida, valor, observacoes")
-            .in("animal_id", idsInativos)
-            .order("data_saida", { ascending: true })
+          ? await withFazendaId(
+            supabase
+              .from("saidas_animais")
+              .select("id, animal_id, tipo_saida, motivo, data_saida, valor, observacoes")
+              .in("animal_id", idsInativos),
+            fazendaAtivaId
+          ).order("data_saida", { ascending: true })
         : { data: [], error: null };
 
       if (erroSaidas) {
@@ -341,7 +350,7 @@ export default function Animais() {
     } finally {
       setCarregando(false);
     }
-  }, [isOnline]);
+  }, [fazendaAtivaId, isOnline]);
 
   useEffect(() => {
     carregarAnimais();

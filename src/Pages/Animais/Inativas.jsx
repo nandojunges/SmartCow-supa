@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
+import { withFazendaId } from "../../lib/fazendaScope";
+import { useFazendaAtiva } from "../../context/FazendaAtivaContext";
 import "../../styles/tabelaModerna.css";
 
 /* ===== helpers ===== */
@@ -41,6 +43,7 @@ export default function Inativas({
   onAtualizar, // função do pai para recarregar listas após reativar
   onVerFicha, // opcional: (animal) => void
 }) {
+  const { fazendaAtivaId } = useFazendaAtiva();
   const [hoveredRowId, setHoveredRowId] = useState(null);
   const [hoveredColKey, setHoveredColKey] = useState(null);
   const [okMsg, setOkMsg] = useState("");
@@ -66,6 +69,11 @@ export default function Inativas({
   const reativar = async (animal) => {
     const { id, saida_id } = animal || {};
     if (!id) return;
+    if (!fazendaAtivaId) {
+      setOkMsg("⚠️ Selecione uma fazenda antes de reativar.");
+      setTimeout(() => setOkMsg(""), 2500);
+      return;
+    }
     if (!navigator.onLine) {
       setOkMsg("⚠️ Sem conexão. Conecte para reativar o animal.");
       setTimeout(() => setOkMsg(""), 2500);
@@ -75,19 +83,19 @@ export default function Inativas({
     setLoadingId(id);
     try {
       // 1) Volta o animal para ativo
-      const { error: erroAtivo } = await supabase
-        .from("animais")
-        .update({ ativo: true })
-        .eq("id", id);
+      const { error: erroAtivo } = await withFazendaId(
+        supabase.from("animais").update({ ativo: true }),
+        fazendaAtivaId
+      ).eq("id", id);
 
       if (erroAtivo) throw erroAtivo;
 
       // 2) Remove a saída vinculada (quando existir)
       if (saida_id) {
-        const { error: erroDelete } = await supabase
-          .from("saidas_animais")
-          .delete()
-          .eq("id", saida_id);
+        const { error: erroDelete } = await withFazendaId(
+          supabase.from("saidas_animais").delete(),
+          fazendaAtivaId
+        ).eq("id", saida_id);
 
         if (erroDelete) throw erroDelete;
       }

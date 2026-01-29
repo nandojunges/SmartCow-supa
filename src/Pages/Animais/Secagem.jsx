@@ -1,6 +1,8 @@
 // src/Pages/Animais/Secagem.jsx
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
+import { withFazendaId } from "../../lib/fazendaScope";
+import { useFazendaAtiva } from "../../context/FazendaAtivaContext";
 import { enqueue, kvGet, kvSet } from "../../offline/localDB";
 import "../../styles/tabelaModerna.css";
 import ModalRegistrarSecagem from "./ModalRegistrarSecagem";
@@ -68,6 +70,7 @@ function previsaoParto(animal) {
 }
 
 export default function Secagem({ isOnline = navigator.onLine }) {
+  const { fazendaAtivaId } = useFazendaAtiva();
   const CACHE_KEY = "cache:animais:list";
   const CACHE_FALLBACK_KEY = "cache:animais:plantel:v1";
 
@@ -101,11 +104,11 @@ export default function Secagem({ isOnline = navigator.onLine }) {
     return map;
   }, [lotes]);
 
-  const carregarAnimais = useCallback(async (userId) => {
-    const { data, error } = await supabase
-      .from("animais")
-      .select("*")
-      .eq("user_id", userId)
+  const carregarAnimais = useCallback(async () => {
+    const { data, error } = await withFazendaId(
+      supabase.from("animais").select("*"),
+      fazendaAtivaId
+    )
       .eq("ativo", true)
       .order("numero", { ascending: true });
 
@@ -113,20 +116,13 @@ export default function Secagem({ isOnline = navigator.onLine }) {
     const lista = Array.isArray(data) ? data : [];
     setAnimais(lista);
     return lista;
-  }, []);
+  }, [fazendaAtivaId]);
 
-  const carregarLotes = useCallback(async (userId) => {
-    let { data, error } = await supabase
-      .from(LOTE_TABLE)
-      .select("*")
-      .order("id", { ascending: true })
-      .eq("user_id", userId);
-
-    if (error && /column .*user_id.* does not exist/i.test(error.message || "")) {
-      const retry = await supabase.from(LOTE_TABLE).select("*").order("id", { ascending: true });
-      data = retry.data;
-      error = retry.error;
-    }
+  const carregarLotes = useCallback(async () => {
+    const { data, error } = await withFazendaId(
+      supabase.from(LOTE_TABLE).select("*"),
+      fazendaAtivaId
+    ).order("id", { ascending: true });
 
     if (error) {
       console.error("Erro ao carregar lotes:", error);
@@ -137,7 +133,7 @@ export default function Secagem({ isOnline = navigator.onLine }) {
     const lista = Array.isArray(data) ? data : [];
     setLotes(lista);
     return lista;
-  }, []);
+  }, [LOTE_TABLE, fazendaAtivaId]);
 
   const carregarDoCache = useCallback(async () => {
     const cachePrimario = await kvGet(CACHE_KEY);
@@ -177,17 +173,14 @@ export default function Secagem({ isOnline = navigator.onLine }) {
           return;
         }
 
-        const {
-          data: { user },
-          error: userErr,
-        } = await supabase.auth.getUser();
-
-        if (userErr || !user) throw new Error("Usuário não autenticado.");
+        if (!fazendaAtivaId) {
+          throw new Error("Selecione uma fazenda para continuar.");
+        }
         if (!ativo) return;
 
         const [animaisData] = await Promise.all([
-          carregarAnimais(user.id),
-          carregarLotes(user.id),
+          carregarAnimais(),
+          carregarLotes(),
         ]);
 
         const payloadCache = {
@@ -215,7 +208,13 @@ export default function Secagem({ isOnline = navigator.onLine }) {
     return () => {
       ativo = false;
     };
-  }, [carregarAnimais, carregarDoCache, carregarLotes, isOnline]);
+  }, [
+    carregarAnimais,
+    carregarDoCache,
+    carregarLotes,
+    fazendaAtivaId,
+    isOnline,
+  ]);
 
   const statusSyncTexto = useMemo(() => {
     if (!isOnline) {
@@ -296,18 +295,15 @@ export default function Secagem({ isOnline = navigator.onLine }) {
     setAcaoMensagem("");
 
     try {
-      const {
-        data: { user },
-        error: userErr,
-      } = await supabase.auth.getUser();
-
-      if (userErr || !user) throw new Error("Usuário não autenticado.");
+      if (!fazendaAtivaId) {
+        throw new Error("Selecione uma fazenda para registrar a secagem.");
+      }
 
       const evento = {
         animal_id: animalSelecionado.id,
         tipo_evento: "secagem",
         data_evento: payload.dataSecagem,
-        user_id: user.id,
+        fazenda_id: fazendaAtivaId,
       };
 
       if (!navigator.onLine) {

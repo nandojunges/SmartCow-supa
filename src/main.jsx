@@ -3,15 +3,15 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App.jsx";
-import { FazendaProvider } from "./context/FazendaContext.jsx";
+import { FazendaAtivaProvider } from "./context/FazendaAtivaContext.jsx";
 import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <BrowserRouter>
-      <FazendaProvider>
+      <FazendaAtivaProvider>
         <App />
-      </FazendaProvider>
+      </FazendaAtivaProvider>
     </BrowserRouter>
   </React.StrictMode>
 );

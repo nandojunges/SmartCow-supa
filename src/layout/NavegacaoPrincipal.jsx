@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import StatusConexao from "../components/StatusConexao";
-import { useFazenda } from "../context/FazendaContext";
+import { useFazendaAtiva } from "../context/FazendaAtivaContext";
 
 const ABAS_BASE = [
   { id: "inicio",     label: "Início",            title: "Página inicial" },
@@ -28,7 +28,7 @@ function useAbaAtiva(pathname, abas) {
 export default function NavegacaoPrincipal({ tipoConta }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { fazendaAtivaId, clearFazendaAtiva } = useFazenda();
+  const { fazendaAtivaId, clearFazendaAtiva } = useFazendaAtiva();
   const [tipoContaPerfil, setTipoContaPerfil] = useState(null);
 
   useEffect(() => {

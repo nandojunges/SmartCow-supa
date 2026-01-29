@@ -7,6 +7,8 @@ import React, {
 } from "react";
 import Select from "react-select";
 import { supabase } from "../../lib/supabaseClient";
+import { withFazendaId } from "../../lib/fazendaScope";
+import { useFazendaAtiva } from "../../context/FazendaAtivaContext";
 import { enqueue, kvGet, kvSet } from "../../offline/localDB";
 
 const CACHE_ANIMAIS_KEY = "cache:animais:list";
@@ -31,6 +33,7 @@ function extrairListaCache(cache) {
 }
 
 export default function SaidaAnimal({ onAtualizar }) {
+  const { fazendaAtivaId } = useFazendaAtiva();
   const [animalSelecionado, setAnimalSelecionado] = useState(null);
   const [tipo, setTipo] = useState("");
   const [motivo, setMotivo] = useState("");
@@ -129,15 +132,14 @@ export default function SaidaAnimal({ onAtualizar }) {
         return;
       }
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error("Usuário não autenticado.");
+      if (!fazendaAtivaId) {
+        throw new Error("Selecione uma fazenda para carregar os animais.");
+      }
 
-      const { data, error } = await supabase
-        .from("animais")
-        .select("id, numero, brinco")
-        .eq("user_id", user.id)
+      const { data, error } = await withFazendaId(
+        supabase.from("animais").select("id, numero, brinco"),
+        fazendaAtivaId
+      )
         .eq("ativo", true)
         .order("numero", { ascending: true });
 
@@ -149,7 +151,7 @@ export default function SaidaAnimal({ onAtualizar }) {
       setOk(`❌ ${msg}`);
       setTimeout(() => setOk(""), 5000);
     }
-  }, []);
+  }, [fazendaAtivaId]);
 
   useEffect(() => {
     carregarAnimais();
@@ -159,10 +161,9 @@ export default function SaidaAnimal({ onAtualizar }) {
     if (!validar() || salvando) return;
     setSalvando(true);
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error("Usuário não autenticado.");
+      if (!fazendaAtivaId) {
+        throw new Error("Selecione uma fazenda antes de registrar a saída.");
+      }
 
       const [dia, mes, ano] = data.split("/");
       const dataISO = `${ano}-${mes}-${dia}`;
@@ -174,7 +175,7 @@ export default function SaidaAnimal({ onAtualizar }) {
         const saidaId = gerarUUID();
         const payload = {
           id: saidaId,
-          user_id: user.id,
+          fazenda_id: fazendaAtivaId,
           animal_id: animalSelecionado.value,
           tipo_saida: tipo,
           motivo_saida: motivo,
@@ -220,7 +221,7 @@ export default function SaidaAnimal({ onAtualizar }) {
       const { error: insertError } = await supabase
         .from("saidas_animais")
         .insert({
-          user_id: user.id,
+          fazenda_id: fazendaAtivaId,
           animal_id: animalSelecionado.value,
           tipo_saida: tipo,
           motivo_saida: motivo,
@@ -231,10 +232,10 @@ export default function SaidaAnimal({ onAtualizar }) {
 
       if (insertError) throw insertError;
 
-      const { error: updateError } = await supabase
-        .from("animais")
-        .update({ ativo: false })
-        .eq("id", animalSelecionado.value);
+      const { error: updateError } = await withFazendaId(
+        supabase.from("animais").update({ ativo: false }),
+        fazendaAtivaId
+      ).eq("id", animalSelecionado.value);
 
       if (updateError) throw updateError;
 

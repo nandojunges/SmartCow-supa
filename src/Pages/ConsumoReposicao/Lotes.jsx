@@ -1,6 +1,8 @@
 // src/pages/ConsumoReposicao/Lotes.jsx
 import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { supabase } from "../../lib/supabaseClient";
+import { withFazendaId } from "../../lib/fazendaScope";
+import { useFazendaAtiva } from "../../context/FazendaAtivaContext";
 import { enqueue, kvGet, kvSet } from "../../offline/localDB";
 
 import "../../styles/tabelaModerna.css";
@@ -59,6 +61,7 @@ function uiToDbPayload(form) {
 }
 
 export default function Lotes() {
+  const { fazendaAtivaId } = useFazendaAtiva();
   const [lotes, setLotes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState("");
@@ -135,10 +138,19 @@ export default function Lotes() {
     }
 
     // View que você criou: v_lotes_com_contagem
-    const { data, error } = await supabase
-      .from("v_lotes_com_contagem")
-      .select("id,nome,funcao,nivel_produtivo,descricao,ativo,num_animais,created_at,updated_at")
-      .order("nome", { ascending: true });
+    if (!fazendaAtivaId) {
+      setErro("Selecione uma fazenda para carregar os lotes.");
+      setLotes([]);
+      setLoading(false);
+      return;
+    }
+
+    const { data, error } = await withFazendaId(
+      supabase
+        .from("v_lotes_com_contagem")
+        .select("id,nome,funcao,nivel_produtivo,descricao,ativo,num_animais,created_at,updated_at"),
+      fazendaAtivaId
+    ).order("nome", { ascending: true });
 
     if (error) {
       console.error("Erro ao carregar lotes:", error);
@@ -150,7 +162,7 @@ export default function Lotes() {
 
     await updateCache((data || []).map(dbToUiLote));
     setLoading(false);
-  }, [updateCache]);
+  }, [fazendaAtivaId, updateCache]);
 
   useEffect(() => {
     carregar();
@@ -189,7 +201,10 @@ export default function Lotes() {
     setLoading(true);
     setErro("");
 
-    const payload = uiToDbPayload(loteFinal);
+    const payload = {
+      ...uiToDbPayload(loteFinal),
+      fazenda_id: fazendaAtivaId || null,
+    };
 
     try {
       if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -223,7 +238,10 @@ export default function Lotes() {
       }
 
       if (loteFinal?.id) {
-        const { error } = await supabase.from("lotes").update(payload).eq("id", loteFinal.id);
+        const { error } = await withFazendaId(
+          supabase.from("lotes").update(payload),
+          fazendaAtivaId
+        ).eq("id", loteFinal.id);
         if (error) throw error;
       } else {
         const { error } = await supabase.from("lotes").insert(payload);
@@ -256,7 +274,10 @@ export default function Lotes() {
         return;
       }
 
-      const { error } = await supabase.from("lotes").update({ ativo: !ativoAtual }).eq("id", loteId);
+      const { error } = await withFazendaId(
+        supabase.from("lotes").update({ ativo: !ativoAtual }),
+        fazendaAtivaId
+      ).eq("id", loteId);
       if (error) throw error;
       await carregar();
     } catch (e) {
@@ -282,7 +303,10 @@ export default function Lotes() {
         return;
       }
 
-      const { error } = await supabase.from("lotes").delete().eq("id", excluirId);
+      const { error } = await withFazendaId(
+        supabase.from("lotes").delete(),
+        fazendaAtivaId
+      ).eq("id", excluirId);
       if (error) throw error;
 
       setExcluirId(null);

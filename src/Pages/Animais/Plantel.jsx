@@ -2,6 +2,8 @@
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import Select from "react-select";
 import { supabase } from "../../lib/supabaseClient";
+import { withFazendaId } from "../../lib/fazendaScope";
+import { useFazendaAtiva } from "../../context/FazendaAtivaContext";
 import { kvGet, kvSet } from "../../offline/localDB";
 import "../../styles/tabelaModerna.css";
 import FichaAnimal from "./FichaAnimal/FichaAnimal";
@@ -100,6 +102,7 @@ function formatProducao(valor) {
 export default function Plantel({ isOnline = navigator.onLine }) {
   const CACHE_KEY = "cache:animais:list";
   const CACHE_FALLBACK_KEY = "cache:animais:plantel:v1";
+  const { fazendaAtivaId } = useFazendaAtiva();
   const [animais, setAnimais] = useState([]);
   const [racaMap, setRacaMap] = useState({});
   const [carregando, setCarregando] = useState(true);
@@ -163,11 +166,11 @@ export default function Plantel({ isOnline = navigator.onLine }) {
     return map;
   }, [lotes]);
 
-  const carregarAnimais = useCallback(async (userId) => {
-    const { data, error } = await supabase
-      .from("animais")
-      .select("*")
-      .eq("user_id", userId)
+  const carregarAnimais = useCallback(async () => {
+    const { data, error } = await withFazendaId(
+      supabase.from("animais").select("*"),
+      fazendaAtivaId
+    )
       .eq("ativo", true)
       .order("numero", { ascending: true });
 
@@ -175,20 +178,13 @@ export default function Plantel({ isOnline = navigator.onLine }) {
     const lista = Array.isArray(data) ? data : [];
     setAnimais(lista);
     return lista;
-  }, []);
+  }, [fazendaAtivaId]);
 
-  const carregarLotes = useCallback(async (userId) => {
-    let { data, error } = await supabase
-      .from(LOTE_TABLE)
-      .select("*")
-      .order("id", { ascending: true })
-      .eq("user_id", userId);
-
-    if (error && /column .*user_id.* does not exist/i.test(error.message || "")) {
-      const retry = await supabase.from(LOTE_TABLE).select("*").order("id", { ascending: true });
-      data = retry.data;
-      error = retry.error;
-    }
+  const carregarLotes = useCallback(async () => {
+    const { data, error } = await withFazendaId(
+      supabase.from(LOTE_TABLE).select("*"),
+      fazendaAtivaId
+    ).order("id", { ascending: true });
 
     if (error) {
       console.error("Erro ao carregar lotes:", error);
@@ -199,13 +195,13 @@ export default function Plantel({ isOnline = navigator.onLine }) {
     const lista = Array.isArray(data) ? data : [];
     setLotes(lista);
     return lista;
-  }, []);
+  }, [LOTE_TABLE, fazendaAtivaId]);
 
-  const carregarRacas = useCallback(async (userId) => {
-    const { data, error } = await supabase
-      .from("racas")
-      .select("id, nome")
-      .eq("user_id", userId);
+  const carregarRacas = useCallback(async () => {
+    const { data, error } = await withFazendaId(
+      supabase.from("racas").select("id, nome"),
+      fazendaAtivaId
+    );
 
     if (error) throw error;
 
@@ -215,7 +211,7 @@ export default function Plantel({ isOnline = navigator.onLine }) {
     });
     setRacaMap(map);
     return map;
-  }, []);
+  }, [fazendaAtivaId]);
 
   const carregarDoCache = useCallback(async () => {
     const cachePrimario = await kvGet(CACHE_KEY);
@@ -253,18 +249,15 @@ export default function Plantel({ isOnline = navigator.onLine }) {
           return;
         }
 
-        const {
-          data: { user },
-          error: userErr,
-        } = await supabase.auth.getUser();
-
-        if (userErr || !user) throw new Error("Usuário não autenticado.");
+        if (!fazendaAtivaId) {
+          throw new Error("Selecione uma fazenda para carregar o plantel.");
+        }
         if (!ativo) return;
 
         const [animaisData, lotesData, racasData] = await Promise.all([
-          carregarAnimais(user.id),
-          carregarLotes(user.id),
-          carregarRacas(user.id),
+          carregarAnimais(),
+          carregarLotes(),
+          carregarRacas(),
         ]);
 
         await kvSet(CACHE_KEY, animaisData);
@@ -286,7 +279,14 @@ export default function Plantel({ isOnline = navigator.onLine }) {
     return () => {
       ativo = false;
     };
-  }, [carregarAnimais, carregarDoCache, carregarLotes, carregarRacas, isOnline]);
+  }, [
+    carregarAnimais,
+    carregarDoCache,
+    carregarLotes,
+    carregarRacas,
+    fazendaAtivaId,
+    isOnline,
+  ]);
 
   useEffect(() => {
     let ativo = true;
@@ -335,9 +335,10 @@ export default function Plantel({ isOnline = navigator.onLine }) {
       };
 
       const buscarMedicoesLeite = async () => {
-        const { data, error } = await supabase
-          .from("medicoes_leite")
-          .select("*")
+        const { data, error } = await withFazendaId(
+          supabase.from("medicoes_leite").select("*"),
+          fazendaAtivaId
+        )
           .in("animal_id", ids)
           .order("data", { ascending: false })
           .limit(800);
@@ -372,25 +373,13 @@ export default function Plantel({ isOnline = navigator.onLine }) {
           }
 
           for (const campoData of camposData) {
-            let consulta = supabase
-              .from(tabela)
-              .select("*")
+            const { data, error } = await withFazendaId(
+              supabase.from(tabela).select("*"),
+              fazendaAtivaId
+            )
               .in("animal_id", ids)
               .order(campoData, { ascending: false })
               .limit(800);
-
-            let { data, error } = await consulta;
-
-            if (error && /column .*user_id.* does not exist/i.test(error.message || "")) {
-              const retry = await supabase
-                .from(tabela)
-                .select("*")
-                .in("animal_id", ids)
-                .order(campoData, { ascending: false })
-                .limit(800);
-              data = retry.data;
-              error = retry.error;
-            }
 
             if (error) {
               if (/column .* does not exist/i.test(error.message || "")) {
@@ -429,7 +418,7 @@ export default function Plantel({ isOnline = navigator.onLine }) {
     return () => {
       ativo = false;
     };
-  }, [animais, isOnline]);
+  }, [animais, fazendaAtivaId, isOnline]);
 
   const linhas = useMemo(() => (Array.isArray(animais) ? animais : []), [animais]);
   const situacoesProdutivas = useMemo(() => {
