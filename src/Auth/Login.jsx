@@ -136,7 +136,10 @@ export default function Login() {
       }
 
       const role = perfil?.role ? String(perfil.role).trim().toLowerCase() : "usuario";
-      const tipoContaPerfil = perfil?.tipo_conta ?? user?.user_metadata?.tipoConta;
+      const tipoContaPerfil =
+        perfil?.tipo_conta ??
+        user?.user_metadata?.tipo_conta ??
+        user?.user_metadata?.tipoConta;
       const tipoConta = tipoContaPerfil
         ? String(tipoContaPerfil).trim().toUpperCase()
         : "PRODUTOR";

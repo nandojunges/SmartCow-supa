@@ -117,7 +117,7 @@ export default function Cadastro() {
         telefone: telDigitos,
         cpf: cpfDigitos,
         senha: form.senha, // só será enviada ao Supabase depois da verificação
-        tipoConta,
+        tipo_conta: tipoConta,
       };
       localStorage.setItem("pendingCadastro", JSON.stringify(pendingCadastro));
 
@@ -125,7 +125,7 @@ export default function Cadastro() {
         full_name: form.nome.trim(),
         phone: telDigitos,
         cpf: cpfDigitos,
-        tipoConta,
+        tipo_conta: tipoConta,
       };
 
       if (tipoConta === "PRODUTOR") {
