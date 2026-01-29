@@ -29,12 +29,7 @@ const isInativo = (a) => {
   if (!a) return false;
   if ((a.status ?? "").toLowerCase() === "inativo") return true;
 
-  if (
-    a.tipo_saida ||
-    a.data_saida ||
-    a.motivo_saida ||
-    a.observacao_saida
-  ) {
+  if (a.tipo_saida || a.data_saida || a.motivo_saida || a.observacao_saida) {
     return true;
   }
 
@@ -42,9 +37,9 @@ const isInativo = (a) => {
 };
 
 export default function Inativas({
-  animais = [],   // recebido pronto do Animais.jsx (já inativos formatados)
-  onAtualizar,   // função do pai para recarregar listas após reativar
-  onVerFicha,    // opcional: (animal) => void
+  animais = [], // recebido pronto do Animais.jsx (já inativos formatados)
+  onAtualizar, // função do pai para recarregar listas após reativar
+  onVerFicha, // opcional: (animal) => void
 }) {
   const [hoveredRowId, setHoveredRowId] = useState(null);
   const [hoveredColKey, setHoveredColKey] = useState(null);
@@ -136,193 +131,221 @@ export default function Inativas({
                 setHoveredColKey(null);
               }}
             >
-            <thead>
-              <tr>
-                {colunas.map((coluna) => (
-                  <th
-                    key={coluna.key}
-                    className={`${coluna.className} ${
-                      hoveredColKey === coluna.key ? "st-col-hover" : ""
-                    }`}
-                    onMouseEnter={() => setHoveredColKey(coluna.key)}
-                  >
-                    <span className="st-th-label">{coluna.label}</span>
-                  </th>
-                ))}
-              </tr>
-            </thead>
+              <thead>
+                <tr>
+                  {colunas.map((coluna) => (
+                    <th
+                      key={coluna.key}
+                      className={`${coluna.className} ${
+                        hoveredColKey === coluna.key ? "st-col-hover" : ""
+                      }`}
+                      onMouseEnter={() => setHoveredColKey(coluna.key)}
+                    >
+                      <span className="st-th-label">{coluna.label}</span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
 
-            <tbody>
-              {lista.map((a, rIdx) => {
-                const tipoSaida = a.tipo_saida || "—";
-                const motivoSaida = a.motivo_saida || "—";
-                const dataSaida = a.data_saida || null;
-                const valorSaida = a.valor_saida ?? a.valor_venda ?? null;
+              <tbody>
+                {lista.map((a, rIdx) => {
+                  const tipoSaida = a.tipo_saida || "—";
+                  const motivoSaida = a.motivo_saida || "—";
+                  const dataSaida = a.data_saida || null;
+                  const valorSaida = a.valor_saida ?? a.valor_venda ?? null;
 
-                // pega observação independente do nome da chave
-                const observacoesSaida =
-                  a.observacao_saida ??
-                  a.observacao ??
-                  a.observacoesSaida ??
-                  a.observacoes_saida ??
-                  "—";
+                  // pega observação independente do nome da chave
+                  const observacoesSaida =
+                    a.observacao_saida ??
+                    a.observacao ??
+                    a.observacoesSaida ??
+                    a.observacoes_saida ??
+                    "—";
 
-                const idRow = a.id ?? `${a.numero}-${rIdx}`;
-                const busy = loadingId === a.id;
+                  const idRow = a.id ?? `${a.numero}-${rIdx}`;
+                  const busy = loadingId === a.id;
 
-                const rowHover = hoveredRowId === idRow;
+                  const rowHover = hoveredRowId === idRow;
 
-                return (
-                  <tr key={idRow} className={rowHover ? "st-row-hover" : ""}>
-                    <td
-                      className={`${colunas[0].className} ${
-                        hoveredColKey === "numero" ? "st-col-hover" : ""
-                      } ${rowHover ? "st-row-hover" : ""} ${
-                        rowHover && hoveredColKey === "numero" ? "st-cell-hover" : ""
-                      }`}
-                      onMouseEnter={() => {
-                        setHoveredRowId(idRow);
-                        setHoveredColKey("numero");
-                      }}
-                    >
-                      {a.numero || a.brinco || "—"}
-                    </td>
-                    <td
-                      className={`${colunas[1].className} ${
-                        hoveredColKey === "categoria" ? "st-col-hover" : ""
-                      } ${rowHover ? "st-row-hover" : ""} ${
-                        rowHover && hoveredColKey === "categoria" ? "st-cell-hover" : ""
-                      }`}
-                      onMouseEnter={() => {
-                        setHoveredRowId(idRow);
-                        setHoveredColKey("categoria");
-                      }}
-                    >
-                      {a.categoria || a.tipo || "—"}
-                    </td>
-                    <td
-                      className={`${colunas[2].className} ${
-                        hoveredColKey === "tipoSaida" ? "st-col-hover" : ""
-                      } ${rowHover ? "st-row-hover" : ""} ${
-                        rowHover && hoveredColKey === "tipoSaida" ? "st-cell-hover" : ""
-                      }`}
-                      onMouseEnter={() => {
-                        setHoveredRowId(idRow);
-                        setHoveredColKey("tipoSaida");
-                      }}
-                    >
-                      {tipoSaida}
-                    </td>
-                    <td
-                      className={`${colunas[3].className} ${
-                        hoveredColKey === "motivo" ? "st-col-hover" : ""
-                      } ${rowHover ? "st-row-hover" : ""} ${
-                        rowHover && hoveredColKey === "motivo" ? "st-cell-hover" : ""
-                      }`}
-                      onMouseEnter={() => {
-                        setHoveredRowId(idRow);
-                        setHoveredColKey("motivo");
-                      }}
-                    >
-                      {motivoSaida}
-                    </td>
-                    <td
-                      className={`${colunas[4].className} ${
-                        hoveredColKey === "data" ? "st-col-hover" : ""
-                      } ${rowHover ? "st-row-hover" : ""} ${
-                        rowHover && hoveredColKey === "data" ? "st-cell-hover" : ""
-                      }`}
-                      onMouseEnter={() => {
-                        setHoveredRowId(idRow);
-                        setHoveredColKey("data");
-                      }}
-                    >
-                      {fmtData(dataSaida)}
-                    </td>
-                    <td
-                      className={`${colunas[5].className} ${
-                        hoveredColKey === "valor" ? "st-col-hover" : ""
-                      } ${rowHover ? "st-row-hover" : ""} ${
-                        rowHover && hoveredColKey === "valor" ? "st-cell-hover" : ""
-                      }`}
-                      onMouseEnter={() => {
-                        setHoveredRowId(idRow);
-                        setHoveredColKey("valor");
-                      }}
-                    >
-                      {fmtValor(valorSaida)}
-                    </td>
-                    <td
-                      className={`${colunas[6].className} ${
-                        hoveredColKey === "observacoes" ? "st-col-hover" : ""
-                      } ${rowHover ? "st-row-hover" : ""} ${
-                        rowHover && hoveredColKey === "observacoes" ? "st-cell-hover" : ""
-                      }`}
-                      onMouseEnter={() => {
-                        setHoveredRowId(idRow);
-                        setHoveredColKey("observacoes");
-                      }}
-                    >
-                      {observacoesSaida}
-                    </td>
-                    <td
-                      className={`${colunas[7].className} ${
-                        hoveredColKey === "acoes" ? "st-col-hover" : ""
-                      } ${rowHover ? "st-row-hover" : ""} ${
-                        rowHover && hoveredColKey === "acoes" ? "st-cell-hover" : ""
-                      }`}
-                      onMouseEnter={() => {
-                        setHoveredRowId(idRow);
-                        setHoveredColKey("acoes");
-                      }}
-                    >
-                      <div className="botoes-tabela">
-                        <button
-                          type="button"
-                          className="px-3 py-1.5 rounded-md border border-[#1e3a8a]/40 text-[#1e3a8a] text-sm hover:border-[#1e3a8a] transition-colors"
-                          onClick={() => doVerFicha(a)}
-                          title="Ver ficha do animal"
-                        >
-                          📋 Ver Ficha
-                        </button>
-                        <button
-                          type="button"
-                          className={`px-3 py-1.5 rounded-md border text-emerald-700 text-sm transition-colors ${
-                            busy
-                              ? "opacity-60 cursor-wait border-emerald-700/40"
-                              : "border-emerald-700/40 hover:border-emerald-700"
-                          }`}
-                          onClick={() => !busy && reativar(a)}
-                          disabled={busy}
-                          title="Reativar animal"
-                        >
-                          🔁 {busy ? "Reativando…" : "Reativar"}
-                        </button>
-                      </div>
+                  return (
+                    <tr key={idRow} className={rowHover ? "st-row-hover" : ""}>
+                      <td
+                        className={`${colunas[0].className} ${
+                          hoveredColKey === "numero" ? "st-col-hover" : ""
+                        } ${rowHover ? "st-row-hover" : ""} ${
+                          rowHover && hoveredColKey === "numero"
+                            ? "st-cell-hover"
+                            : ""
+                        }`}
+                        onMouseEnter={() => {
+                          setHoveredRowId(idRow);
+                          setHoveredColKey("numero");
+                        }}
+                      >
+                        {a.numero || a.brinco || "—"}
+                      </td>
+
+                      <td
+                        className={`${colunas[1].className} ${
+                          hoveredColKey === "categoria" ? "st-col-hover" : ""
+                        } ${rowHover ? "st-row-hover" : ""} ${
+                          rowHover && hoveredColKey === "categoria"
+                            ? "st-cell-hover"
+                            : ""
+                        }`}
+                        onMouseEnter={() => {
+                          setHoveredRowId(idRow);
+                          setHoveredColKey("categoria");
+                        }}
+                      >
+                        {a.categoria || a.tipo || "—"}
+                      </td>
+
+                      <td
+                        className={`${colunas[2].className} ${
+                          hoveredColKey === "tipoSaida" ? "st-col-hover" : ""
+                        } ${rowHover ? "st-row-hover" : ""} ${
+                          rowHover && hoveredColKey === "tipoSaida"
+                            ? "st-cell-hover"
+                            : ""
+                        }`}
+                        onMouseEnter={() => {
+                          setHoveredRowId(idRow);
+                          setHoveredColKey("tipoSaida");
+                        }}
+                      >
+                        {tipoSaida}
+                      </td>
+
+                      <td
+                        className={`${colunas[3].className} ${
+                          hoveredColKey === "motivo" ? "st-col-hover" : ""
+                        } ${rowHover ? "st-row-hover" : ""} ${
+                          rowHover && hoveredColKey === "motivo"
+                            ? "st-cell-hover"
+                            : ""
+                        }`}
+                        onMouseEnter={() => {
+                          setHoveredRowId(idRow);
+                          setHoveredColKey("motivo");
+                        }}
+                      >
+                        {motivoSaida}
+                      </td>
+
+                      <td
+                        className={`${colunas[4].className} ${
+                          hoveredColKey === "data" ? "st-col-hover" : ""
+                        } ${rowHover ? "st-row-hover" : ""} ${
+                          rowHover && hoveredColKey === "data"
+                            ? "st-cell-hover"
+                            : ""
+                        }`}
+                        onMouseEnter={() => {
+                          setHoveredRowId(idRow);
+                          setHoveredColKey("data");
+                        }}
+                      >
+                        {fmtData(dataSaida)}
+                      </td>
+
+                      <td
+                        className={`${colunas[5].className} ${
+                          hoveredColKey === "valor" ? "st-col-hover" : ""
+                        } ${rowHover ? "st-row-hover" : ""} ${
+                          rowHover && hoveredColKey === "valor"
+                            ? "st-cell-hover"
+                            : ""
+                        }`}
+                        onMouseEnter={() => {
+                          setHoveredRowId(idRow);
+                          setHoveredColKey("valor");
+                        }}
+                      >
+                        {fmtValor(valorSaida)}
+                      </td>
+
+                      <td
+                        className={`${colunas[6].className} ${
+                          hoveredColKey === "observacoes" ? "st-col-hover" : ""
+                        } ${rowHover ? "st-row-hover" : ""} ${
+                          rowHover && hoveredColKey === "observacoes"
+                            ? "st-cell-hover"
+                            : ""
+                        }`}
+                        onMouseEnter={() => {
+                          setHoveredRowId(idRow);
+                          setHoveredColKey("observacoes");
+                        }}
+                      >
+                        {observacoesSaida}
+                      </td>
+
+                      <td
+                        className={`${colunas[7].className} ${
+                          hoveredColKey === "acoes" ? "st-col-hover" : ""
+                        } ${rowHover ? "st-row-hover" : ""} ${
+                          rowHover && hoveredColKey === "acoes"
+                            ? "st-cell-hover"
+                            : ""
+                        }`}
+                        onMouseEnter={() => {
+                          setHoveredRowId(idRow);
+                          setHoveredColKey("acoes");
+                        }}
+                      >
+                        <div className="botoes-tabela">
+                          <button
+                            type="button"
+                            className="px-3 py-1.5 rounded-md border border-[#1e3a8a]/40 text-[#1e3a8a] text-sm hover:border-[#1e3a8a] transition-colors"
+                            onClick={() => doVerFicha(a)}
+                            title="Ver ficha do animal"
+                          >
+                            📋 Ver Ficha
+                          </button>
+
+                          <button
+                            type="button"
+                            className={`px-3 py-1.5 rounded-md border text-emerald-700 text-sm transition-colors ${
+                              busy
+                                ? "opacity-60 cursor-wait border-emerald-700/40"
+                                : "border-emerald-700/40 hover:border-emerald-700"
+                            }`}
+                            onClick={() => !busy && reativar(a)}
+                            disabled={busy}
+                            title="Reativar animal"
+                          >
+                            🔁 {busy ? "Reativando…" : "Reativar"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {lista.length === 0 && (
+                  <tr className="st-empty">
+                    <td colSpan={colunas.length} className="st-td-center">
+                      Nenhum animal inativo registrado.
                     </td>
                   </tr>
-                );
-              })}
+                )}
+              </tbody>
 
-              {lista.length === 0 && (
-                <tr className="st-empty">
-                  <td colSpan={colunas.length} className="st-td-center">
-                    Nenhum animal inativo registrado.
+              <tfoot>
+                <tr className="st-summary-row">
+                  <td colSpan={colunas.length}>
+                    <div className="st-summary-row__content">
+                      <span>Total exibidos: {lista.length}</span>
+                    </div>
                   </td>
                 </tr>
-              )}
-            </tbody>
-            <tfoot>
-              <tr className="st-summary-row">
-                <td colSpan={colunas.length}>
-                  <div className="st-summary-row__content">
-                    <span>Total exibidos: {lista.length}</span>
-                  </div>
-                </td>
-              </tr>
-            </tfoot>
-          </table>
+              </tfoot>
+            </table>
+          </div>
         </div>
+
+        {/* ✅ ESTE FECHAMENTO ESTAVA FALTANDO NO TEU ARQUIVO */}
       </div>
     </section>
   );
