@@ -346,10 +346,11 @@ export default function PrePartoParto({ isOnline = navigator.onLine }) {
           marginBottom: 12,
         }}
       >
-        <label className="st-filter__label" style={{ minWidth: 240 }}>
-          Entram em pré-parto X dias antes do parto
+        <label className="st-filter__label" style={{ maxWidth: 220, flex: "1 1 220px" }}>
+          Dias antes do parto para entrar em pré-parto
           <input
             className="st-filter-input"
+            style={{ width: 90 }}
             type="number"
             min={1}
             value={diasPreParto}
@@ -359,9 +360,6 @@ export default function PrePartoParto({ isOnline = navigator.onLine }) {
       </div>
 
       {statusSyncTexto && <div className="st-filter-hint">{statusSyncTexto}</div>}
-      <div className="st-filter-hint">
-        Dica: acompanhe a proximidade do parto para agir no momento certo.
-      </div>
 
       <div className="st-table-container">
         <div className="st-table-wrap">

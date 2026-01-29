@@ -46,6 +46,12 @@ export default function Inativas({
   const [okMsg, setOkMsg] = useState("");
   const [loadingId, setLoadingId] = useState(null);
 
+  const nowrapEllipsis = {
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  };
+
   const lista = useMemo(
     () => (Array.isArray(animais) ? animais : []).filter(isInativo),
     [animais]
@@ -99,13 +105,18 @@ export default function Inativas({
   };
 
   const colunas = [
-    { key: "numero", label: "Número", className: "col-numero" },
-    { key: "categoria", label: "Categoria", className: "col-categoria" },
-    { key: "tipoSaida", label: "Tipo de saída", className: "col-tipo" },
-    { key: "motivo", label: "Motivo", className: "col-motivo" },
-    { key: "data", label: "Data", className: "st-td-center col-data" },
-    { key: "valor", label: "Valor", className: "st-td-center col-valor" },
-    { key: "observacoes", label: "Observações", className: "col-observacoes" },
+    { key: "numero", label: "Número", className: "col-numero", style: nowrapEllipsis },
+    { key: "categoria", label: "Categoria", className: "col-categoria", style: nowrapEllipsis },
+    { key: "tipoSaida", label: "Tipo de saída", className: "col-tipo", style: nowrapEllipsis },
+    { key: "motivo", label: "Motivo", className: "col-motivo", style: nowrapEllipsis },
+    { key: "data", label: "Data", className: "st-td-center col-data", style: nowrapEllipsis },
+    { key: "valor", label: "Valor", className: "st-td-center col-valor", style: nowrapEllipsis },
+    {
+      key: "observacoes",
+      label: "Observações",
+      className: "col-observacoes",
+      style: nowrapEllipsis,
+    },
     { key: "acoes", label: "Ações", className: "st-td-center col-acoes" },
   ];
 
@@ -131,6 +142,16 @@ export default function Inativas({
                 setHoveredColKey(null);
               }}
             >
+              <colgroup>
+                <col style={{ width: "10%" }} />
+                <col style={{ width: "12%" }} />
+                <col style={{ width: "12%" }} />
+                <col style={{ width: "16%" }} />
+                <col style={{ width: "10%" }} />
+                <col style={{ width: "10%" }} />
+                <col style={{ width: "20%" }} />
+                <col style={{ width: "10%" }} />
+              </colgroup>
               <thead>
                 <tr>
                   {colunas.map((coluna) => (
@@ -140,6 +161,7 @@ export default function Inativas({
                         hoveredColKey === coluna.key ? "st-col-hover" : ""
                       }`}
                       onMouseEnter={() => setHoveredColKey(coluna.key)}
+                      style={coluna.style}
                     >
                       <span className="st-th-label">{coluna.label}</span>
                     </th>
@@ -177,6 +199,7 @@ export default function Inativas({
                             ? "st-cell-hover"
                             : ""
                         }`}
+                        style={colunas[0].style}
                         onMouseEnter={() => {
                           setHoveredRowId(idRow);
                           setHoveredColKey("numero");
@@ -193,6 +216,7 @@ export default function Inativas({
                             ? "st-cell-hover"
                             : ""
                         }`}
+                        style={colunas[1].style}
                         onMouseEnter={() => {
                           setHoveredRowId(idRow);
                           setHoveredColKey("categoria");
@@ -209,6 +233,7 @@ export default function Inativas({
                             ? "st-cell-hover"
                             : ""
                         }`}
+                        style={colunas[2].style}
                         onMouseEnter={() => {
                           setHoveredRowId(idRow);
                           setHoveredColKey("tipoSaida");
@@ -225,6 +250,7 @@ export default function Inativas({
                             ? "st-cell-hover"
                             : ""
                         }`}
+                        style={colunas[3].style}
                         onMouseEnter={() => {
                           setHoveredRowId(idRow);
                           setHoveredColKey("motivo");
@@ -241,6 +267,7 @@ export default function Inativas({
                             ? "st-cell-hover"
                             : ""
                         }`}
+                        style={colunas[4].style}
                         onMouseEnter={() => {
                           setHoveredRowId(idRow);
                           setHoveredColKey("data");
@@ -257,6 +284,7 @@ export default function Inativas({
                             ? "st-cell-hover"
                             : ""
                         }`}
+                        style={colunas[5].style}
                         onMouseEnter={() => {
                           setHoveredRowId(idRow);
                           setHoveredColKey("valor");
@@ -273,6 +301,7 @@ export default function Inativas({
                             ? "st-cell-hover"
                             : ""
                         }`}
+                        style={colunas[6].style}
                         onMouseEnter={() => {
                           setHoveredRowId(idRow);
                           setHoveredColKey("observacoes");
