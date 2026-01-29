@@ -140,10 +140,10 @@ export default function SubAbasAnimais({ animais = [], onRefresh, isOnline }) {
           />
         )}
 
-        {tab === "secagem" && <Secagem animais={animais} />}
+        {tab === "secagem" && <Secagem animais={animais} isOnline={isOnline} />}
 
         {tab === "preparto_parto" && (
-          <PrePartoParto animais={animais} />
+          <PrePartoParto animais={animais} isOnline={isOnline} />
         )}
       </div>
     </div>
