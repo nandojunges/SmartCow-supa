@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import StatusConexao from "../components/StatusConexao";
+import FarmSwitcher from "../components/FarmSwitcher";
 import { useFazenda } from "../context/FazendaContext";
 
 const ABAS_BASE = [
@@ -159,6 +160,13 @@ export default function NavegacaoPrincipal({ tipoConta }) {
           >
             {ativa?.label} · {ativa?.title}
           </span>
+
+          <FarmSwitcher
+            style={{
+              marginLeft: 20,
+              marginTop: 4,
+            }}
+          />
         </div>
 
         {/* Tabs ERP (sem contorno externo; underline interno não “corta”) */}
