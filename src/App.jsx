@@ -1,6 +1,8 @@
 // src/App.jsx
 import { useEffect, useState } from "react";
 import { Routes, Route, Navigate, Outlet } from "react-router-dom";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 import { supabase } from "./lib/supabaseClient";
 import { syncAnimaisSeed, syncPending } from "./offline/sync";
 import { useFazenda } from "./context/FazendaContext";
@@ -162,6 +164,7 @@ export default function App() {
           </>
         )}
       </Routes>
+      <ToastContainer position="top-right" autoClose={3500} pauseOnFocusLoss={false} />
     </>
   );
 }

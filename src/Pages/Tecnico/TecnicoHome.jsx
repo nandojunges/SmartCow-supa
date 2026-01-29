@@ -1,6 +1,7 @@
 // src/Pages/Tecnico/TecnicoHome.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
 import { supabase } from "../../lib/supabaseClient";
 import { useFazenda } from "../../context/FazendaContext";
 
@@ -18,15 +19,39 @@ export default function TecnicoHome() {
   const [acessos, setAcessos] = useState([]);
   const [convites, setConvites] = useState([]);
   const [processandoId, setProcessandoId] = useState(null);
-  const [mensagem, setMensagem] = useState(null);
+
+  async function carregarDados(user) {
+    setCarregando(true);
+
+    try {
+      const [acessosResp, convitesResp] = await Promise.all([
+        supabase.rpc("listar_fazendas_com_acesso"),
+        supabase.rpc("listar_meus_convites"),
+      ]);
+
+      if (acessosResp.error) {
+        throw acessosResp.error;
+      }
+
+      if (convitesResp.error) {
+        throw convitesResp.error;
+      }
+
+      setUsuario(user);
+      setAcessos(acessosResp.data ?? []);
+      setConvites(convitesResp.data ?? []);
+    } catch (err) {
+      console.error("Erro ao carregar dados do técnico:", err.message);
+      toast.error(err.message || "Não foi possível carregar suas fazendas no momento.");
+    } finally {
+      setCarregando(false);
+    }
+  }
 
   useEffect(() => {
     let isMounted = true;
 
-    async function carregarDados() {
-      setCarregando(true);
-      setMensagem(null);
-
+    async function carregarUsuario() {
       try {
         const { data: authData, error: authError } = await supabase.auth.getUser();
         if (authError) {
@@ -34,52 +59,19 @@ export default function TecnicoHome() {
         }
 
         const user = authData?.user;
-        if (!user) {
+        if (!user || !isMounted) {
           return;
         }
 
-        const [acessosResp, convitesResp] = await Promise.all([
-          supabase
-            .from("fazenda_acessos")
-            .select("id, fazenda_id, created_at")
-            .eq("user_id", user.id)
-            .order("created_at", { ascending: false }),
-          supabase
-            .from("convites_acesso")
-            .select("id, fazenda_id, status, created_at, email_convidado")
-            .eq("email_convidado", user.email)
-            .order("created_at", { ascending: false }),
-        ]);
-
-        if (acessosResp.error) {
-          console.error("Erro ao carregar acessos:", acessosResp.error.message);
-        }
-
-        if (convitesResp.error) {
-          console.error("Erro ao carregar convites:", convitesResp.error.message);
-        }
-
-        if (isMounted) {
-          setUsuario(user);
-          setAcessos(acessosResp.data ?? []);
-          setConvites(convitesResp.data ?? []);
-        }
+        await carregarDados(user);
       } catch (err) {
         console.error("Erro ao carregar dados do técnico:", err.message);
-        if (isMounted) {
-          setMensagem({
-            tipo: "erro",
-            texto: "Não foi possível carregar suas fazendas no momento.",
-          });
-        }
-      } finally {
-        if (isMounted) {
-          setCarregando(false);
-        }
+        toast.error(err.message || "Não foi possível carregar seus dados.");
+        setCarregando(false);
       }
     }
 
-    carregarDados();
+    carregarUsuario();
 
     return () => {
       isMounted = false;
@@ -89,69 +81,36 @@ export default function TecnicoHome() {
   const convitesPendentes = useMemo(
     () =>
       convites.filter(
-        (convite) => (convite.status ?? "PENDENTE").toUpperCase() !== "ACEITO"
+        (convite) => (convite.status ?? "PENDENTE").toUpperCase() === "PENDENTE"
       ),
     [convites]
+  );
+
+  const acessosAtivos = useMemo(
+    () => acessos.filter((acesso) => (acesso.status ?? "ATIVO") === "ATIVO"),
+    [acessos]
   );
 
   async function handleAceitarConvite(convite) {
     if (!usuario) return;
 
-    setMensagem(null);
     setProcessandoId(convite.id);
 
     try {
-      const { error: insertError } = await supabase
-        .from("fazenda_acessos")
-        .insert({
-          fazenda_id: convite.fazenda_id,
-          user_id: usuario.id,
-        });
-
-      if (insertError) {
-        console.error("Erro ao inserir acesso:", insertError.message);
-      }
-
-      const { error: updateError } = await supabase
-        .from("convites_acesso")
-        .update({ status: "ACEITO" })
-        .eq("id", convite.id);
-
-      if (updateError) {
-        throw updateError;
-      }
-
-      setConvites((prev) =>
-        prev.map((item) =>
-          item.id === convite.id ? { ...item, status: "ACEITO" } : item
-        )
-      );
-
-      setAcessos((prev) => {
-        const jaExiste = prev.some((item) => item.fazenda_id === convite.fazenda_id);
-        if (jaExiste) {
-          return prev;
-        }
-        return [
-          {
-            id: `novo-${convite.id}`,
-            fazenda_id: convite.fazenda_id,
-            created_at: new Date().toISOString(),
-          },
-          ...prev,
-        ];
+      const { error } = await supabase.rpc("aceitar_convite_acesso", {
+        p_token: convite.token,
       });
 
-      setMensagem({
-        tipo: "sucesso",
-        texto: "Convite aceito! A fazenda já está disponível para você.",
-      });
+      if (error) {
+        throw error;
+      }
+
+      toast.success("Convite aceito! A fazenda já está disponível para você.");
+
+      await carregarDados(usuario);
     } catch (err) {
       console.error("Erro ao aceitar convite:", err.message);
-      setMensagem({
-        tipo: "erro",
-        texto: "Não foi possível aceitar o convite. Tente novamente.",
-      });
+      toast.error(err.message || "Não foi possível aceitar o convite.");
     } finally {
       setProcessandoId(null);
     }
@@ -167,20 +126,10 @@ export default function TecnicoHome() {
       <div style={styles.header}>
         <h1 style={styles.title}>Propriedades autorizadas</h1>
         <p style={styles.subtitle}>
-          Aqui aparecem as fazendas que convidaram seu e-mail{usuario?.email ? ` (${usuario.email})` : ""}.
+          Aqui aparecem as fazendas que convidaram seu e-mail
+          {usuario?.email ? ` (${usuario.email})` : ""}.
         </p>
       </div>
-
-      {mensagem && (
-        <div
-          style={{
-            ...styles.feedback,
-            ...(mensagem.tipo === "erro" ? styles.feedbackErro : styles.feedbackSucesso),
-          }}
-        >
-          {mensagem.texto}
-        </div>
-      )}
 
       <section style={styles.card}>
         <div style={styles.sectionHeader}>
@@ -209,7 +158,11 @@ export default function TecnicoHome() {
                 <div key={convite.id} style={styles.listItem}>
                   <div style={styles.listInfo}>
                     <span style={styles.listTitle}>
-                      Fazenda #{convite.fazenda_id}
+                      {convite.fazenda_nome || `Fazenda #${convite.fazenda_id}`}
+                    </span>
+                    <span style={styles.listMeta}>
+                      {convite.profissional_tipo || "Convite profissional"}
+                      {convite.profissional_nome ? ` · ${convite.profissional_nome}` : ""}
                     </span>
                     <span style={styles.listMeta}>
                       Convite enviado em {formatarData(convite.created_at)}
@@ -245,7 +198,7 @@ export default function TecnicoHome() {
 
         {carregando ? (
           <p style={styles.helperText}>Carregando acessos...</p>
-        ) : acessos.length === 0 ? (
+        ) : acessosAtivos.length === 0 ? (
           <div style={styles.emptyState}>
             <p style={styles.emptyTitle}>Nenhuma fazenda liberada ainda.</p>
             <span style={styles.emptyDescription}>
@@ -254,10 +207,12 @@ export default function TecnicoHome() {
           </div>
         ) : (
           <div style={styles.list}>
-            {acessos.map((acesso) => (
-              <div key={acesso.id} style={styles.listItem}>
+            {acessosAtivos.map((acesso) => (
+              <div key={acesso.acesso_id} style={styles.listItem}>
                 <div style={styles.listInfo}>
-                  <span style={styles.listTitle}>Fazenda #{acesso.fazenda_id}</span>
+                  <span style={styles.listTitle}>
+                    {acesso.fazenda_nome || `Fazenda #${acesso.fazenda_id}`}
+                  </span>
                   <span style={styles.listMeta}>
                     Acesso ativo desde {formatarData(acesso.created_at)}
                   </span>
@@ -436,21 +391,5 @@ const styles = {
     margin: 0,
     fontSize: 12,
     color: "#94a3b8",
-  },
-  feedback: {
-    padding: "10px 12px",
-    borderRadius: 12,
-    fontSize: 13,
-    fontWeight: 500,
-  },
-  feedbackSucesso: {
-    background: "#ecfdf3",
-    color: "#166534",
-    border: "1px solid #bbf7d0",
-  },
-  feedbackErro: {
-    background: "#fef2f2",
-    color: "#991b1b",
-    border: "1px solid #fecaca",
   },
 };
