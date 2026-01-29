@@ -7,19 +7,17 @@ export async function getFazendaDoProdutor(userId) {
 
   const { data, error } = await supabase
     .from("fazendas")
-    .select("id, nome")
+    .select("id, nome, created_at")
     .eq("owner_user_id", userId)
-    .single();
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
 
   if (error) {
     throw error;
   }
 
-  if (!data?.id) {
-    throw new Error("Nenhuma fazenda encontrada para este produtor.");
-  }
-
-  return data;
+  return data ?? null;
 }
 
 export async function getEmailDoUsuario(userId) {
