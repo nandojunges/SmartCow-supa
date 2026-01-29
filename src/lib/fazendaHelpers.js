@@ -1,9 +1,7 @@
-import {
-  EMAIL_COLS,
-  isMissingColumnError,
-  selectByEmailWithFallback,
-} from "../utils/supabaseFallback";
+import { isMissingColumnError, selectByEmailWithFallback } from "../utils/supabaseFallback";
 import { supabase } from "./supabaseClient";
+
+const CONVITE_EMAIL_COL = "email_convidado";
 
 export async function getFazendaDoProdutor(userId) {
   if (!userId) {
@@ -47,34 +45,28 @@ export async function listConvitesDaFazenda(fazendaId) {
     throw new Error("Fazenda inválida para carregar convites.");
   }
 
-  let lastError;
+  const { data, error } = await supabase
+    .from("convites_acesso")
+    .select(
+      `id, ${CONVITE_EMAIL_COL}, tipo_profissional, nome_profissional, status, created_at`
+    )
+    .eq("fazenda_id", fazendaId)
+    .order("created_at", { ascending: false });
 
-  for (const col of EMAIL_COLS) {
-    const { data, error } = await supabase
-      .from("convites_acesso")
-      .select(`id, ${col}, tipo_profissional, nome_profissional, status, created_at`)
-      .eq("fazenda_id", fazendaId)
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      if (isMissingColumnError(error, col)) {
-        lastError = error;
-        continue;
-      }
-      throw error;
+  if (error) {
+    if (isMissingColumnError(error, CONVITE_EMAIL_COL)) {
+      throw new Error(
+        "Não foi possível localizar a coluna de e-mail dos convites. Verifique a configuração."
+      );
     }
-
-    return (data ?? []).map((convite) => ({
-      ...convite,
-      email_convite: convite[col] ?? "",
-    }));
+    throw error;
   }
 
-  if (lastError) {
-    throw lastError;
-  }
-
-  return [];
+  return (data ?? []).map((convite) => ({
+    ...convite,
+    email_convidado: convite[CONVITE_EMAIL_COL] ?? "",
+    email_convite: convite[CONVITE_EMAIL_COL] ?? "",
+  }));
 }
 
 export async function listAcessosDaFazenda(fazendaId) {
@@ -96,14 +88,16 @@ export async function listAcessosDaFazenda(fazendaId) {
 }
 
 export async function listConvitesDoTecnico(email) {
-  if (!email) {
+  const emailNormalizado = email?.trim().toLowerCase() ?? "";
+
+  if (!emailNormalizado) {
     throw new Error("E-mail inválido para carregar convites.");
   }
 
   const { data, error, emailColumn } = await selectByEmailWithFallback({
     table: "convites_acesso",
     select: "id, fazenda_id, status, created_at, tipo_profissional, nome_profissional",
-    email,
+    email: emailNormalizado,
     extraFilters: (query) =>
       query.eq("status", "pendente").order("created_at", { ascending: false }),
   });
@@ -114,6 +108,7 @@ export async function listConvitesDoTecnico(email) {
 
   return (data ?? []).map((convite) => ({
     ...convite,
+    email_convidado: emailColumn ? convite[emailColumn] ?? "" : "",
     email_convite: emailColumn ? convite[emailColumn] ?? "" : "",
   }));
 }

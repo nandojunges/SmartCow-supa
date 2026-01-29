@@ -1,17 +1,7 @@
 import { supabase } from "../lib/supabaseClient";
-import {
-  EMAIL_COLS,
-  insertWithEmailFallback,
-  isMissingColumnError,
-} from "../utils/supabaseFallback";
+import { insertWithEmailFallback, isMissingColumnError } from "../utils/supabaseFallback";
 
-const EMAIL_COLS_FALLBACK = [
-  "convidado_email",
-  "email_convidado",
-  "convidadoEmail",
-  "email",
-  "email_profissional",
-];
+const CONVITE_EMAIL_COL = "email_convidado";
 
 export async function ensureFazendaDoProdutor(userId) {
   if (!userId) {
@@ -83,35 +73,29 @@ export async function listarConvitesPendentesProdutor(fazendaId) {
     throw new Error("Fazenda inválida para carregar convites.");
   }
 
-  let lastError;
+  const { data, error } = await supabase
+    .from("convites_acesso")
+    .select(
+      `id, ${CONVITE_EMAIL_COL}, tipo_profissional, nome_profissional, status, created_at`
+    )
+    .eq("fazenda_id", fazendaId)
+    .eq("status", "pendente")
+    .order("created_at", { ascending: false });
 
-  for (const col of EMAIL_COLS) {
-    const { data, error } = await supabase
-      .from("convites_acesso")
-      .select(`id, ${col}, tipo_profissional, nome_profissional, status, created_at`)
-      .eq("fazenda_id", fazendaId)
-      .eq("status", "pendente")
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      if (isMissingColumnError(error, col)) {
-        lastError = error;
-        continue;
-      }
-      throw error;
+  if (error) {
+    if (isMissingColumnError(error, CONVITE_EMAIL_COL)) {
+      throw new Error(
+        "Não foi possível localizar a coluna de e-mail dos convites. Verifique a configuração."
+      );
     }
-
-    return (data ?? []).map((convite) => ({
-      ...convite,
-      email_convite: convite[col] ?? "",
-    }));
+    throw error;
   }
 
-  if (lastError) {
-    throw lastError;
-  }
-
-  return [];
+  return (data ?? []).map((convite) => ({
+    ...convite,
+    email_convidado: convite[CONVITE_EMAIL_COL] ?? "",
+    email_convite: convite[CONVITE_EMAIL_COL] ?? "",
+  }));
 }
 
 export async function criarConvite(fazendaId, email, tipo, nome) {
@@ -143,49 +127,24 @@ export async function criarConvite(fazendaId, email, tipo, nome) {
   return data ?? null;
 }
 
-export async function getConviteEmailColumn() {
-  const { data, error } = await supabase
-    .from("convites_acesso")
-    .select("*")
-    .limit(1);
-
-  if (error) {
-    throw error;
-  }
-
-  const keys = data?.[0] ? Object.keys(data[0]) : EMAIL_COLS_FALLBACK;
-  const match = keys.find((key) => {
-    const lower = key.toLowerCase();
-    return lower.includes("email") && lower.includes("convid");
-  });
-
-  return match || "convidado_email";
-}
-
 export async function listarConvitesPendentesTecnico(email) {
-  if (!email) {
+  const emailNormalizado = email?.trim().toLowerCase() ?? "";
+
+  if (!emailNormalizado) {
     throw new Error("E-mail inválido para carregar convites.");
-  }
-
-  let emailColumn = "convidado_email";
-
-  try {
-    emailColumn = await getConviteEmailColumn();
-  } catch (error) {
-    console.error("Erro ao detectar coluna de e-mail dos convites:", error);
   }
 
   const { data, error } = await supabase
     .from("convites_acesso")
     .select("id, fazenda_id, status, created_at, tipo_profissional, nome_profissional")
-    .eq(emailColumn, email)
+    .eq(CONVITE_EMAIL_COL, emailNormalizado)
     .eq("status", "pendente")
     .order("created_at", { ascending: false });
 
   if (error) {
-    if (isMissingColumnError(error, emailColumn)) {
+    if (isMissingColumnError(error, CONVITE_EMAIL_COL)) {
       console.error("Coluna de e-mail inexistente nos convites:", {
-        emailColumn,
+        emailColumn: CONVITE_EMAIL_COL,
         error,
       });
       throw new Error(
@@ -197,6 +156,7 @@ export async function listarConvitesPendentesTecnico(email) {
 
   return (data ?? []).map((convite) => ({
     ...convite,
-    email_convite: emailColumn ? convite[emailColumn] ?? "" : "",
+    email_convidado: convite[CONVITE_EMAIL_COL] ?? "",
+    email_convite: convite[CONVITE_EMAIL_COL] ?? "",
   }));
 }

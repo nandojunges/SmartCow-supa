@@ -186,9 +186,15 @@ export default function Ajustes() {
   const conviteBloqueado =
     enviando ||
     carregando ||
+    !fazendaId ||
     !emailNormalizado ||
     !profissionalTipoLabel ||
     !validarEmail(emailNormalizado);
+
+  const avisoConvite =
+    !carregando && !fazendaId
+      ? "Defina uma fazenda antes de enviar convites."
+      : "";
 
   async function handleConvidar(event) {
     event.preventDefault();
@@ -230,7 +236,30 @@ export default function Ajustes() {
         setFazendaAtiva(fazenda);
       }
 
-      await criarConvite(fazendaIdAtual, emailNormalizado, profissionalTipoLabel, nomeNormalizado);
+      const { data: conviteExistente, error: conviteError } = await supabase
+        .from("convites_acesso")
+        .select("id")
+        .eq("fazenda_id", fazendaIdAtual)
+        .eq("email_convidado", emailNormalizado)
+        .eq("status", "pendente")
+        .limit(1)
+        .maybeSingle();
+
+      if (conviteError) {
+        throw conviteError;
+      }
+
+      if (conviteExistente?.id) {
+        toast.info("Convite pendente já enviado para este e-mail.");
+        return;
+      }
+
+      await criarConvite(
+        fazendaIdAtual,
+        emailNormalizado,
+        profissionalTipoLabel,
+        nomeNormalizado
+      );
 
       setEmail("");
       setProfissionalTipo(null);
@@ -391,6 +420,9 @@ export default function Ajustes() {
         {!carregando && avisoSemFazenda && (
           <p style={styles.warningText}>{avisoSemFazenda}</p>
         )}
+        {!carregando && !avisoSemFazenda && avisoConvite && (
+          <p style={styles.warningText}>{avisoConvite}</p>
+        )}
       </section>
 
       <section style={styles.card}>
@@ -414,7 +446,7 @@ export default function Ajustes() {
               <div key={convite.id} style={styles.listItem}>
                 <div style={styles.listInfo}>
                   <span style={styles.listTitle}>
-                    {convite.email_convite || "E-mail não disponível"}
+                    {convite.email_convidado || "E-mail não disponível"}
                   </span>
                   <span style={styles.listMeta}>
                     {convite.tipo_profissional || "Tipo não informado"}
