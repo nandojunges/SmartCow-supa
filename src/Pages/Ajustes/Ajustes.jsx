@@ -3,6 +3,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Select from "react-select";
 import { toast } from "react-toastify";
 import { supabase } from "../../lib/supabaseClient";
+import {
+  getFazendaDoProdutor,
+  listAcessosDaFazenda,
+  listConvitesDaFazenda,
+} from "../../lib/fazendaHelpers";
 
 const PROFISSIONAIS_OPTIONS = [
   { value: "Veterinário (Reprodução)", label: "Veterinário (Reprodução)" },
@@ -53,39 +58,17 @@ export default function Ajustes() {
     setCarregandoListas(true);
 
     try {
-      const [convitesResp, acessosResp] = await Promise.all([
-        supabase
-          .from("convites_acesso")
-          .select(
-            "id, convidado_email, profissional_tipo, profissional_nome, status, created_at"
-          )
-          .eq("fazenda_id", fazendaIdAtual)
-          .order("created_at", { ascending: false }),
-        supabase
-          .from("fazenda_acessos")
-          .select(
-            "id, user_id, status, created_at, profissional_tipo, profissional_nome"
-          )
-          .eq("fazenda_id", fazendaIdAtual)
-          .order("created_at", { ascending: false }),
+      const [convitesData, acessosData] = await Promise.all([
+        listConvitesDaFazenda(fazendaIdAtual),
+        listAcessosDaFazenda(fazendaIdAtual),
       ]);
-
-      if (convitesResp.error) {
-        throw convitesResp.error;
-      }
-
-      if (acessosResp.error) {
-        throw acessosResp.error;
-      }
-
-      const acessosData = acessosResp.data ?? [];
       const userIds = acessosData.map((acesso) => acesso.user_id).filter(Boolean);
       let perfis = [];
 
       if (userIds.length > 0) {
         const { data: perfisData, error: perfisError } = await supabase
           .from("profiles")
-          .select("id, email, full_name")
+          .select("id, email, tipo_conta")
           .in("id", userIds);
 
         if (perfisError) {
@@ -102,12 +85,12 @@ export default function Ajustes() {
         return {
           ...acesso,
           email: perfil?.email ?? "",
-          nome: perfil?.full_name ?? "",
-          status: (acesso.status ?? "ativo").toLowerCase(),
+          tipo_conta: perfil?.tipo_conta ?? "",
+          ativo: acesso.ativo ?? true,
         };
       });
 
-      setConvites(convitesResp.data ?? []);
+      setConvites(convitesData ?? []);
       setAcessos(acessosComPerfil);
     } catch (error) {
       console.error("Erro ao carregar acessos:", error?.message);
@@ -134,32 +117,8 @@ export default function Ajustes() {
           return;
         }
 
-        const { data: fazendas, error: fazendasError } = await supabase
-          .from("fazendas")
-          .select("id")
-          .eq("owner_id", user.id)
-          .order("created_at", { ascending: true })
-          .limit(1);
-
-        if (fazendasError) {
-          throw fazendasError;
-        }
-
-        let fazendaIdCarregada = fazendas?.[0]?.id ?? null;
-
-        if (!fazendaIdCarregada) {
-          const { data: novaFazenda, error: insertError } = await supabase
-            .from("fazendas")
-            .insert({ owner_id: user.id, nome: "Minha Fazenda" })
-            .select("id")
-            .single();
-
-          if (insertError) {
-            throw insertError;
-          }
-
-          fazendaIdCarregada = novaFazenda?.id ?? null;
-        }
+        const fazenda = await getFazendaDoProdutor(user.id);
+        const fazendaIdCarregada = fazenda?.id ?? null;
 
         if (isMounted) {
           setFazendaId(fazendaIdCarregada);
@@ -193,12 +152,12 @@ export default function Ajustes() {
   );
 
   const acessosAtivos = useMemo(
-    () => acessos.filter((acesso) => (acesso.status ?? "ativo") === "ativo"),
+    () => acessos.filter((acesso) => acesso.ativo !== false),
     [acessos]
   );
 
   const acessosBloqueados = useMemo(
-    () => acessos.filter((acesso) => (acesso.status ?? "ativo") === "bloqueado"),
+    () => acessos.filter((acesso) => acesso.ativo === false),
     [acessos]
   );
 
@@ -226,10 +185,9 @@ export default function Ajustes() {
       setEnviando(true);
       const { error } = await supabase.from("convites_acesso").insert({
         fazenda_id: fazendaId,
-        invited_by: usuario.id,
         convidado_email: emailNormalizado,
-        profissional_tipo: profissionalTipoLabel,
-        profissional_nome: nomeNormalizado || null,
+        tipo_profissional: profissionalTipoLabel,
+        nome_profissional: nomeNormalizado || null,
         status: "pendente",
       });
 
@@ -247,35 +205,6 @@ export default function Ajustes() {
       toast.error(err.message || "Não foi possível enviar o convite.");
     } finally {
       setEnviando(false);
-    }
-  }
-
-  async function handleReenviar(convite) {
-    if (!fazendaId) return;
-
-    try {
-      setProcessandoId(`reenviar-${convite.id}`);
-      const { error } = await supabase
-        .from("convites_acesso")
-        .update({
-          status: "pendente",
-          profissional_tipo: convite.profissional_tipo ?? null,
-          profissional_nome: convite.profissional_nome ?? null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", convite.id);
-
-      if (error) {
-        throw error;
-      }
-
-      toast.success("Convite reenviado com sucesso.");
-      await carregarListas(fazendaId);
-    } catch (err) {
-      console.error("Erro ao reenviar convite:", err.message);
-      toast.error(err.message || "Não foi possível reenviar o convite.");
-    } finally {
-      setProcessandoId(null);
     }
   }
 
@@ -308,10 +237,9 @@ export default function Ajustes() {
 
     try {
       setProcessandoId(`bloquear-${acesso.id}`);
-      const novoStatus = bloquear ? "bloqueado" : "ativo";
       const { error } = await supabase
         .from("fazenda_acessos")
-        .update({ status: novoStatus })
+        .update({ ativo: !bloquear })
         .eq("id", acesso.id);
 
       if (error) {
@@ -335,19 +263,6 @@ export default function Ajustes() {
 
     try {
       setProcessandoId(`remover-${acesso.id}`);
-      const convidadoEmail = acesso.email?.trim().toLowerCase();
-      if (convidadoEmail) {
-        const { error: revokeError } = await supabase
-          .from("convites_acesso")
-          .update({ status: "revogado", revoked_at: new Date().toISOString() })
-          .eq("fazenda_id", fazendaId)
-          .eq("convidado_email", convidadoEmail);
-
-        if (revokeError) {
-          throw revokeError;
-        }
-      }
-
       const { error } = await supabase
         .from("fazenda_acessos")
         .delete()
@@ -451,9 +366,9 @@ export default function Ajustes() {
                 <div style={styles.listInfo}>
                   <span style={styles.listTitle}>{convite.convidado_email}</span>
                   <span style={styles.listMeta}>
-                    {convite.profissional_tipo || "Tipo não informado"}
-                    {convite.profissional_nome
-                      ? ` · ${convite.profissional_nome}`
+                    {convite.tipo_profissional || "Tipo não informado"}
+                    {convite.nome_profissional
+                      ? ` · ${convite.nome_profissional}`
                       : ""}
                   </span>
                   <span style={styles.listMeta}>
@@ -464,16 +379,6 @@ export default function Ajustes() {
                   <span style={{ ...styles.status, ...styles.statuswarning }}>
                     Pendente
                   </span>
-                  <button
-                    type="button"
-                    style={styles.secondaryButton}
-                    onClick={() => handleReenviar(convite)}
-                    disabled={processandoId === `reenviar-${convite.id}`}
-                  >
-                    {processandoId === `reenviar-${convite.id}`
-                      ? "Reenviando..."
-                      : "Reenviar"}
-                  </button>
                   <button
                     type="button"
                     style={styles.ghostButton}
@@ -513,10 +418,6 @@ export default function Ajustes() {
                 <div style={styles.listInfo}>
                   <span style={styles.listTitle}>
                     {acesso.email || "E-mail não disponível"}
-                  </span>
-                  <span style={styles.listMeta}>
-                    {acesso.profissional_tipo || "Tipo não informado"}
-                    {acesso.profissional_nome ? ` · ${acesso.profissional_nome}` : ""}
                   </span>
                   <span style={styles.listMeta}>
                     Acesso ativo desde {formatarData(acesso.created_at)}
@@ -575,10 +476,6 @@ export default function Ajustes() {
                 <div style={styles.listInfo}>
                   <span style={styles.listTitle}>
                     {acesso.email || "E-mail não disponível"}
-                  </span>
-                  <span style={styles.listMeta}>
-                    {acesso.profissional_tipo || "Tipo não informado"}
-                    {acesso.profissional_nome ? ` · ${acesso.profissional_nome}` : ""}
                   </span>
                   <span style={styles.listMeta}>
                     Bloqueado desde {formatarData(acesso.created_at)}
