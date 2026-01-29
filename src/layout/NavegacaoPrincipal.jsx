@@ -3,6 +3,7 @@ import React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import StatusConexao from "../components/StatusConexao";
+import { useFazenda } from "../context/FazendaContext";
 
 const ABAS_BASE = [
   { id: "inicio",     label: "Início",            title: "Página inicial" },
@@ -22,10 +23,12 @@ function useAbaAtiva(pathname) {
   return ABAS_BASE.some((a) => a.id === seg) ? seg : "inicio";
 }
 
-export default function NavegacaoPrincipal() {
+export default function NavegacaoPrincipal({ tipoConta }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const abaAtiva = useAbaAtiva(pathname);
+  const { limparFazendaAtiva } = useFazenda();
+  const isAssistenteTecnico = String(tipoConta ?? "").trim().toUpperCase() === "ASSISTENTE_TECNICO";
 
   // ===== PALETA “AgTech premium” =====
   const NAV_BG = "#0B1F3A";           // navy profundo
@@ -156,9 +159,14 @@ export default function NavegacaoPrincipal() {
         {/* Sair (ghost, menos chamativo, combina com paleta) */}
         <button
           onClick={async () => {
+            if (isAssistenteTecnico) {
+              limparFazendaAtiva();
+              navigate("/tecnico");
+              return;
+            }
             await supabase.auth.signOut();
           }}
-          title="Sair do sistema"
+          title={isAssistenteTecnico ? "Sair da fazenda" : "Sair do sistema"}
           style={{
             display: "inline-flex",
             alignItems: "center",

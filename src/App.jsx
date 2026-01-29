@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { supabase } from "./lib/supabaseClient";
 import { syncAnimaisSeed, syncPending } from "./offline/sync";
+import { useFazenda } from "./context/FazendaContext";
 
 // Telas
 import Login from "./Auth/Login";
@@ -30,6 +31,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
+  const { hasFazendaAtiva } = useFazenda();
 
   // Ouve sessão do Supabase
   useEffect(() => {
@@ -96,11 +98,7 @@ export default function App() {
   const tipoContaRaw = profile?.tipo_conta ?? session?.user?.user_metadata?.tipoConta;
   const tipoConta = tipoContaRaw ? String(tipoContaRaw).trim().toUpperCase() : "PRODUTOR";
   const isAssistenteTecnico = tipoConta === "ASSISTENTE_TECNICO";
-  const hasFazendaSelecionada =
-    typeof localStorage !== "undefined" &&
-    Boolean(
-      localStorage.getItem("fazendaSelecionadaId") || localStorage.getItem("fazendaSelecionada")
-    );
+  const hasFazendaSelecionada = hasFazendaAtiva;
 
   if (loading) {
     return null; // ou um spinner de "Carregando..."
@@ -132,7 +130,7 @@ export default function App() {
             <Route path="/admin" element={<Admin />} />
 
             {/* 🟦 DEMAIS PÁGINAS DENTRO DO SISTEMABASE (com menu azul) */}
-            <Route element={<SistemaBase />}>
+            <Route element={<SistemaBase tipoConta={tipoConta} />}>
               <Route
                 element={
                   <AssistenteGuard
