@@ -1,12 +1,12 @@
 // src/App.jsx
 import { useEffect, useState } from "react";
-import { Routes, Route, Navigate, Outlet } from "react-router-dom";
+import { Routes, Route, Navigate, Outlet, useNavigate } from "react-router-dom";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { supabase } from "./lib/supabaseClient";
 import { syncAnimaisSeed, syncPending } from "./offline/sync";
 import { useFazenda } from "./context/FazendaContext";
-import { ensureFazendaDoProdutor } from "./services/acessos";
+import { useFarmSelection } from "./hooks/useFarmSelection";
 
 // Telas
 import Login from "./Auth/Login";
@@ -30,13 +30,12 @@ import Admin from "./Pages/Admin/Admin.jsx";
 import TecnicoHome from "./Pages/Tecnico/TecnicoHome.jsx";
 
 export default function App() {
+  const navigate = useNavigate();
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
-  const { fazendaAtualId, hasFazendaAtual, setFazendaAtualId } = useFazenda();
-  const [fazendasProdutor, setFazendasProdutor] = useState([]);
-  const [mostrarSeletorFazenda, setMostrarSeletorFazenda] = useState(false);
+  const { hasFazendaAtual } = useFazenda();
 
   // Ouve sessão do Supabase
   useEffect(() => {
@@ -108,65 +107,17 @@ export default function App() {
   const isAssistenteTecnico = tipoConta === "ASSISTENTE_TECNICO";
   const hasFazendaSelecionada = hasFazendaAtual;
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function carregarFazendasProdutor() {
-      if (!session?.user?.id || tipoConta !== "PRODUTOR") {
-        return;
-      }
-
-      try {
-        const { data: fazendasData, error } = await supabase
-          .from("fazendas")
-          .select("id, nome, created_at")
-          .eq("owner_user_id", session.user.id)
-          .order("created_at", { ascending: true });
-
-        if (error) {
-          throw error;
-        }
-
-        let fazendas = fazendasData ?? [];
-
-        if (!fazendas.length) {
-          const { fazenda, fazendas: fazendasCriadas } = await ensureFazendaDoProdutor(
-            session.user.id
-          );
-          fazendas = fazendasCriadas ?? (fazenda ? [fazenda] : []);
-        }
-
-        if (!isMounted) {
-          return;
-        }
-
-        setFazendasProdutor(fazendas);
-
-        if (!fazendaAtualId && fazendas.length === 1) {
-          setFazendaAtualId(fazendas[0].id);
-          setMostrarSeletorFazenda(false);
-          return;
-        }
-
-        if (!fazendaAtualId && fazendas.length > 1) {
-          setMostrarSeletorFazenda(true);
-        }
-      } catch (error) {
-        if (import.meta.env.DEV) {
-          console.error("Erro ao definir fazenda ativa:", error?.message);
-        }
-        if (isMounted) {
-          toast.error("Não foi possível localizar suas fazendas.");
-        }
-      }
-    }
-
-    carregarFazendasProdutor();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [fazendaAtualId, session?.user?.id, setFazendaAtualId, tipoConta]);
+  const { fazendas, mostrarSeletor, selecionarFazenda, loading: fazendasLoading } =
+    useFarmSelection({
+      userId: session?.user?.id,
+      tipoConta,
+      onSelect: () => {
+        navigate("/inicio", { replace: true });
+      },
+      onError: () => {
+        toast.error("Não foi possível localizar suas fazendas.");
+      },
+    });
 
   if (loading) {
     return null; // ou um spinner de "Carregando..."
@@ -201,13 +152,15 @@ export default function App() {
             <Route element={<SistemaBase tipoConta={tipoConta} />}>
               <Route
                 element={
-                  <AssistenteGuard
-                    isAssistenteTecnico={isAssistenteTecnico}
-                    hasFazendaSelecionada={hasFazendaSelecionada}
-                    loading={profileLoading}
-                  />
-                }
-              >
+                <AssistenteGuard
+                  isAssistenteTecnico={isAssistenteTecnico}
+                  hasFazendaSelecionada={hasFazendaSelecionada}
+                  loading={profileLoading}
+                  isProdutor={tipoConta === "PRODUTOR"}
+                  selecionandoFazenda={fazendasLoading || mostrarSeletor}
+                />
+              }
+            >
                 <Route path="/inicio" element={<Inicio />} />
                 <Route path="/animais" element={<Animais />} />
                 <Route path="/bezerras" element={<Bezerras />} />
@@ -227,12 +180,11 @@ export default function App() {
           </>
         )}
       </Routes>
-      {mostrarSeletorFazenda && (
+      {mostrarSeletor && (
         <SelecaoFazendaModal
-          fazendas={fazendasProdutor}
+          fazendas={fazendas}
           onSelecionar={(fazendaId) => {
-            setFazendaAtualId(fazendaId);
-            setMostrarSeletorFazenda(false);
+            selecionarFazenda(fazendaId);
           }}
         />
       )}
@@ -241,7 +193,13 @@ export default function App() {
   );
 }
 
-function AssistenteGuard({ isAssistenteTecnico, hasFazendaSelecionada, loading }) {
+function AssistenteGuard({
+  isAssistenteTecnico,
+  hasFazendaSelecionada,
+  loading,
+  isProdutor,
+  selecionandoFazenda,
+}) {
   useEffect(() => {
     if (loading) {
       return;
@@ -251,7 +209,7 @@ function AssistenteGuard({ isAssistenteTecnico, hasFazendaSelecionada, loading }
     }
   }, [hasFazendaSelecionada, isAssistenteTecnico, loading]);
 
-  if (loading) {
+  if (loading || (isProdutor && selecionandoFazenda)) {
     return null;
   }
 

@@ -6,6 +6,7 @@ import { toast } from "react-toastify";
 import { supabase } from "../../lib/supabaseClient";
 import { useFazenda } from "../../context/FazendaContext";
 import { listAcessosDaFazenda } from "../../lib/fazendaHelpers";
+import { atualizarLastFarmUsuario, setLastFarmId } from "../../lib/farmSelection";
 import {
   criarConvite,
   ensureFazendaDoProdutor,
@@ -138,8 +139,10 @@ export default function Ajustes() {
   useEffect(() => {
     if (fazendaAtiva?.id && String(fazendaAtiva.id) !== String(fazendaAtualId || "")) {
       setFazendaAtualId(fazendaAtiva.id);
+      setLastFarmId(fazendaAtiva.id);
+      atualizarLastFarmUsuario({ userId: usuario?.id, farmId: fazendaAtiva.id });
     }
-  }, [fazendaAtiva, fazendaAtualId, setFazendaAtualId]);
+  }, [fazendaAtiva, fazendaAtualId, setFazendaAtualId, usuario?.id]);
 
   useEffect(() => {
     let isMounted = true;
