@@ -26,6 +26,12 @@ import ConsumoReposicao from "./Pages/ConsumoReposicao/ConsumoReposicao.jsx";
 import Financeiro from "./Pages/Financeiro/Financeiro.jsx";
 import Calendario from "./Pages/Calendario/Calendario.jsx";
 import Ajustes from "./Pages/Ajustes/Ajustes.jsx";
+import AjustesAcessos from "./Pages/Ajustes/AjustesAcessos.jsx";
+import AjustesAparencia from "./Pages/Ajustes/AjustesAparencia.jsx";
+import AjustesFazendas from "./Pages/Ajustes/AjustesFazendas.jsx";
+import AjustesIdioma from "./Pages/Ajustes/AjustesIdioma.jsx";
+import AjustesNotificacoes from "./Pages/Ajustes/AjustesNotificacoes.jsx";
+import AjustesPerfil from "./Pages/Ajustes/AjustesPerfil.jsx";
 import Admin from "./Pages/Admin/Admin.jsx";
 import TecnicoHome from "./Pages/Tecnico/TecnicoHome.jsx";
 
@@ -171,6 +177,12 @@ export default function App() {
                 <Route path="/financeiro" element={<Financeiro />} />
                 <Route path="/calendario" element={<Calendario />} />
                 <Route path="/ajustes" element={<Ajustes />} />
+                <Route path="/ajustes/acessos" element={<AjustesAcessos />} />
+                <Route path="/ajustes/perfil" element={<AjustesPerfil />} />
+                <Route path="/ajustes/fazendas" element={<AjustesFazendas />} />
+                <Route path="/ajustes/aparencia" element={<AjustesAparencia />} />
+                <Route path="/ajustes/idioma" element={<AjustesIdioma />} />
+                <Route path="/ajustes/notificacoes" element={<AjustesNotificacoes />} />
               </Route>
               <Route path="/tecnico" element={<TecnicoHome />} />
 
