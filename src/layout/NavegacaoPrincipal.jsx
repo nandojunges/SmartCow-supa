@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import StatusConexao from "../components/StatusConexao";
-import { useFazendaAtiva } from "../context/FazendaAtivaContext";
+import { useFazenda } from "../context/FazendaContext";
 
 const ABAS_BASE = [
   { id: "inicio",     label: "Início",            title: "Página inicial" },
@@ -28,7 +28,7 @@ function useAbaAtiva(pathname, abas) {
 export default function NavegacaoPrincipal({ tipoConta }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { fazendaAtivaId, clearFazendaAtiva } = useFazendaAtiva();
+  const { fazendaAtualId, clearFazendaAtualId } = useFazenda();
   const [tipoContaPerfil, setTipoContaPerfil] = useState(null);
 
   useEffect(() => {
@@ -72,7 +72,7 @@ export default function NavegacaoPrincipal({ tipoConta }) {
   const tipoContaAtual = tipoContaPerfil ?? tipoConta;
   const isAssistenteTecnico =
     String(tipoContaAtual ?? "").trim().toUpperCase() === "ASSISTENTE_TECNICO";
-  const usarMenuTecnico = isAssistenteTecnico && !fazendaAtivaId;
+  const usarMenuTecnico = isAssistenteTecnico && !fazendaAtualId;
   const abas = usarMenuTecnico ? ABAS_TECNICO : ABAS_BASE;
   const abaAtiva = useAbaAtiva(pathname, abas);
 
@@ -120,7 +120,7 @@ export default function NavegacaoPrincipal({ tipoConta }) {
             >
               SmartCow
             </span>
-            {isAssistenteTecnico && fazendaAtivaId && (
+            {isAssistenteTecnico && fazendaAtualId && (
               <span
                 style={{
                   fontSize: 10,
@@ -222,12 +222,12 @@ export default function NavegacaoPrincipal({ tipoConta }) {
         <button
           onClick={async () => {
             if (isAssistenteTecnico) {
-              if (fazendaAtivaId) {
-                clearFazendaAtiva();
+              if (fazendaAtualId) {
+                clearFazendaAtualId();
                 navigate("/tecnico");
                 return;
               }
-              clearFazendaAtiva();
+              clearFazendaAtualId();
               await supabase.auth.signOut();
               if (typeof localStorage !== "undefined") {
                 localStorage.clear();
@@ -249,7 +249,7 @@ export default function NavegacaoPrincipal({ tipoConta }) {
           }}
           title={
             isAssistenteTecnico
-              ? fazendaAtivaId
+              ? fazendaAtualId
                 ? "Sair da fazenda"
                 : "Sair do sistema"
               : "Sair do sistema"

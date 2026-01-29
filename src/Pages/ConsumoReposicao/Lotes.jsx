@@ -2,7 +2,7 @@
 import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { withFazendaId } from "../../lib/fazendaScope";
-import { useFazendaAtiva } from "../../context/FazendaAtivaContext";
+import { useFazenda } from "../../context/FazendaContext";
 import { enqueue, kvGet, kvSet } from "../../offline/localDB";
 
 import "../../styles/tabelaModerna.css";
@@ -61,7 +61,7 @@ function uiToDbPayload(form) {
 }
 
 export default function Lotes() {
-  const { fazendaAtivaId } = useFazendaAtiva();
+  const { fazendaAtualId } = useFazenda();
   const [lotes, setLotes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState("");
@@ -138,7 +138,7 @@ export default function Lotes() {
     }
 
     // View que você criou: v_lotes_com_contagem
-    if (!fazendaAtivaId) {
+    if (!fazendaAtualId) {
       setErro("Selecione uma fazenda para carregar os lotes.");
       setLotes([]);
       setLoading(false);
@@ -149,7 +149,7 @@ export default function Lotes() {
       supabase
         .from("v_lotes_com_contagem")
         .select("id,nome,funcao,nivel_produtivo,descricao,ativo,num_animais,created_at,updated_at"),
-      fazendaAtivaId
+      fazendaAtualId
     ).order("nome", { ascending: true });
 
     if (error) {
@@ -162,7 +162,7 @@ export default function Lotes() {
 
     await updateCache((data || []).map(dbToUiLote));
     setLoading(false);
-  }, [fazendaAtivaId, updateCache]);
+  }, [fazendaAtualId, updateCache]);
 
   useEffect(() => {
     carregar();
@@ -203,7 +203,7 @@ export default function Lotes() {
 
     const payload = {
       ...uiToDbPayload(loteFinal),
-      fazenda_id: fazendaAtivaId || null,
+      fazenda_id: fazendaAtualId || null,
     };
 
     try {
@@ -240,7 +240,7 @@ export default function Lotes() {
       if (loteFinal?.id) {
         const { error } = await withFazendaId(
           supabase.from("lotes").update(payload),
-          fazendaAtivaId
+          fazendaAtualId
         ).eq("id", loteFinal.id);
         if (error) throw error;
       } else {
@@ -276,7 +276,7 @@ export default function Lotes() {
 
       const { error } = await withFazendaId(
         supabase.from("lotes").update({ ativo: !ativoAtual }),
-        fazendaAtivaId
+        fazendaAtualId
       ).eq("id", loteId);
       if (error) throw error;
       await carregar();
@@ -305,7 +305,7 @@ export default function Lotes() {
 
       const { error } = await withFazendaId(
         supabase.from("lotes").delete(),
-        fazendaAtivaId
+        fazendaAtualId
       ).eq("id", excluirId);
       if (error) throw error;
 

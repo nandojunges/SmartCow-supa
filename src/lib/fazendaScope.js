@@ -1,11 +1,11 @@
-export function requireFazendaAtiva(fazendaAtivaId) {
-  if (!fazendaAtivaId) {
+export function requireFazendaAtiva(fazendaAtualId) {
+  if (!fazendaAtualId) {
     throw new Error("Sem fazenda ativa");
   }
-  return fazendaAtivaId;
+  return fazendaAtualId;
 }
 
-export function withFazendaId(query, fazendaAtivaId) {
-  requireFazendaAtiva(fazendaAtivaId);
-  return query.eq("fazenda_id", fazendaAtivaId);
+export function withFazendaId(query, fazendaAtualId) {
+  requireFazendaAtiva(fazendaAtualId);
+  return query.eq("fazenda_id", fazendaAtualId);
 }

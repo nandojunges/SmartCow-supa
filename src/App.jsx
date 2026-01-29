@@ -5,7 +5,7 @@ import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { supabase } from "./lib/supabaseClient";
 import { syncAnimaisSeed, syncPending } from "./offline/sync";
-import { useFazendaAtiva } from "./context/FazendaAtivaContext";
+import { useFazenda } from "./context/FazendaContext";
 import { ensureFazendaDoProdutor } from "./services/acessos";
 
 // Telas
@@ -34,7 +34,9 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
-  const { fazendaAtivaId, hasFazendaAtiva, setFazendaAtiva } = useFazendaAtiva();
+  const { fazendaAtualId, hasFazendaAtual, setFazendaAtualId } = useFazenda();
+  const [fazendasProdutor, setFazendasProdutor] = useState([]);
+  const [mostrarSeletorFazenda, setMostrarSeletorFazenda] = useState(false);
 
   // Ouve sessão do Supabase
   useEffect(() => {
@@ -104,52 +106,67 @@ export default function App() {
     session?.user?.user_metadata?.tipoConta;
   const tipoConta = tipoContaRaw ? String(tipoContaRaw).trim().toUpperCase() : "PRODUTOR";
   const isAssistenteTecnico = tipoConta === "ASSISTENTE_TECNICO";
-  const hasFazendaSelecionada = hasFazendaAtiva;
+  const hasFazendaSelecionada = hasFazendaAtual;
 
   useEffect(() => {
     let isMounted = true;
 
-    async function carregarFazendaProdutor() {
-      if (!session?.user?.id) {
-        return;
-      }
-
-      if (tipoConta !== "PRODUTOR") {
-        return;
-      }
-
-      if (fazendaAtivaId) {
+    async function carregarFazendasProdutor() {
+      if (!session?.user?.id || tipoConta !== "PRODUTOR") {
         return;
       }
 
       try {
-        const { fazenda } = await ensureFazendaDoProdutor(session.user.id);
-        if (!fazenda?.id) {
-          if (isMounted) {
-            toast.info("Cadastre sua fazenda para continuar.");
-          }
+        const { data: fazendasData, error } = await supabase
+          .from("fazendas")
+          .select("id, nome, created_at")
+          .eq("owner_user_id", session.user.id)
+          .order("created_at", { ascending: true });
+
+        if (error) {
+          throw error;
+        }
+
+        let fazendas = fazendasData ?? [];
+
+        if (!fazendas.length) {
+          const { fazenda, fazendas: fazendasCriadas } = await ensureFazendaDoProdutor(
+            session.user.id
+          );
+          fazendas = fazendasCriadas ?? (fazenda ? [fazenda] : []);
+        }
+
+        if (!isMounted) {
           return;
         }
 
-        if (isMounted) {
-          setFazendaAtiva({ id: fazenda.id, nome: fazenda.nome });
+        setFazendasProdutor(fazendas);
+
+        if (!fazendaAtualId && fazendas.length === 1) {
+          setFazendaAtualId(fazendas[0].id);
+          setMostrarSeletorFazenda(false);
+          return;
+        }
+
+        if (!fazendaAtualId && fazendas.length > 1) {
+          setMostrarSeletorFazenda(true);
         }
       } catch (error) {
         if (import.meta.env.DEV) {
           console.error("Erro ao definir fazenda ativa:", error?.message);
         }
         if (isMounted) {
-          toast.error("Não foi possível localizar sua fazenda.");
+          toast.error("Não foi possível localizar suas fazendas.");
         }
       }
     }
 
-    carregarFazendaProdutor();
+    carregarFazendasProdutor();
 
     return () => {
       isMounted = false;
     };
-  }, [fazendaAtivaId, setFazendaAtiva, session?.user?.id, tipoConta]);
+  }, [fazendaAtualId, session?.user?.id, setFazendaAtualId, tipoConta]);
 
   if (loading) {
     return null; // ou um spinner de "Carregando..."
@@ -210,6 +227,15 @@ export default function App() {
           </>
         )}
       </Routes>
+      {mostrarSeletorFazenda && (
+        <SelecaoFazendaModal
+          fazendas={fazendasProdutor}
+          onSelecionar={(fazendaId) => {
+            setFazendaAtualId(fazendaId);
+            setMostrarSeletorFazenda(false);
+          }}
+        />
+      )}
       <ToastContainer position="top-right" autoClose={3500} pauseOnFocusLoss={false} />
     </>
   );
@@ -235,3 +261,95 @@ function AssistenteGuard({ isAssistenteTecnico, hasFazendaSelecionada, loading }
 
   return <Outlet />;
 }
+
+function SelecaoFazendaModal({ fazendas, onSelecionar }) {
+  const [selecionada, setSelecionada] = useState(fazendas?.[0]?.id ?? "");
+
+  useEffect(() => {
+    setSelecionada(fazendas?.[0]?.id ?? "");
+  }, [fazendas]);
+
+  if (!fazendas?.length) {
+    return null;
+  }
+
+  return (
+    <div style={modalStyles.overlay}>
+      <div style={modalStyles.card}>
+        <h2 style={modalStyles.title}>Selecione a fazenda</h2>
+        <p style={modalStyles.subtitle}>
+          Escolha qual fazenda deseja acessar agora.
+        </p>
+        <select
+          style={modalStyles.select}
+          value={selecionada}
+          onChange={(event) => setSelecionada(event.target.value)}
+        >
+          {fazendas.map((fazenda) => (
+            <option key={fazenda.id} value={fazenda.id}>
+              {fazenda.nome || `Fazenda ${fazenda.id}`}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          style={modalStyles.button}
+          onClick={() => onSelecionar(selecionada)}
+          disabled={!selecionada}
+        >
+          Acessar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const modalStyles = {
+  overlay: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(15, 23, 42, 0.35)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 9999,
+    padding: 16,
+  },
+  card: {
+    background: "#fff",
+    borderRadius: 16,
+    padding: 24,
+    width: "100%",
+    maxWidth: 420,
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+    boxShadow: "0 12px 40px rgba(15, 23, 42, 0.2)",
+  },
+  title: {
+    margin: 0,
+    fontSize: 20,
+    fontWeight: 700,
+    color: "#0f172a",
+  },
+  subtitle: {
+    margin: 0,
+    fontSize: 13,
+    color: "#64748b",
+  },
+  select: {
+    borderRadius: 12,
+    border: "1px solid #e2e8f0",
+    padding: "10px 12px",
+    fontSize: 14,
+  },
+  button: {
+    borderRadius: 12,
+    border: "none",
+    background: "#2563eb",
+    color: "#fff",
+    fontWeight: 600,
+    padding: "10px 14px",
+    cursor: "pointer",
+  },
+};

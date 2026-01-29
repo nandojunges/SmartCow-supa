@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from "react"
 import Select from "react-select";
 import { supabase } from "../../lib/supabaseClient";
 import { withFazendaId } from "../../lib/fazendaScope";
-import { useFazendaAtiva } from "../../context/FazendaAtivaContext";
+import { useFazenda } from "../../context/FazendaContext";
 import "../../styles/tabelaModerna.css";
 
 /* ===== helpers ===== */
@@ -702,7 +702,7 @@ export default function ModalMedicaoLeite({
   onFechar,
   onSalvar,
 }) {
-  const { fazendaAtivaId } = useFazendaAtiva();
+  const { fazendaAtualId } = useFazenda();
   const [dataMedicao, setDataMedicao] = useState(dataInicial);
   const [tipoLancamento, setTipoLancamento] = useState("2"); // padrão: 2 ordenhas
 
@@ -796,13 +796,13 @@ export default function ModalMedicaoLeite({
       }
 
       if (!ativo) return;
-      setResolvedFazendaId(fazendaAtivaId || null);
+      setResolvedFazendaId(fazendaAtualId || null);
     })();
 
     return () => {
       ativo = false;
     };
-  }, [aberto, fazendaAtivaId]);
+  }, [aberto, fazendaAtualId]);
 
   // ✅ carrega lotes do banco ao abrir (apenas Lactação com nível e ativo)
   useEffect(() => {
@@ -1090,7 +1090,7 @@ export default function ModalMedicaoLeite({
           return;
         }
       } else {
-        resolvedFazendaId = fazendaAtivaId || null;
+        resolvedFazendaId = fazendaAtualId || null;
 
         if (!resolvedFazendaId) {
           alert("Não foi possível identificar a fazenda ativa.");

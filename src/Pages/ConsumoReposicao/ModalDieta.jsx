@@ -12,7 +12,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Select from "react-select";
 import { supabase } from "../../lib/supabaseClient";
 import { withFazendaId } from "../../lib/fazendaScope";
-import { useFazendaAtiva } from "../../context/FazendaAtivaContext";
+import { useFazenda } from "../../context/FazendaContext";
 import { enqueue, kvGet } from "../../offline/localDB";
 import "../../styles/botoes.css";
 
@@ -152,7 +152,7 @@ function withCosts(d, pricesMap) {
 
 /** =================== Componente =================== */
 export default function ModalDieta({ title = "Cadastro de Dieta", value, onCancel, onSave }) {
-  const { fazendaAtivaId } = useFazendaAtiva();
+  const { fazendaAtualId } = useFazenda();
   const wrapRef = useRef(null);
 
   // -------------------- lotes (Supabase) --------------------
@@ -174,20 +174,23 @@ export default function ModalDieta({ title = "Cadastro de Dieta", value, onCance
       return;
     }
 
-    if (!fazendaAtivaId) {
+    if (!fazendaAtualId) {
       setLotesDb([]);
       setLotesLoading(false);
       return;
     }
 
     const { data, error } = await withFazendaId(
-      supabase.from("lotes").select("id, nome").eq("ativo", true),
-      fazendaAtivaId
+      withFazendaId(
+        supabase.from("lotes").select("id, nome"),
+        fazendaAtualId
+      ).eq("ativo", true),
+      fazendaAtualId
     ).order("nome", { ascending: true });
 
     if (!error) setLotesDb(Array.isArray(data) ? data : []);
     setLotesLoading(false);
-  }, [fazendaAtivaId]);
+  }, [fazendaAtualId]);
 
   useEffect(() => {
     loadLotes();
@@ -230,7 +233,7 @@ export default function ModalDieta({ title = "Cadastro de Dieta", value, onCance
       return;
     }
 
-    if (!fazendaAtivaId) {
+    if (!fazendaAtualId) {
       setProdutosCozinha([]);
       setPrecosMap({});
       setProdutosLoading(false);
@@ -242,7 +245,7 @@ export default function ModalDieta({ title = "Cadastro de Dieta", value, onCance
         .from("estoque_produtos")
         .select("id, nome_comercial, categoria, unidade, apresentacao")
         .ilike("categoria", CATEGORIA_INGREDIENTE),
-      fazendaAtivaId
+      fazendaAtualId
     ).order("nome_comercial", { ascending: true });
 
     if (eProd) {
@@ -266,8 +269,11 @@ export default function ModalDieta({ title = "Cadastro de Dieta", value, onCance
     let viewPrices = null;
     try {
       const { data: viewData, error: eView } = await withFazendaId(
-        supabase.from("vw_dieta_ingredientes").select("id, preco_unitario"),
-        fazendaAtivaId
+        withFazendaId(
+          supabase.from("vw_dieta_ingredientes").select("id, preco_unitario"),
+          fazendaAtualId
+        ),
+        fazendaAtualId
       ).in("id", list.map((p) => p.id));
 
       if (!eView && Array.isArray(viewData)) {
@@ -291,8 +297,13 @@ export default function ModalDieta({ title = "Cadastro de Dieta", value, onCance
     const nextPrices = {};
     for (const p of list) {
       const { data: movs, error: eMov } = await withFazendaId(
-        supabase.from("estoque_movimentos").select("*").eq("produto_id", p.id).in("tipo", TIPOS_ENTRADA),
-        fazendaAtivaId
+        withFazendaId(
+          supabase.from("estoque_movimentos").select("*"),
+          fazendaAtualId
+        )
+          .eq("produto_id", p.id)
+          .in("tipo", TIPOS_ENTRADA),
+        fazendaAtualId
       ).limit(50);
 
       if (eMov) {
@@ -307,7 +318,7 @@ export default function ModalDieta({ title = "Cadastro de Dieta", value, onCance
 
     setPrecosMap(nextPrices);
     setProdutosLoading(false);
-  }, [fazendaAtivaId]);
+  }, [fazendaAtualId]);
 
   useEffect(() => {
     loadProdutosIngredientes();
@@ -361,14 +372,17 @@ export default function ModalDieta({ title = "Cadastro de Dieta", value, onCance
 
     setNumVacasLoading(true);
 
-    if (!fazendaAtivaId) {
+    if (!fazendaAtualId) {
       setNumVacasLoading(false);
       return 0;
     }
 
     const { count, error } = await withFazendaId(
-      supabase.from("animais").select("id", { count: "exact", head: true }).eq("ativo", true),
-      fazendaAtivaId
+      withFazendaId(
+        supabase.from("animais").select("id", { count: "exact", head: true }),
+        fazendaAtualId
+      ).eq("ativo", true),
+      fazendaAtualId
     ).eq("lote_id", loteId);
 
     setNumVacasLoading(false);
@@ -378,7 +392,7 @@ export default function ModalDieta({ title = "Cadastro de Dieta", value, onCance
       return 0;
     }
     return Number(count || 0);
-  }, [fazendaAtivaId]);
+  }, [fazendaAtualId]);
 
   // -------------------- setters --------------------
   const setLote = useCallback(
@@ -552,7 +566,7 @@ export default function ModalDieta({ title = "Cadastro de Dieta", value, onCance
 
     setSaving(true);
 
-    const resolvedFazendaId = fazendaAtivaId || null;
+    const resolvedFazendaId = fazendaAtualId || null;
 
     if (!resolvedFazendaId) {
       alert("Selecione uma fazenda antes de salvar a dieta.");

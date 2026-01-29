@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import Select from "react-select";
 import { supabase } from "../../lib/supabaseClient";
 import { withFazendaId } from "../../lib/fazendaScope";
-import { useFazendaAtiva } from "../../context/FazendaAtivaContext";
+import { useFazenda } from "../../context/FazendaContext";
 import { enqueue, kvGet, kvSet } from "../../offline/localDB";
 import FichaComplementarAnimal from "./FichaComplementarAnimal";
 
@@ -99,7 +99,7 @@ function gerarUUID() {
    Componente principal
 ============================ */
 export default function CadastroAnimal() {
-  const { fazendaAtivaId } = useFazendaAtiva();
+  const { fazendaAtualId } = useFazenda();
   const CACHE_KEY = "cache:animais:list";
   const [mostrarFichaComplementar, setMostrarFichaComplementar] = useState(false);
   // básicos
@@ -249,10 +249,10 @@ export default function CadastroAnimal() {
   );
 
   async function carregarProximoNumero() {
-    if (!fazendaAtivaId) return;
+    if (!fazendaAtualId) return;
     const { data, error } = await withFazendaId(
       supabase.from("animais").select("numero"),
-      fazendaAtivaId
+      fazendaAtualId
     )
       .order("numero", { ascending: false })
       .limit(1);
@@ -268,7 +268,7 @@ export default function CadastroAnimal() {
     if (autoNumero) {
       carregarProximoNumero();
     }
-  }, [autoNumero, fazendaAtivaId]);
+  }, [autoNumero, fazendaAtualId]);
 
   const { br: prevPartoBR } = previsaoPartoISO(ultimaIAResumo);
 
@@ -377,14 +377,14 @@ export default function CadastroAnimal() {
 
   useEffect(() => {
     async function carregarRacas() {
-      if (!fazendaAtivaId) {
+      if (!fazendaAtualId) {
         setRacasBanco([]);
         return;
       }
 
       const { data, error } = await withFazendaId(
         supabase.from("racas").select("id, nome"),
-        fazendaAtivaId
+        fazendaAtualId
       ).order("nome", { ascending: true });
 
       if (!error && data) {
@@ -393,21 +393,21 @@ export default function CadastroAnimal() {
     }
 
     carregarRacas();
-  }, [fazendaAtivaId]);
+  }, [fazendaAtualId]);
 
   /* ========= ações ========= */
 
   const adicionarNovaRaca = async () => {
     const v = (novaRaca || "").trim();
     if (!v) return;
-    if (!fazendaAtivaId) {
+    if (!fazendaAtualId) {
       setMensagemErro("Selecione uma fazenda antes de cadastrar raça.");
       setTimeout(() => setMensagemErro(""), 2500);
       return;
     }
     const { data, error } = await supabase
       .from("racas")
-      .insert({ nome: v, fazenda_id: fazendaAtivaId })
+      .insert({ nome: v, fazenda_id: fazendaAtualId })
       .select("id, nome")
       .single();
     if (!error && data) {
@@ -451,7 +451,7 @@ export default function CadastroAnimal() {
       return;
     }
 
-    if (!fazendaAtivaId) {
+    if (!fazendaAtualId) {
       setMensagemErro("Selecione uma fazenda antes de cadastrar.");
       setTimeout(() => setMensagemErro(""), 2500);
       return;
@@ -485,7 +485,7 @@ export default function CadastroAnimal() {
       mae_nome: mae || null,
       categoria_atual: categoria || null,
       idade_meses: mesesIdade || null,
-      fazenda_id: fazendaAtivaId,
+      fazenda_id: fazendaAtualId,
     };
 
     const payloadMinimo = {
@@ -505,7 +505,7 @@ export default function CadastroAnimal() {
             animal_id: animalId,
             tipo_evento: tipo,
             data_evento: iso,
-            fazenda_id: fazendaAtivaId,
+            fazenda_id: fazendaAtualId,
           });
         });
       };

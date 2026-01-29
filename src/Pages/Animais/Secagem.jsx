@@ -2,7 +2,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { withFazendaId } from "../../lib/fazendaScope";
-import { useFazendaAtiva } from "../../context/FazendaAtivaContext";
+import { useFazenda } from "../../context/FazendaContext";
 import { enqueue, kvGet, kvSet } from "../../offline/localDB";
 import "../../styles/tabelaModerna.css";
 import ModalRegistrarSecagem from "./ModalRegistrarSecagem";
@@ -70,7 +70,7 @@ function previsaoParto(animal) {
 }
 
 export default function Secagem({ isOnline = navigator.onLine }) {
-  const { fazendaAtivaId } = useFazendaAtiva();
+  const { fazendaAtualId } = useFazenda();
   const CACHE_KEY = "cache:animais:list";
   const CACHE_FALLBACK_KEY = "cache:animais:plantel:v1";
 
@@ -107,7 +107,7 @@ export default function Secagem({ isOnline = navigator.onLine }) {
   const carregarAnimais = useCallback(async () => {
     const { data, error } = await withFazendaId(
       supabase.from("animais").select("*"),
-      fazendaAtivaId
+      fazendaAtualId
     )
       .eq("ativo", true)
       .order("numero", { ascending: true });
@@ -116,12 +116,12 @@ export default function Secagem({ isOnline = navigator.onLine }) {
     const lista = Array.isArray(data) ? data : [];
     setAnimais(lista);
     return lista;
-  }, [fazendaAtivaId]);
+  }, [fazendaAtualId]);
 
   const carregarLotes = useCallback(async () => {
     const { data, error } = await withFazendaId(
       supabase.from(LOTE_TABLE).select("*"),
-      fazendaAtivaId
+      fazendaAtualId
     ).order("id", { ascending: true });
 
     if (error) {
@@ -133,7 +133,7 @@ export default function Secagem({ isOnline = navigator.onLine }) {
     const lista = Array.isArray(data) ? data : [];
     setLotes(lista);
     return lista;
-  }, [LOTE_TABLE, fazendaAtivaId]);
+  }, [LOTE_TABLE, fazendaAtualId]);
 
   const carregarDoCache = useCallback(async () => {
     const cachePrimario = await kvGet(CACHE_KEY);
@@ -173,7 +173,7 @@ export default function Secagem({ isOnline = navigator.onLine }) {
           return;
         }
 
-        if (!fazendaAtivaId) {
+        if (!fazendaAtualId) {
           throw new Error("Selecione uma fazenda para continuar.");
         }
         if (!ativo) return;
@@ -212,7 +212,7 @@ export default function Secagem({ isOnline = navigator.onLine }) {
     carregarAnimais,
     carregarDoCache,
     carregarLotes,
-    fazendaAtivaId,
+    fazendaAtualId,
     isOnline,
   ]);
 
@@ -295,7 +295,7 @@ export default function Secagem({ isOnline = navigator.onLine }) {
     setAcaoMensagem("");
 
     try {
-      if (!fazendaAtivaId) {
+      if (!fazendaAtualId) {
         throw new Error("Selecione uma fazenda para registrar a secagem.");
       }
 
@@ -303,7 +303,7 @@ export default function Secagem({ isOnline = navigator.onLine }) {
         animal_id: animalSelecionado.id,
         tipo_evento: "secagem",
         data_evento: payload.dataSecagem,
-        fazenda_id: fazendaAtivaId,
+        fazenda_id: fazendaAtualId,
       };
 
       if (!navigator.onLine) {

@@ -1,6 +1,8 @@
 // src/pages/Leite/AbaCMT.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
+import { withFazendaId } from "../../lib/fazendaScope";
+import { useFazenda } from "../../context/FazendaContext";
 import { enqueue, kvGet, kvSet } from "../../offline/localDB";
 import Select from "react-select";
 import "../../styles/tabelaModerna.css";
@@ -185,6 +187,7 @@ const selectBaseStyles = {
 
 /* ===================== COMPONENT ===================== */
 export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }) {
+  const { fazendaAtualId } = useFazenda();
   if (!vaca?.id) {
     return (
       <div style={{ padding: "1rem", color: "crimson" }}>
@@ -287,9 +290,10 @@ export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }
 
   /* ---------- RESPONSÁVEIS: carregar do banco ---------- */
   const carregarResponsaveis = async () => {
-    const { data, error } = await supabase
-      .from("leite_responsaveis")
-      .select("id, nome, ativo")
+    const { data, error } = await withFazendaId(
+      supabase.from("leite_responsaveis").select("id, nome, ativo"),
+      fazendaAtualId
+    )
       .eq("ativo", true)
       .order("nome", { ascending: true });
 
@@ -326,9 +330,10 @@ export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }
     try {
       // tenta achar existente por nome (case-insensitive aproximado)
       // (sem índice UNIQUE, isso evita duplicar na maioria dos casos)
-      const { data: jaExiste, error: errBusca } = await supabase
-        .from("leite_responsaveis")
-        .select("id, nome, ativo")
+      const { data: jaExiste, error: errBusca } = await withFazendaId(
+        supabase.from("leite_responsaveis").select("id, nome, ativo"),
+        fazendaAtualId
+      )
         .ilike("nome", nome)
         .limit(1);
 
@@ -343,16 +348,16 @@ export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }
 
         // se estava inativo, reativa
         if (jaExiste[0].ativo === false) {
-          const { error: errReativar } = await supabase
-            .from("leite_responsaveis")
-            .update({ ativo: true })
-            .eq("id", idFinal);
+          const { error: errReativar } = await withFazendaId(
+            supabase.from("leite_responsaveis").update({ ativo: true }),
+            fazendaAtualId
+          ).eq("id", idFinal);
           if (errReativar) throw errReativar;
         }
       } else {
         const { data: ins, error: errIns } = await supabase
           .from("leite_responsaveis")
-          .insert({ nome: nome, ativo: true })
+          .insert({ nome: nome, ativo: true, fazenda_id: fazendaAtualId })
           .select("id, nome")
           .single();
 
@@ -392,9 +397,10 @@ export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }
 
   /* ---------- lactações via eventos_reprodutivos ---------- */
   const carregarLactacoes = async () => {
-    const { data, error } = await supabase
-      .from("eventos_reprodutivos")
-      .select("id, tipo_evento, data_evento")
+    const { data, error } = await withFazendaId(
+      supabase.from("eventos_reprodutivos").select("id, tipo_evento, data_evento"),
+      fazendaAtualId
+    )
       .eq("animal_id", vaca.id)
       .in("tipo_evento", ["parto", "secagem"])
       .order("data_evento", { ascending: false });
@@ -449,10 +455,11 @@ export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }
       return;
     }
 
-    const { data, error } = await supabase
-      .from("leite_cmt_testes")
-      .select(
-        `
+    const { data, error } = await withFazendaId(
+      supabase
+        .from("leite_cmt_testes")
+        .select(
+          `
         id,
         animal_id,
         dia,
@@ -468,7 +475,9 @@ export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }
           observacao
         )
       `
-      )
+        ),
+      fazendaAtualId
+    )
       .eq("animal_id", vaca.id)
       .order("momento", { ascending: false });
 
@@ -510,11 +519,14 @@ export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }
   };
 
   useEffect(() => {
+    if (!fazendaAtualId) {
+      return;
+    }
     carregarHistoricoCompleto();
     carregarLactacoes();
     carregarResponsaveis();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vaca?.id]);
+  }, [vaca?.id, fazendaAtualId]);
 
   useEffect(() => {
     const doDia = (historico || []).filter((t) => getDiaDoTeste(t) === diaSelecionado);
@@ -617,9 +629,10 @@ export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }
   const buscarTesteExistentePorChave = async (animalId, dia, ord) => {
     if (!ord) return null;
 
-    const { data, error } = await supabase
-      .from("leite_cmt_testes")
-      .select("id")
+    const { data, error } = await withFazendaId(
+      supabase.from("leite_cmt_testes").select("id"),
+      fazendaAtualId
+    )
       .eq("animal_id", animalId)
       .eq("dia", dia)
       .eq("ordenha", Number(ord))
@@ -647,6 +660,7 @@ export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }
     const operadorNome = operadorOption?.label ? String(operadorOption.label).trim() : null;
 
     const payloadTeste = {
+      fazenda_id: fazendaAtualId,
       animal_id: vaca.id,
       dia: diaSelecionado,
       momento: new Date(momento).toISOString(),
@@ -728,10 +742,10 @@ export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }
       }
 
       if (testeId) {
-        const { error: errUp } = await supabase
-          .from("leite_cmt_testes")
-          .update(payloadTeste)
-          .eq("id", testeId);
+        const { error: errUp } = await withFazendaId(
+          supabase.from("leite_cmt_testes").update(payloadTeste),
+          fazendaAtualId
+        ).eq("id", testeId);
 
         if (errUp) throw errUp;
       } else {
@@ -747,6 +761,7 @@ export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }
       }
 
       const payloadQuartos = ["TE", "TD", "PE", "PD"].map((q) => ({
+        fazenda_id: fazendaAtualId,
         teste_id: testeId,
         quarto: q,
         resultado: (cmt?.[q]?.resultado || "").trim() || null,
@@ -784,7 +799,10 @@ export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }
     setErro("");
     setSalvando(true);
 
-    const { error } = await supabase.from("leite_cmt_testes").delete().eq("id", testeId);
+    const { error } = await withFazendaId(
+      supabase.from("leite_cmt_testes").delete(),
+      fazendaAtualId
+    ).eq("id", testeId);
 
     if (error) {
       setErro(error.message || "Erro ao excluir.");

@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { supabase } from "../../lib/supabaseClient";
-import { useFazendaAtiva } from "../../context/FazendaAtivaContext";
+import { useFazenda } from "../../context/FazendaContext";
 import { aceitarConvite, getEmailDoUsuario } from "../../lib/fazendaHelpers";
 import { listarConvitesPendentesTecnico } from "../../services/acessos";
 
@@ -16,7 +16,7 @@ const STATUS_LABELS = {
 
 export default function TecnicoHome() {
   const navigate = useNavigate();
-  const { setFazendaAtiva, fazendaAtivaNome } = useFazendaAtiva();
+  const { setFazendaAtualId, fazendaAtualId } = useFazenda();
   const [carregando, setCarregando] = useState(true);
   const [usuario, setUsuario] = useState(null);
   const [emailTecnico, setEmailTecnico] = useState("");
@@ -40,8 +40,9 @@ export default function TecnicoHome() {
 
       const { data: acessosData, error: acessosError } = await supabase
         .from("fazenda_acessos")
-        .select("id, fazenda_id, created_at")
+        .select("id, fazenda_id, created_at, ativo, fazendas (id, nome, owner_user_id)")
         .eq("user_id", user.id)
+        .eq("ativo", true)
         .order("created_at", { ascending: false });
 
       if (acessosError) {
@@ -59,7 +60,7 @@ export default function TecnicoHome() {
       if (fazendaIds.length > 0) {
         const { data: fazendasData, error: fazendasError } = await supabase
           .from("fazendas")
-          .select("id, nome")
+          .select("id, nome, owner_user_id")
           .in("id", fazendaIds);
 
         if (fazendasError) {
@@ -72,11 +73,17 @@ export default function TecnicoHome() {
       const convitesComFazenda = convitesPendentes.map((convite) => ({
         ...convite,
         fazenda_nome: fazendasMap.get(convite.fazenda_id)?.nome ?? null,
+        owner_user_id: fazendasMap.get(convite.fazenda_id)?.owner_user_id ?? null,
       }));
 
       const acessosComFazenda = (acessosData ?? []).map((acesso) => ({
         ...acesso,
-        fazenda_nome: fazendasMap.get(acesso.fazenda_id)?.nome ?? null,
+        fazenda_nome:
+          acesso.fazendas?.nome ?? fazendasMap.get(acesso.fazenda_id)?.nome ?? null,
+        owner_user_id:
+          acesso.fazendas?.owner_user_id ??
+          fazendasMap.get(acesso.fazenda_id)?.owner_user_id ??
+          null,
       }));
 
       setUsuario(user);
@@ -179,8 +186,8 @@ export default function TecnicoHome() {
     }
   }
 
-  function handleAcessarFazenda(fazendaId, fazendaNome) {
-    setFazendaAtiva({ id: fazendaId, nome: fazendaNome });
+  function handleAcessarFazenda(fazendaId) {
+    setFazendaAtualId(fazendaId);
     navigate("/inicio", { replace: true });
   }
 
@@ -192,8 +199,8 @@ export default function TecnicoHome() {
           Aqui aparecem as fazendas que convidaram seu e-mail
           {emailTecnico ? ` (${emailTecnico})` : ""}.
         </p>
-        {fazendaAtivaNome && (
-          <p style={styles.activeHint}>Acessando: {fazendaAtivaNome}</p>
+        {fazendaAtualId && (
+          <p style={styles.activeHint}>Acessando: Fazenda #{fazendaAtualId}</p>
         )}
       </div>
 
@@ -288,7 +295,10 @@ export default function TecnicoHome() {
                     {acesso.fazenda_nome || `Fazenda #${acesso.fazenda_id}`}
                   </span>
                   <span style={styles.listMeta}>
-                    Acesso ativo desde {formatarData(acesso.created_at)}
+                    {acesso.owner_user_id
+                      ? `Produtor: ${acesso.owner_user_id}`
+                      : "Produtor não identificado"}{" "}
+                    • Acesso ativo desde {formatarData(acesso.created_at)}
                   </span>
                 </div>
                 <div style={styles.listActions}>
@@ -296,7 +306,7 @@ export default function TecnicoHome() {
                   <button
                     type="button"
                     style={styles.secondaryButton}
-                    onClick={() => handleAcessarFazenda(acesso.fazenda_id, acesso.fazenda_nome)}
+                    onClick={() => handleAcessarFazenda(acesso.fazenda_id)}
                   >
                     Acessar
                   </button>

@@ -48,7 +48,7 @@ export async function listConvitesDaFazenda(fazendaId) {
   const { data, error } = await supabase
     .from("convites_acesso")
     .select(
-      `id, ${CONVITE_EMAIL_COL}, status, created_at`
+      `id, ${CONVITE_EMAIL_COL}, status, created_at, tipo_profissional, nome_profissional`
     )
     .eq("fazenda_id", fazendaId)
     .order("created_at", { ascending: false });
@@ -76,8 +76,9 @@ export async function listAcessosDaFazenda(fazendaId) {
 
   const { data, error } = await supabase
     .from("fazenda_acessos")
-    .select("id, user_id, created_at")
+    .select("id, user_id, created_at, ativo, profiles (id, email)")
     .eq("fazenda_id", fazendaId)
+    .eq("ativo", true)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -133,11 +134,19 @@ export async function aceitarConvite(convite, userId) {
   const acessoExistente = acessosData?.[0];
 
   if (acessoExistente?.id) {
-    // acesso já existe, não há coluna de status ativo para atualizar
+    const { error: updateError } = await supabase
+      .from("fazenda_acessos")
+      .update({ ativo: true })
+      .eq("id", acessoExistente.id);
+
+    if (updateError) {
+      throw updateError;
+    }
   } else {
     const { error: insertError } = await supabase.from("fazenda_acessos").insert({
       fazenda_id: convite.fazenda_id,
       user_id: userId,
+      ativo: true,
     });
 
     if (insertError) {

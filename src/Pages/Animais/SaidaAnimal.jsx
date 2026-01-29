@@ -8,7 +8,7 @@ import React, {
 import Select from "react-select";
 import { supabase } from "../../lib/supabaseClient";
 import { withFazendaId } from "../../lib/fazendaScope";
-import { useFazendaAtiva } from "../../context/FazendaAtivaContext";
+import { useFazenda } from "../../context/FazendaContext";
 import { enqueue, kvGet, kvSet } from "../../offline/localDB";
 
 const CACHE_ANIMAIS_KEY = "cache:animais:list";
@@ -33,7 +33,7 @@ function extrairListaCache(cache) {
 }
 
 export default function SaidaAnimal({ onAtualizar }) {
-  const { fazendaAtivaId } = useFazendaAtiva();
+  const { fazendaAtualId } = useFazenda();
   const [animalSelecionado, setAnimalSelecionado] = useState(null);
   const [tipo, setTipo] = useState("");
   const [motivo, setMotivo] = useState("");
@@ -132,13 +132,13 @@ export default function SaidaAnimal({ onAtualizar }) {
         return;
       }
 
-      if (!fazendaAtivaId) {
+      if (!fazendaAtualId) {
         throw new Error("Selecione uma fazenda para carregar os animais.");
       }
 
       const { data, error } = await withFazendaId(
         supabase.from("animais").select("id, numero, brinco"),
-        fazendaAtivaId
+        fazendaAtualId
       )
         .eq("ativo", true)
         .order("numero", { ascending: true });
@@ -151,7 +151,7 @@ export default function SaidaAnimal({ onAtualizar }) {
       setOk(`❌ ${msg}`);
       setTimeout(() => setOk(""), 5000);
     }
-  }, [fazendaAtivaId]);
+  }, [fazendaAtualId]);
 
   useEffect(() => {
     carregarAnimais();
@@ -161,7 +161,7 @@ export default function SaidaAnimal({ onAtualizar }) {
     if (!validar() || salvando) return;
     setSalvando(true);
     try {
-      if (!fazendaAtivaId) {
+      if (!fazendaAtualId) {
         throw new Error("Selecione uma fazenda antes de registrar a saída.");
       }
 
@@ -175,7 +175,7 @@ export default function SaidaAnimal({ onAtualizar }) {
         const saidaId = gerarUUID();
         const payload = {
           id: saidaId,
-          fazenda_id: fazendaAtivaId,
+          fazenda_id: fazendaAtualId,
           animal_id: animalSelecionado.value,
           tipo_saida: tipo,
           motivo_saida: motivo,
@@ -221,7 +221,7 @@ export default function SaidaAnimal({ onAtualizar }) {
       const { error: insertError } = await supabase
         .from("saidas_animais")
         .insert({
-          fazenda_id: fazendaAtivaId,
+          fazenda_id: fazendaAtualId,
           animal_id: animalSelecionado.value,
           tipo_saida: tipo,
           motivo_saida: motivo,
@@ -234,7 +234,7 @@ export default function SaidaAnimal({ onAtualizar }) {
 
       const { error: updateError } = await withFazendaId(
         supabase.from("animais").update({ ativo: false }),
-        fazendaAtivaId
+        fazendaAtualId
       ).eq("id", animalSelecionado.value);
 
       if (updateError) throw updateError;

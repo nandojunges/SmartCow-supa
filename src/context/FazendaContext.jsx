@@ -1,10 +1,10 @@
 // src/context/FazendaContext.jsx
-import { createContext, useCallback, useContext, useMemo, useState, useEffect } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
-const STORAGE_KEY = "fazendaAtivaId";
-const LEGACY_KEYS = ["fazendaSelecionadaId", "fazendaSelecionada"];
+const STORAGE_KEY = "smartcow:fazendaAtualId";
+const LEGACY_KEYS = ["fazendaAtualId", "fazendaSelecionadaId", "fazendaSelecionada"];
 
-function getInitialFazendaAtivaId() {
+export function getFazendaAtualId() {
   if (typeof localStorage === "undefined") {
     return null;
   }
@@ -27,18 +27,18 @@ function getInitialFazendaAtivaId() {
 const FazendaContext = createContext(null);
 
 export function FazendaProvider({ children }) {
-  const [fazendaAtivaId, setFazendaAtivaId] = useState(getInitialFazendaAtivaId);
+  const [fazendaAtualId, setFazendaAtualIdState] = useState(getFazendaAtualId);
 
-  const setFazendaAtiva = useCallback((id) => {
+  const setFazendaAtualId = useCallback((id) => {
     if (id === null || id === undefined || id === "") {
-      setFazendaAtivaId(null);
+      setFazendaAtualIdState(null);
       return;
     }
-    setFazendaAtivaId(String(id));
+    setFazendaAtualIdState(String(id));
   }, []);
 
-  const clearFazendaAtiva = useCallback(() => {
-    setFazendaAtivaId(null);
+  const clearFazendaAtualId = useCallback(() => {
+    setFazendaAtualIdState(null);
   }, []);
 
   useEffect(() => {
@@ -46,25 +46,23 @@ export function FazendaProvider({ children }) {
       return;
     }
 
-    if (fazendaAtivaId) {
-      localStorage.setItem(STORAGE_KEY, fazendaAtivaId);
+    if (fazendaAtualId) {
+      localStorage.setItem(STORAGE_KEY, fazendaAtualId);
     } else {
       localStorage.removeItem(STORAGE_KEY);
     }
 
     LEGACY_KEYS.forEach((key) => localStorage.removeItem(key));
-  }, [fazendaAtivaId]);
+  }, [fazendaAtualId]);
 
   const value = useMemo(
     () => ({
-      fazendaAtivaId,
-      hasFazendaAtiva: Boolean(fazendaAtivaId),
-      setFazendaAtiva,
-      clearFazendaAtiva,
-      definirFazendaAtiva: setFazendaAtiva,
-      limparFazendaAtiva: clearFazendaAtiva,
+      fazendaAtualId,
+      hasFazendaAtual: Boolean(fazendaAtualId),
+      setFazendaAtualId,
+      clearFazendaAtualId,
     }),
-    [fazendaAtivaId, setFazendaAtiva, clearFazendaAtiva]
+    [fazendaAtualId, setFazendaAtualId, clearFazendaAtualId]
   );
 
   return <FazendaContext.Provider value={value}>{children}</FazendaContext.Provider>;
