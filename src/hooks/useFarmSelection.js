@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ensureFazendaDoProdutor } from "../services/acessos";
 import {
   atualizarLastFarmUsuario,
@@ -9,14 +9,30 @@ import {
 import { useFazenda } from "../context/FazendaContext";
 
 export function useFarmSelection({ userId, tipoConta, onSelect, onError }) {
-  const { setFazendaAtualId } = useFazenda();
+  const { fazendaAtualId, setFazendaAtualId } = useFazenda();
   const [fazendas, setFazendas] = useState([]);
   const [loading, setLoading] = useState(false);
   const [mostrarSeletor, setMostrarSeletor] = useState(false);
+  const isMountedRef = useRef(false);
+  const tipoContaRef = useRef(tipoConta);
+  const onErrorRef = useRef(onError);
+
+  useEffect(() => {
+    tipoContaRef.current = tipoConta;
+  }, [tipoConta]);
+
+  useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
 
   const selecionarFazenda = useCallback(
     async (fazendaId) => {
       if (!fazendaId) {
+        return;
+      }
+
+      if (fazendaAtualId && String(fazendaAtualId) === String(fazendaId)) {
+        setMostrarSeletor(false);
         return;
       }
 
@@ -29,75 +45,84 @@ export function useFarmSelection({ userId, tipoConta, onSelect, onError }) {
         onSelect(fazendaId);
       }
     },
-    [onSelect, setFazendaAtualId, userId]
+    [fazendaAtualId, onSelect, setFazendaAtualId, userId]
   );
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function carregarFazendas() {
-      if (!userId) {
+  const carregarFazendas = useCallback(async () => {
+    if (!userId) {
+      if (isMountedRef.current) {
         setFazendas([]);
+        setMostrarSeletor(false);
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (isMountedRef.current) {
+      setLoading(true);
+    }
+
+    try {
+      let fazendasDisponiveis = await listarFazendasAcessiveis(userId);
+
+      if (tipoContaRef.current === "PRODUTOR" && !fazendasDisponiveis.length) {
+        const { fazendas: fazendasCriadas } = await ensureFazendaDoProdutor(userId);
+        fazendasDisponiveis = fazendasCriadas ?? [];
+      }
+
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      setFazendas(fazendasDisponiveis);
+    } catch (error) {
+      if (import.meta.env.DEV) {
+        console.error("Erro ao carregar fazendas:", error?.message);
+      }
+      if (onErrorRef.current) {
+        onErrorRef.current(error);
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    carregarFazendas();
+
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, [carregarFazendas, userId]);
+
+  useEffect(() => {
+    if (loading || fazendas.length === 0) {
+      return;
+    }
+
+    const lastFarmId = getLastFarmId();
+    const lastFarm = lastFarmId
+      ? fazendas.find((fazenda) => String(fazenda.id) === String(lastFarmId))
+      : null;
+    const fazendaAutoSelecionada = lastFarm?.id ?? (fazendas.length === 1 ? fazendas[0].id : null);
+
+    if (fazendaAutoSelecionada) {
+      if (fazendaAtualId && String(fazendaAtualId) === String(fazendaAutoSelecionada)) {
         setMostrarSeletor(false);
         return;
       }
 
-      setLoading(true);
-
-      try {
-        let fazendasDisponiveis = await listarFazendasAcessiveis(userId);
-
-        if (tipoConta === "PRODUTOR" && !fazendasDisponiveis.length) {
-          const { fazendas: fazendasCriadas } = await ensureFazendaDoProdutor(userId);
-          fazendasDisponiveis = fazendasCriadas ?? [];
-        }
-
-        if (!isMounted) {
-          return;
-        }
-
-        setFazendas(fazendasDisponiveis);
-
-        const lastFarmId = getLastFarmId();
-        const lastFarm = lastFarmId
-          ? fazendasDisponiveis.find(
-              (fazenda) => String(fazenda.id) === String(lastFarmId)
-            )
-          : null;
-
-        if (lastFarm) {
-          await selecionarFazenda(lastFarm.id);
-          return;
-        }
-
-        if (fazendasDisponiveis.length === 1) {
-          await selecionarFazenda(fazendasDisponiveis[0].id);
-          return;
-        }
-
-        if (fazendasDisponiveis.length > 1) {
-          setMostrarSeletor(true);
-        }
-      } catch (error) {
-        if (import.meta.env.DEV) {
-          console.error("Erro ao carregar fazendas:", error?.message);
-        }
-        if (onError) {
-          onError(error);
-        }
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
+      selecionarFazenda(fazendaAutoSelecionada);
+      return;
     }
 
-    carregarFazendas();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [selecionarFazenda, tipoConta, userId]);
+    if (fazendas.length > 1) {
+      setMostrarSeletor(true);
+    }
+  }, [fazendaAtualId, fazendas, loading, selecionarFazenda]);
 
   const value = useMemo(
     () => ({
