@@ -4,6 +4,11 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { supabase } from "../../lib/supabaseClient";
 import { useFazenda } from "../../context/FazendaContext";
+import {
+  aceitarConvite,
+  getEmailDoUsuario,
+  listConvitesDoTecnico,
+} from "../../lib/fazendaHelpers";
 
 const STATUS_LABELS = {
   pendente: { label: "Pendente", tone: "warning" },
@@ -17,6 +22,7 @@ export default function TecnicoHome() {
   const { setFazendaAtiva } = useFazenda();
   const [carregando, setCarregando] = useState(true);
   const [usuario, setUsuario] = useState(null);
+  const [emailTecnico, setEmailTecnico] = useState("");
   const [acessos, setAcessos] = useState([]);
   const [convites, setConvites] = useState([]);
   const [processandoId, setProcessandoId] = useState(null);
@@ -25,22 +31,57 @@ export default function TecnicoHome() {
     setCarregando(true);
 
     try {
-      const [acessosResp, convitesResp] = await Promise.all([
-        supabase.rpc("listar_fazendas_com_acesso"),
-        supabase.rpc("listar_convites_pendentes"),
-      ]);
+      const perfil = await getEmailDoUsuario(user.id);
+      const email = (perfil?.email ?? "").trim().toLowerCase();
+      setEmailTecnico(email);
 
-      if (acessosResp.error) {
-        throw acessosResp.error;
+      const convitesPendentes = email ? await listConvitesDoTecnico(email) : [];
+
+      const { data: acessosData, error: acessosError } = await supabase
+        .from("fazenda_acessos")
+        .select("id, fazenda_id, ativo, created_at")
+        .eq("user_id", user.id)
+        .eq("ativo", true)
+        .order("created_at", { ascending: false });
+
+      if (acessosError) {
+        throw acessosError;
       }
 
-      if (convitesResp.error) {
-        throw convitesResp.error;
+      const fazendaIds = [
+        ...new Set([
+          ...convitesPendentes.map((convite) => convite.fazenda_id),
+          ...(acessosData ?? []).map((acesso) => acesso.fazenda_id),
+        ]),
+      ].filter(Boolean);
+
+      let fazendasMap = new Map();
+      if (fazendaIds.length > 0) {
+        const { data: fazendasData, error: fazendasError } = await supabase
+          .from("fazendas")
+          .select("id, nome")
+          .in("id", fazendaIds);
+
+        if (fazendasError) {
+          throw fazendasError;
+        }
+
+        fazendasMap = new Map((fazendasData ?? []).map((fazenda) => [fazenda.id, fazenda]));
       }
+
+      const convitesComFazenda = convitesPendentes.map((convite) => ({
+        ...convite,
+        fazenda_nome: fazendasMap.get(convite.fazenda_id)?.nome ?? null,
+      }));
+
+      const acessosComFazenda = (acessosData ?? []).map((acesso) => ({
+        ...acesso,
+        fazenda_nome: fazendasMap.get(acesso.fazenda_id)?.nome ?? null,
+      }));
 
       setUsuario(user);
-      setAcessos(acessosResp.data ?? []);
-      setConvites(convitesResp.data ?? []);
+      setAcessos(acessosComFazenda);
+      setConvites(convitesComFazenda);
     } catch (err) {
       console.error("Erro ao carregar dados do técnico:", err.message);
       toast.error(err.message || "Não foi possível carregar suas fazendas no momento.");
@@ -87,40 +128,15 @@ export default function TecnicoHome() {
     [convites]
   );
 
-  const acessosAtivos = useMemo(
-    () => acessos.filter((acesso) => (acesso.status ?? "ativo") === "ativo"),
-    [acessos]
-  );
+  const acessosAtivos = useMemo(() => acessos.filter((acesso) => acesso.ativo), [acessos]);
 
   async function handleAceitarConvite(convite) {
     if (!usuario) return;
 
-    setProcessandoId(convite.id);
+    setProcessandoId(`aceitar-${convite.id}`);
 
     try {
-      const { error: acessoError } = await supabase.from("fazenda_acessos").upsert(
-        {
-          fazenda_id: convite.fazenda_id,
-          user_id: usuario.id,
-          status: "ativo",
-          profissional_tipo: convite.profissional_tipo ?? null,
-          profissional_nome: convite.profissional_nome ?? null,
-        },
-        { onConflict: "fazenda_id,user_id" }
-      );
-
-      if (acessoError) {
-        throw acessoError;
-      }
-
-      const { error: conviteError } = await supabase
-        .from("convites_acesso")
-        .update({ status: "aceito", accepted_at: new Date().toISOString() })
-        .eq("id", convite.id);
-
-      if (conviteError) {
-        throw conviteError;
-      }
+      await aceitarConvite(convite, usuario.id);
 
       toast.success("Convite aceito! A fazenda já está disponível para você.");
 
@@ -128,6 +144,28 @@ export default function TecnicoHome() {
     } catch (err) {
       console.error("Erro ao aceitar convite:", err.message);
       toast.error(err.message || "Não foi possível aceitar o convite.");
+    } finally {
+      setProcessandoId(null);
+    }
+  }
+
+  async function handleRecusarConvite(convite) {
+    try {
+      setProcessandoId(`recusar-${convite.id}`);
+      const { error } = await supabase
+        .from("convites_acesso")
+        .update({ status: "recusado" })
+        .eq("id", convite.id);
+
+      if (error) {
+        throw error;
+      }
+
+      toast.success("Convite recusado.");
+      await carregarDados(usuario);
+    } catch (err) {
+      console.error("Erro ao recusar convite:", err.message);
+      toast.error(err.message || "Não foi possível recusar o convite.");
     } finally {
       setProcessandoId(null);
     }
@@ -144,7 +182,7 @@ export default function TecnicoHome() {
         <h1 style={styles.title}>Propriedades autorizadas</h1>
         <p style={styles.subtitle}>
           Aqui aparecem as fazendas que convidaram seu e-mail
-          {usuario?.email ? ` (${usuario.email})` : ""}.
+          {emailTecnico ? ` (${emailTecnico})` : ""}.
         </p>
       </div>
 
@@ -178,8 +216,8 @@ export default function TecnicoHome() {
                       {convite.fazenda_nome || `Fazenda #${convite.fazenda_id}`}
                     </span>
                     <span style={styles.listMeta}>
-                      {convite.profissional_tipo || "Convite profissional"}
-                      {convite.profissional_nome ? ` · ${convite.profissional_nome}` : ""}
+                      {convite.tipo_profissional || "Convite profissional"}
+                      {convite.nome_profissional ? ` · ${convite.nome_profissional}` : ""}
                     </span>
                     <span style={styles.listMeta}>
                       Convite enviado em {formatarData(convite.created_at)}
@@ -193,9 +231,21 @@ export default function TecnicoHome() {
                       type="button"
                       style={styles.primaryButton}
                       onClick={() => handleAceitarConvite(convite)}
-                      disabled={processandoId === convite.id}
+                      disabled={processandoId === `aceitar-${convite.id}`}
                     >
-                      {processandoId === convite.id ? "Aceitando..." : "Aceitar convite"}
+                      {processandoId === `aceitar-${convite.id}`
+                        ? "Aceitando..."
+                        : "Aceitar convite"}
+                    </button>
+                    <button
+                      type="button"
+                      style={styles.secondaryButton}
+                      onClick={() => handleRecusarConvite(convite)}
+                      disabled={processandoId === `recusar-${convite.id}`}
+                    >
+                      {processandoId === `recusar-${convite.id}`
+                        ? "Recusando..."
+                        : "Recusar"}
                     </button>
                   </div>
                 </div>
@@ -225,7 +275,7 @@ export default function TecnicoHome() {
         ) : (
           <div style={styles.list}>
             {acessosAtivos.map((acesso) => (
-              <div key={acesso.acesso_id} style={styles.listItem}>
+              <div key={acesso.id} style={styles.listItem}>
                 <div style={styles.listInfo}>
                   <span style={styles.listTitle}>
                     {acesso.fazenda_nome || `Fazenda #${acesso.fazenda_id}`}
