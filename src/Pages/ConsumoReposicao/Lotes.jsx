@@ -145,12 +145,13 @@ export default function Lotes() {
       return;
     }
 
-    const { data, error } = await withFazendaId(
-      supabase
-        .from("v_lotes_com_contagem")
-        .select("id,nome,funcao,nivel_produtivo,descricao,ativo,num_animais,created_at,updated_at"),
-      fazendaAtualId
-    ).order("nome", { ascending: true });
+    const { data, error } = await supabase
+      .from("v_lotes_com_contagem")
+      .select(
+        "id,nome,funcao,nivel_produtivo,descricao,ativo,num_animais,created_at,updated_at,fazenda_id"
+      )
+      .eq("fazenda_id", fazendaAtualId)
+      .order("nome", { ascending: true });
 
     if (error) {
       console.error("Erro ao carregar lotes:", error);
