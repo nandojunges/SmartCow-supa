@@ -12,7 +12,7 @@ const STATUS_LABELS = {
 
 export default function TecnicoHome() {
   const navigate = useNavigate();
-  const { definirFazendaAtiva } = useFazenda();
+  const { setFazendaAtiva } = useFazenda();
   const [carregando, setCarregando] = useState(true);
   const [usuario, setUsuario] = useState(null);
   const [acessos, setAcessos] = useState([]);
@@ -158,7 +158,7 @@ export default function TecnicoHome() {
   }
 
   function handleAcessarFazenda(fazendaId) {
-    definirFazendaAtiva(fazendaId);
+    setFazendaAtiva(fazendaId);
     navigate("/inicio", { replace: true });
   }
 
