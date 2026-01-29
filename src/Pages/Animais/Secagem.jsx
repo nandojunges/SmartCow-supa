@@ -1,50 +1,40 @@
 // src/Pages/Animais/Secagem.jsx
-import React, {
-  useEffect,
-  useMemo,
-  useState,
-  useRef,
-} from "react";
-import Select from "react-select";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { supabase } from "../../lib/supabaseClient";
+import { enqueue, kvGet, kvSet } from "../../offline/localDB";
+import "../../styles/tabelaModerna.css";
+import ModalRegistrarSecagem from "./Modals/ModalRegistrarSecagem";
 
 export const iconeSecagem = "/icones/secagem.png";
 export const rotuloSecagem = "Secagem";
 
-/* ===== utils simples, só pra layout ===== */
+/* ========= helpers de data ========= */
+function parseDateFlexible(s) {
+  if (!s) return null;
+  if (typeof s !== "string") s = String(s);
 
-function parseDate(any) {
-  if (!any) return null;
-  if (any instanceof Date && Number.isFinite(any.getTime())) return any;
-
-  if (typeof any === "number") {
-    const ms = any > 1e12 ? any : any * 1000;
-    const d = new Date(ms);
-    return Number.isFinite(d.getTime()) ? d : null;
+  // ISO: yyyy-mm-dd
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) {
+    const y = +m[1];
+    const mo = +m[2];
+    const d = +m[3];
+    const dt = new Date(y, mo - 1, d);
+    return Number.isFinite(+dt) ? dt : null;
   }
 
-  if (typeof any === "string") {
-    const s = any.trim();
-
-    // dd/mm/aaaa
-    const mBR = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(s);
-    if (mBR) {
-      const dd = Number(mBR[1]);
-      const mm = Number(mBR[2]);
-      const yyyy = Number(mBR[3]);
-      const d = new Date(yyyy, mm - 1, dd);
-      return Number.isFinite(d.getTime()) ? d : null;
-    }
-
-    // yyyy-mm-dd ou ISO
-    const d2 = new Date(s);
-    return Number.isFinite(d2.getTime()) ? d2 : null;
+  // BR: dd/mm/aaaa
+  m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (m) {
+    const d = +m[1];
+    const mo = +m[2];
+    const y = +m[3];
+    const dt = new Date(y, mo - 1, d);
+    return Number.isFinite(+dt) ? dt : null;
   }
 
-  return null;
-}
-
-function formatBR(dt) {
-  return dt ? dt.toLocaleDateString("pt-BR") : "—";
+  const dt = new Date(s);
+  return Number.isFinite(+dt) ? dt : null;
 }
 
 function addDays(dt, n) {
@@ -53,670 +43,586 @@ function addDays(dt, n) {
   return d;
 }
 
-function idadeTexto(nascimento) {
-  const dt = parseDate(nascimento);
-  if (!dt) return "—";
-  const meses = Math.max(
-    0,
-    Math.floor(
-      (Date.now() - dt.getTime()) / (1000 * 60 * 60 * 24 * 30.44)
-    )
-  );
-  return `${Math.floor(meses / 12)}a ${meses % 12}m`;
+function formatBR(dt) {
+  return dt ? dt.toLocaleDateString("pt-BR") : "—";
 }
 
-const onlyDigits = (s) => String(s || "").replace(/\D/g, "");
-const fmtData = (val) => {
-  const d = onlyDigits(val).slice(0, 8);
-  const p1 = d.slice(0, 2),
-    p2 = d.slice(2, 4),
-    p3 = d.slice(4, 8);
-  return [p1, p2, p3].filter(Boolean).join("/");
-};
-
-function toISO(val) {
-  const dt = parseDate(val);
-  if (!dt) return "";
-  const y = dt.getFullYear();
-  const m = String(dt.getMonth() + 1).padStart(2, "0");
-  const d = String(dt.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+function diffDias(target, base = new Date()) {
+  if (!target) return null;
+  const diff = Math.round((target.getTime() - base.getTime()) / 86400000);
+  return Number.isFinite(diff) ? diff : null;
 }
 
-// previsão de parto simples (só visual)
-function calcPrevisaoParto(animal) {
+function previsaoParto(animal) {
   if (!animal) return null;
-  const pp =
-    parseDate(animal.previsao_parto) ||
-    parseDate(animal.previsaoParto);
-  if (pp) return pp;
+  const direta =
+    parseDateFlexible(animal.previsao_parto) ||
+    parseDateFlexible(animal.previsaoParto);
+  if (direta) return direta;
 
   const ia =
-    parseDate(animal.ultima_ia) ||
-    parseDate(animal.ultimaIa) ||
-    parseDate(animal.ultimaIA);
+    parseDateFlexible(animal.ultima_ia) ||
+    parseDateFlexible(animal.ultimaIa) ||
+    parseDateFlexible(animal.ultimaIA);
   return ia ? addDays(ia, 283) : null;
 }
 
-/* ===== helper para modais (ESC + clique fora) ===== */
-function useModalClose(refBox, onClose) {
-  useEffect(() => {
-    const onKey = (e) => {
-      if (e.key === "Escape") onClose?.();
-    };
-    const onClick = (e) => {
-      if (refBox.current && !refBox.current.contains(e.target)) {
-        onClose?.();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("mousedown", onClick);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("mousedown", onClick);
-    };
-  }, [refBox, onClose]);
-}
+export default function Secagem({ isOnline = navigator.onLine }) {
+  const CACHE_KEY = "cache:animais:list";
+  const CACHE_FALLBACK_KEY = "cache:animais:plantel:v1";
 
-/* ===== estilos de tabela (mesmo padrão das outras telas) ===== */
-const tableClasses =
-  "w-full border-separate [border-spacing:0_4px] text-[14px] text-[#333] table-auto";
-const thBase =
-  "bg-[#e6f0ff] px-3 py-3 text-left font-bold text-[16px] text-[#1e3a8a] border-b-2 border-[#a8c3e6] sticky z-10 whitespace-nowrap";
-const tdBase =
-  "px-4 py-2 border-b border-[#eee] whitespace-nowrap transition-transform";
-const tdClamp = tdBase + " overflow-hidden text-ellipsis";
-const rowBase = "bg-white shadow-xs transition-colors";
-const rowAlt = "even:bg-[#f7f7f8]";
-const bgHL = "bg-[rgba(33,150,243,0.08)]";
-const ringCell =
-  "relative z-[1] ring-1 ring-[#1e3a8a]/30 shadow-sm scale-[1.01]";
-const STICKY_OFFSET = 48;
-
-/* ===== react-select style ===== */
-const selectStyle = {
-  control: (base) => ({
-    ...base,
-    height: 44,
-    minHeight: 44,
-    borderRadius: 8,
-    borderColor: "#ccc",
-    boxShadow: "none",
-    fontSize: "0.95rem",
-  }),
-  menu: (b) => ({ ...b, zIndex: 9999 }),
-};
-
-/* ======================= MODAL SECAGEM (layout) ======================= */
-
-function ModalSecagem({ animal, onClose }) {
-  const boxRef = useRef(null);
-  useModalClose(boxRef, onClose);
-
-  const [dataSecagem, setDataSecagem] = useState(
-    new Date().toLocaleDateString("pt-BR")
-  );
-  const [planoTrat, setPlanoTrat] = useState(null);
-  const [diasCarenciaCarne, setDiasCarenciaCarne] = useState("");
-  const [diasCarenciaLeite, setDiasCarenciaLeite] = useState("");
-  const [principioAtivo, setPrincipioAtivo] = useState(null);
-  const [nomeComercial, setNomeComercial] = useState("");
-  const [responsavel, setResponsavel] = useState("");
-  const [obs, setObs] = useState("");
+  const [animais, setAnimais] = useState([]);
+  const [lotes, setLotes] = useState([]);
+  const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
+  const [offlineAviso, setOfflineAviso] = useState("");
+  const [hasCache, setHasCache] = useState(false);
+  const [cacheMetadata, setCacheMetadata] = useState(null);
 
-  const hiddenDateRef = useRef(null);
-  const openPicker = () => {
-    const el = hiddenDateRef.current;
-    if (!el) return;
-    if (typeof el.showPicker === "function") el.showPicker();
-    else el.click();
-  };
-  const onHiddenDateChange = (e) => {
-    const iso = e.target.value; // yyyy-mm-dd
-    if (!iso) return;
-    const [y, m, d] = iso.split("-").map(Number);
-    const br = `${String(d).padStart(2, "0")}/${String(m).padStart(
-      2,
-      "0"
-    )}/${y}`;
-    setDataSecagem(br);
-  };
+  const [diasAntes, setDiasAntes] = useState(60);
+  const [diasAviso, setDiasAviso] = useState(7);
 
-  const planoOptions = [
-    "Secagem apenas antibiótico intramamário",
-    "Secagem com antibiótico + selante",
-    "Secagem seletiva",
-    "Outro protocolo",
-  ].map((v) => ({ value: v, label: v }));
+  const [hoveredRowId, setHoveredRowId] = useState(null);
+  const [hoveredColKey, setHoveredColKey] = useState(null);
 
-  const principiosOptions = [
-    "Cloxacilina",
-    "Cefalexina",
-    "Cefalonium",
-    "Outros",
-  ].map((v) => ({ value: v, label: v }));
+  const [modalAberto, setModalAberto] = useState(false);
+  const [animalSelecionado, setAnimalSelecionado] = useState(null);
+  const [acaoMensagem, setAcaoMensagem] = useState("");
 
-  const salvar = () => {
-    const dt = parseDate(dataSecagem);
-    if (!dt) {
-      setErro("Informe uma data de secagem válida (dd/mm/aaaa).");
-      return;
-    }
-    setErro("");
-    // Aqui é só layout: poderíamos dar um console.log se quisesse ver o objeto,
-    // mas para o momento basta fechar o modal.
-    // console.log("Secagem simulada:", { ... });
-    onClose?.();
-  };
+  const LOTE_TABLE = "lotes";
 
-  const overlay = {
-    position: "fixed",
-    inset: 0,
-    background: "rgba(0,0,0,.55)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 9999,
-  };
-  const modal = {
-    background: "#fff",
-    borderRadius: "1rem",
-    width: 700,
-    maxHeight: "92vh",
-    display: "flex",
-    flexDirection: "column",
-    overflow: "hidden",
-    fontFamily: "Poppins, sans-serif",
-  };
-  const header = {
-    background: "#0f172a",
-    color: "#fff",
-    padding: "12px 16px",
-    fontWeight: 700,
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-  };
-  const body = {
-    padding: 16,
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    columnGap: "1.5rem",
-    rowGap: "0.75rem",
-    overflowY: "auto",
-    flex: 1,
-  };
-  const footer = {
-    padding: "12px 16px",
-    display: "flex",
-    justifyContent: "flex-end",
-    gap: 12,
-    borderTop: "1px solid #e5e7eb",
-  };
-  const input = {
-    width: "100%",
-    height: 44,
-    border: "1px solid #ccc",
-    borderRadius: 8,
-    padding: "0 12px",
-    boxSizing: "border-box",
-  };
-
-  return (
-    <div style={overlay}>
-      <div ref={boxRef} style={modal}>
-        <div style={header}>
-          <span>
-            🧴 Secagem — Nº {animal?.numero} • Brinco{" "}
-            {animal?.brinco}
-          </span>
-          <button
-            onClick={onClose}
-            className="text-sm px-2 py-1 rounded hover:bg-white/10"
-          >
-            ESC
-          </button>
-        </div>
-
-        <div style={body}>
-          <div style={{ gridColumn: "1 / -1", marginBottom: 4 }}>
-            <div className="text-xs text-gray-600">
-              Preencha os dados da secagem (somente layout, sem
-              integração).
-            </div>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium">
-              Número do animal
-            </label>
-            <input
-              style={input}
-              value={animal?.numero ?? ""}
-              disabled
-            />
-          </div>
-          <div>
-            <label className="text-sm font-medium">Brinco</label>
-            <input
-              style={input}
-              value={animal?.brinco ?? ""}
-              disabled
-            />
-          </div>
-
-          <div>
-            <label className="text-sm font-medium">
-              Data da secagem *
-            </label>
-            <div className="relative">
-              <input
-                value={dataSecagem}
-                onChange={(e) =>
-                  setDataSecagem(fmtData(e.target.value))
-                }
-                placeholder="dd/mm/aaaa"
-                style={{ ...input, paddingRight: 40 }}
-              />
-              <button
-                type="button"
-                onClick={openPicker}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded hover:bg-gray-100"
-                title="Abrir calendário"
-                aria-label="Abrir calendário"
-              >
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  aria-hidden="true"
-                >
-                  <rect
-                    x="3"
-                    y="4"
-                    width="18"
-                    height="17"
-                    rx="2"
-                    stroke="#1e3a8a"
-                    strokeWidth="1.6"
-                  />
-                  <path
-                    d="M8 2v4M16 2v4M3 9h18"
-                    stroke="#1e3a8a"
-                    strokeWidth="1.6"
-                    strokeLinecap="round"
-                  />
-                </svg>
-              </button>
-              <input
-                ref={hiddenDateRef}
-                type="date"
-                className="sr-only"
-                value={toISO(dataSecagem)}
-                onChange={onHiddenDateChange}
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium">
-              Plano de tratamento
-            </label>
-            <Select
-              options={planoOptions}
-              value={planoTrat}
-              onChange={setPlanoTrat}
-              styles={selectStyle}
-              placeholder="Selecione ou cadastre depois..."
-            />
-          </div>
-
-          <div>
-            <label className="text-sm font-medium">
-              Dias de carência (carne)
-            </label>
-            <input
-              style={input}
-              type="number"
-              value={diasCarenciaCarne}
-              onChange={(e) =>
-                setDiasCarenciaCarne(e.target.value)
-              }
-            />
-          </div>
-          <div>
-            <label className="text-sm font-medium">
-              Dias de carência (leite)
-            </label>
-            <input
-              style={input}
-              type="number"
-              value={diasCarenciaLeite}
-              onChange={(e) =>
-                setDiasCarenciaLeite(e.target.value)
-              }
-            />
-          </div>
-
-          <div>
-            <label className="text-sm font-medium">
-              Princípio ativo
-            </label>
-            <Select
-              options={principiosOptions}
-              value={principioAtivo}
-              onChange={setPrincipioAtivo}
-              styles={selectStyle}
-              isSearchable
-              isClearable
-              placeholder="Selecione ou digite..."
-            />
-          </div>
-          <div>
-            <label className="text-sm font-medium">
-              Nome comercial
-            </label>
-            <input
-              style={input}
-              value={nomeComercial}
-              onChange={(e) =>
-                setNomeComercial(e.target.value)
-              }
-              placeholder="Ex.: Lactomast, Tomorrow..."
-            />
-          </div>
-
-          <div>
-            <label className="text-sm font-medium">
-              Responsável
-            </label>
-            <input
-              style={input}
-              value={responsavel}
-              onChange={(e) =>
-                setResponsavel(e.target.value)
-              }
-              placeholder="Nome de quem aplicou o protocolo"
-            />
-          </div>
-
-          <div style={{ gridColumn: "1 / -1" }}>
-            <label className="text-sm font-medium">
-              Observações
-            </label>
-            <textarea
-              rows={3}
-              value={obs}
-              onChange={(e) => setObs(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "8px 12px",
-                border: "1px solid #ccc",
-                borderRadius: 8,
-                resize: "none",
-              }}
-              placeholder="Reações, conduta extra, recomendações..."
-            />
-          </div>
-
-          {erro && (
-            <div
-              style={{
-                gridColumn: "1 / -1",
-                color: "#b91c1c",
-                fontWeight: 600,
-                marginTop: 4,
-              }}
-            >
-              ⚠️ {erro}
-            </div>
-          )}
-        </div>
-
-        <div style={footer}>
-          <button
-            className="px-4 py-2 rounded-md border"
-            onClick={onClose}
-          >
-            Cancelar
-          </button>
-          <button
-            className="px-4 py-2 rounded-md text-white"
-            style={{ background: "#16a34a" }}
-            onClick={salvar}
-          >
-            ✅ Aplicar secagem (layout)
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ======================= LISTA SECAGEM (layout) ======================= */
-
-export default function Secagem({
-  animais = [],
-  onCountChange,
-}) {
-  const [hoverCol, setHoverCol] = useState(null);
-  const [hoverRow, setHoverRow] = useState(null);
-  const [hoverCell, setHoverCell] = useState({
-    r: null,
-    c: null,
-  });
-
-  const [selecionado, setSelecionado] = useState(null);
-  const [showModal, setShowModal] = useState(false);
-
-  const [erro] = useState("");
-  const [loading] = useState(false);
-
-  // ordenar só para ficar bonitinho (por previsão de parto)
-  const listaOrdenada = useMemo(() => {
-    const base = Array.isArray(animais) ? animais : [];
-    return [...base].sort((a, b) => {
-      const pa = calcPrevisaoParto(a);
-      const pb = calcPrevisaoParto(b);
-      if (!pa && !pb) return 0;
-      if (!pa) return 1;
-      if (!pb) return -1;
-      return pa - pb;
+  const lotesById = useMemo(() => {
+    const map = {};
+    (lotes || []).forEach((lote) => {
+      if (lote?.id == null) return;
+      map[lote.id] =
+        lote.nome ?? lote.descricao ?? lote.titulo ?? lote.label ?? String(lote.id);
     });
-  }, [animais]);
+    return map;
+  }, [lotes]);
+
+  const carregarAnimais = useCallback(async (userId) => {
+    const { data, error } = await supabase
+      .from("animais")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("ativo", true)
+      .order("numero", { ascending: true });
+
+    if (error) throw error;
+    const lista = Array.isArray(data) ? data : [];
+    setAnimais(lista);
+    return lista;
+  }, []);
+
+  const carregarLotes = useCallback(async (userId) => {
+    let { data, error } = await supabase
+      .from(LOTE_TABLE)
+      .select("*")
+      .order("id", { ascending: true })
+      .eq("user_id", userId);
+
+    if (error && /column .*user_id.* does not exist/i.test(error.message || "")) {
+      const retry = await supabase.from(LOTE_TABLE).select("*").order("id", { ascending: true });
+      data = retry.data;
+      error = retry.error;
+    }
+
+    if (error) {
+      console.error("Erro ao carregar lotes:", error);
+      setLotes([]);
+      return [];
+    }
+
+    const lista = Array.isArray(data) ? data : [];
+    setLotes(lista);
+    return lista;
+  }, []);
+
+  const carregarDoCache = useCallback(async () => {
+    const cachePrimario = await kvGet(CACHE_KEY);
+    const cacheFallback = cachePrimario ? null : await kvGet(CACHE_FALLBACK_KEY);
+    const cache = cachePrimario ?? cacheFallback;
+    if (!cache) return false;
+
+    const lista = Array.isArray(cache)
+      ? cache
+      : Array.isArray(cache.animais)
+      ? cache.animais
+      : [];
+
+    if (Array.isArray(lista)) {
+      setAnimais(lista.filter((animal) => animal?.ativo !== false));
+    }
+
+    setHasCache(lista.length > 0);
+    setCacheMetadata(cache?.updatedAt ? { updatedAt: cache.updatedAt } : null);
+    return lista.length > 0;
+  }, [CACHE_FALLBACK_KEY, CACHE_KEY]);
 
   useEffect(() => {
-    onCountChange?.(listaOrdenada.length);
-  }, [listaOrdenada.length, onCountChange]);
+    let ativo = true;
 
-  const colunas = useMemo(
-    () => [
-      "Número",
-      "Brinco",
-      "Categoria",
-      "Idade",
-      "Raça",
-      "Previsão de parto (simulada)",
-      "Data ideal de secagem (simulada)",
-      "Ação",
-    ],
-    []
-  );
+    async function carregarDados() {
+      setCarregando(true);
+      setErro("");
+      setOfflineAviso("");
+
+      try {
+        if (!isOnline) {
+          const cacheOk = await carregarDoCache();
+          if (!cacheOk) {
+            setOfflineAviso("Offline: sem dados salvos no computador");
+          }
+          return;
+        }
+
+        const {
+          data: { user },
+          error: userErr,
+        } = await supabase.auth.getUser();
+
+        if (userErr || !user) throw new Error("Usuário não autenticado.");
+        if (!ativo) return;
+
+        const [animaisData] = await Promise.all([
+          carregarAnimais(user.id),
+          carregarLotes(user.id),
+        ]);
+
+        const payloadCache = {
+          animais: animaisData,
+          updatedAt: new Date().toISOString(),
+        };
+        await kvSet(CACHE_KEY, payloadCache);
+        setHasCache(animaisData.length > 0);
+        setCacheMetadata({ updatedAt: payloadCache.updatedAt });
+      } catch (e) {
+        console.error("Erro ao carregar secagem:", e);
+        if (!ativo) return;
+        const cacheOk = await carregarDoCache();
+        if (!cacheOk) {
+          setErro(
+            "Não foi possível carregar os animais. Sem dados offline ainda. Conecte na internet uma vez para baixar os animais."
+          );
+        }
+      } finally {
+        if (ativo) setCarregando(false);
+      }
+    }
+
+    carregarDados();
+    return () => {
+      ativo = false;
+    };
+  }, [carregarAnimais, carregarDoCache, carregarLotes, isOnline]);
+
+  const statusSyncTexto = useMemo(() => {
+    if (!isOnline) {
+      if (hasCache && cacheMetadata?.updatedAt) {
+        const textoData = new Date(cacheMetadata.updatedAt).toLocaleString("pt-BR");
+        return `Offline: usando dados salvos em ${textoData}`;
+      }
+      if (hasCache) {
+        return "Offline: usando dados salvos no computador";
+      }
+      return "Offline: sem dados salvos no computador";
+    }
+    return "Online: dados atualizados";
+  }, [cacheMetadata, hasCache, isOnline]);
+
+  const linhasOrdenadas = useMemo(() => {
+    const hoje = new Date();
+    const janelaMax = addDays(hoje, 120);
+    const base = Array.isArray(animais) ? animais : [];
+
+    const filtrados = base
+      .filter((animal) => {
+        const sitProd = String(animal?.situacao_produtiva || "");
+        if (!/lact|lac/i.test(sitProd)) return false;
+        const previsao = previsaoParto(animal);
+        if (!previsao) return false;
+        const dataSecagemIdeal = addDays(previsao, -Number(diasAntes));
+        return dataSecagemIdeal <= janelaMax;
+      })
+      .map((animal) => {
+        const previsao = previsaoParto(animal);
+        const dataSecagemIdeal = previsao ? addDays(previsao, -Number(diasAntes)) : null;
+        const diasParaParto = diffDias(previsao, hoje);
+        const diasParaSecagem = diffDias(dataSecagemIdeal, hoje);
+        return {
+          animal,
+          previsao,
+          dataSecagemIdeal,
+          diasParaParto,
+          diasParaSecagem,
+        };
+      });
+
+    return filtrados.sort((a, b) => {
+      const diffA = Math.abs(a.diasParaSecagem ?? 0);
+      const diffB = Math.abs(b.diasParaSecagem ?? 0);
+      return diffA - diffB;
+    });
+  }, [animais, diasAntes]);
+
+  const resumo = useMemo(() => {
+    const total = linhasOrdenadas.length;
+    const mediaParto =
+      total > 0
+        ? linhasOrdenadas.reduce((acc, item) => acc + (item.diasParaParto ?? 0), 0) /
+          total
+        : null;
+    const mediaSecagem =
+      total > 0
+        ? linhasOrdenadas.reduce((acc, item) => acc + (item.diasParaSecagem ?? 0), 0) /
+          total
+        : null;
+    return { total, mediaParto, mediaSecagem };
+  }, [linhasOrdenadas]);
+
+  const abrirModal = (animal) => {
+    setAnimalSelecionado(animal);
+    setModalAberto(true);
+  };
+
+  const fecharModal = () => {
+    setModalAberto(false);
+    setAnimalSelecionado(null);
+  };
+
+  const registrarSecagem = async (payload) => {
+    if (!animalSelecionado) return;
+    setAcaoMensagem("");
+
+    try {
+      const {
+        data: { user },
+        error: userErr,
+      } = await supabase.auth.getUser();
+
+      if (userErr || !user) throw new Error("Usuário não autenticado.");
+
+      const evento = {
+        animal_id: animalSelecionado.id,
+        tipo_evento: "secagem",
+        data_evento: payload.dataSecagem,
+        user_id: user.id,
+      };
+
+      if (!navigator.onLine) {
+        await enqueue("eventos_reprodutivos.insert", evento);
+        setAcaoMensagem("✅ Secagem registrada offline. Será sincronizada ao reconectar.");
+        fecharModal();
+        return;
+      }
+
+      const { error } = await supabase
+        .from("eventos_reprodutivos")
+        .insert(evento);
+
+      if (error) throw error;
+
+      setAcaoMensagem("✅ Secagem registrada com sucesso.");
+      fecharModal();
+    } catch (e) {
+      console.error("Erro ao registrar secagem:", e);
+      setAcaoMensagem("❌ Não foi possível registrar a secagem.");
+    }
+  };
 
   return (
-    <section className="w-full py-6 font-sans">
-      <div className="px-2 md:px-4 lg:px-6">
-        <div className="mb-2 flex items-center gap-3">
-          <h2 className="text-lg font-semibold text-[#1e3a8a]">
-            Controle de Secagem (layout)
-          </h2>
-          <span className="text-xs text-gray-500">
-            Somente visual — sem salvar nada ainda.
-          </span>
-          <div className="ml-auto text-sm">
-            {loading ? (
-              <span className="text-[#1e3a8a]">
-                Carregando…
-              </span>
-            ) : (
-              <span className="text-gray-600">
-                Total: <strong>{listaOrdenada.length}</strong>
-              </span>
-            )}
-          </div>
-        </div>
+    <section className="w-full">
+      {erro && <div className="st-alert st-alert--danger">{erro}</div>}
+      {offlineAviso && <div className="st-filter-hint">{offlineAviso}</div>}
+      {acaoMensagem && <div className="st-filter-hint">{acaoMensagem}</div>}
 
-        {erro && (
-          <div className="mb-3 text-sm text-amber-700 bg-amber-50 border border-amber-300 px-3 py-2 rounded">
-            {erro}
-          </div>
-        )}
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 12,
+          alignItems: "flex-end",
+          marginBottom: 12,
+        }}
+      >
+        <label className="st-filter__label" style={{ minWidth: 200 }}>
+          Secar X dias antes do parto
+          <input
+            className="st-filter-input"
+            type="number"
+            min={1}
+            value={diasAntes}
+            onChange={(event) => setDiasAntes(Number(event.target.value || 0))}
+          />
+        </label>
+        <label className="st-filter__label" style={{ minWidth: 200 }}>
+          Avisar/preparar Y dias antes
+          <input
+            className="st-filter-input"
+            type="number"
+            min={0}
+            value={diasAviso}
+            onChange={(event) => setDiasAviso(Number(event.target.value || 0))}
+          />
+        </label>
+      </div>
 
-        <table className={tableClasses}>
-          <colgroup>
-            <col style={{ width: 70 }} />
-            <col style={{ width: 80 }} />
-            <col style={{ width: 150 }} />
-            <col style={{ width: 90 }} />
-            <col style={{ width: 120 }} />
-            <col style={{ width: 170 }} />
-            <col style={{ width: 170 }} />
-            <col style={{ width: 200 }} />
-          </colgroup>
-          <thead>
-            <tr>
-              {colunas.map((c, i) => (
-                <th
-                  key={c}
-                  onMouseEnter={() => setHoverCol(i)}
-                  onMouseLeave={() => setHoverCol(null)}
-                  className={`${thBase} ${
-                    hoverCol === i ? bgHL : ""
-                  }`}
-                  style={{ top: STICKY_OFFSET }}
-                >
-                  {c}
+      <div className="st-filter-hint">{statusSyncTexto}</div>
+      <div className="st-filter-hint">
+        Dica: acompanhe a data ideal de secagem e prepare os lotes com antecedência.
+      </div>
+
+      <div className="st-table-container">
+        <div className="st-table-wrap">
+          <table
+            className="st-table st-table--darkhead"
+            onMouseLeave={() => {
+              setHoveredRowId(null);
+              setHoveredColKey(null);
+            }}
+          >
+            <colgroup>
+              <col style={{ width: "20%" }} />
+              <col style={{ width: "12%" }} />
+              <col style={{ width: "12%" }} />
+              <col style={{ width: "13%" }} />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "14%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "10%" }} />
+            </colgroup>
+            <thead>
+              <tr>
+                <th className="col-animal st-col-animal">
+                  <span className="st-th-label">Animal</span>
                 </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {listaOrdenada.map((v, rIdx) => {
-              const numero = v.numero ?? "—";
-              const brinco = v.brinco ?? "—";
-              const categoria = v.categoria ?? "—";
-              const idade = idadeTexto(v.nascimento);
-              const raca = v.raca ?? "—";
-
-              const pp = calcPrevisaoParto(v);
-              const prevParto = formatBR(pp);
-              const dataSecagem = pp
-                ? formatBR(addDays(pp, -60)) // simulação 60 dias antes
-                : "—";
-
-              const TD = (content, cIdx, clamp = true) => {
-                const isRowHL = hoverRow === rIdx;
-                const isColHL = hoverCol === cIdx;
-                const isCellHL =
-                  hoverCell.r === rIdx &&
-                  hoverCell.c === cIdx;
-                const klass = `${clamp ? tdClamp : tdBase} ${
-                  isRowHL || isColHL ? bgHL : ""
-                } ${isCellHL ? ringCell : ""}`;
-                return (
-                  <td
-                    className={klass}
-                    onMouseEnter={() => {
-                      setHoverRow(rIdx);
-                      setHoverCol(cIdx);
-                      setHoverCell({ r: rIdx, c: cIdx });
-                    }}
-                    onMouseLeave={() => {
-                      setHoverRow(null);
-                      setHoverCell({ r: null, c: null });
-                    }}
-                  >
-                    {content}
-                  </td>
-                );
-              };
-
-              return (
-                <tr
-                  key={v.id ?? rIdx}
-                  className={`${rowBase} ${rowAlt} hover:bg-[#eaf5ff]`}
-                  onMouseEnter={() => setHoverRow(rIdx)}
-                  onMouseLeave={() => setHoverRow(null)}
-                >
-                  {TD(numero, 0)}
-                  {TD(brinco, 1)}
-                  {TD(categoria, 2)}
-                  {TD(idade, 3)}
-                  {TD(raca, 4)}
-                  {TD(prevParto, 5)}
-                  {TD(dataSecagem, 6)}
-                  <td
-                    className={`${tdBase} ${
-                      hoverCol === 7 || hoverRow === rIdx
-                        ? bgHL
-                        : ""
-                    } ${
-                      hoverCell.r === rIdx &&
-                      hoverCell.c === 7
-                        ? ringCell
-                        : ""
-                    }`}
-                    onMouseEnter={() => {
-                      setHoverRow(rIdx);
-                      setHoverCol(7);
-                      setHoverCell({ r: rIdx, c: 7 });
-                    }}
-                    onMouseLeave={() => {
-                      setHoverRow(null);
-                      setHoverCell({ r: null, c: null });
-                    }}
-                  >
-                    <button
-                      type="button"
-                      className="px-3 py-1.5 rounded-md border border-[#16a34a]/40 hover:border-[#16a34a] text-[#166534] text-sm"
-                      onClick={() => {
-                        setSelecionado(v);
-                        setShowModal(true);
-                      }}
-                      title="Registrar secagem"
-                    >
-                      Registrar secagem
-                    </button>
+                <th className="col-lote">
+                  <span className="st-th-label">Lote atual</span>
+                </th>
+                <th className="st-td-center col-sitprod">
+                  <span className="st-th-label">Sit. produtiva</span>
+                </th>
+                <th className="st-td-center col-previsao">
+                  <span className="st-th-label">Previsão parto</span>
+                </th>
+                <th className="st-td-center col-dias">
+                  <span className="st-th-label">Dias p/ parto</span>
+                </th>
+                <th className="st-td-center col-secagem">
+                  <span className="st-th-label">Secagem ideal</span>
+                </th>
+                <th className="st-td-center col-status">
+                  <span className="st-th-label">Status</span>
+                </th>
+                <th className="st-td-center col-acoes">
+                  <span className="st-th-label">Ações</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {linhasOrdenadas.length === 0 && !carregando && (
+                <tr className="st-empty">
+                  <td colSpan={8} className="st-td-center">
+                    Nenhum animal na janela de secagem.
                   </td>
                 </tr>
-              );
-            })}
+              )}
 
-            {!loading && listaOrdenada.length === 0 && (
-              <tr>
-                <td className={tdBase} colSpan={colunas.length}>
-                  <div className="text-center text-gray-600 py-6">
-                    Nenhuma vaca listada para secagem (somente
-                    layout).
+              {linhasOrdenadas.map((item, idx) => {
+                const { animal, previsao, dataSecagemIdeal, diasParaParto, diasParaSecagem } =
+                  item;
+                const rowId = animal.id ?? animal.numero ?? animal.brinco ?? idx;
+                const rowHover = hoveredRowId === rowId;
+                const sitProd = animal?.situacao_produtiva || "—";
+
+                const prodClass =
+                  String(sitProd).toLowerCase().includes("lact")
+                    ? "st-pill st-pill--ok"
+                    : String(sitProd).toLowerCase().includes("seca")
+                    ? "st-pill st-pill--mute"
+                    : "st-pill st-pill--info";
+
+                let statusLabel = "Planejada";
+                let statusClass = "st-pill st-pill--info";
+
+                if (diasParaSecagem != null && diasParaSecagem < 0) {
+                  statusLabel = "Atrasada";
+                  statusClass = "st-pill st-pill--warn";
+                } else if (diasParaParto != null && diasParaParto <= diasAntes) {
+                  statusLabel = "Na hora";
+                  statusClass = "st-pill st-pill--ok";
+                } else if (
+                  diasParaParto != null &&
+                  diasParaParto <= diasAntes + diasAviso &&
+                  diasParaParto > diasAntes
+                ) {
+                  statusLabel = "Preparar";
+                  statusClass = "st-pill st-pill--warn";
+                }
+
+                return (
+                  <tr key={rowId} className={rowHover ? "st-row-hover" : ""}>
+                    <td
+                      className={`col-animal st-col-animal ${
+                        hoveredColKey === "animal" ? "st-col-hover" : ""
+                      } ${rowHover ? "st-row-hover" : ""} ${
+                        rowHover && hoveredColKey === "animal" ? "st-cell-hover" : ""
+                      }`}
+                      onMouseEnter={() => {
+                        setHoveredRowId(rowId);
+                        setHoveredColKey("animal");
+                      }}
+                    >
+                      <div className="st-animal">
+                        <span className="st-animal-num">{animal.numero ?? "—"}</span>
+                        <div className="st-animal-main">
+                          <div className="st-animal-title">
+                            {animal?.raca_nome || "Vaca"} <span className="st-dot">•</span>{" "}
+                            {animal?.sexo === "macho"
+                              ? "Macho"
+                              : animal?.sexo === "femea"
+                              ? "Fêmea"
+                              : animal?.sexo || "—"}
+                          </div>
+                          <div className="st-animal-sub">
+                            <span>Brinco {animal.brinco || "—"}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+
+                    <td
+                      className={`col-lote ${
+                        hoveredColKey === "lote" ? "st-col-hover" : ""
+                      } ${rowHover ? "st-row-hover" : ""} ${
+                        rowHover && hoveredColKey === "lote" ? "st-cell-hover" : ""
+                      }`}
+                      onMouseEnter={() => {
+                        setHoveredRowId(rowId);
+                        setHoveredColKey("lote");
+                      }}
+                    >
+                      {lotesById[animal?.lote_id] || "Sem lote"}
+                    </td>
+
+                    <td
+                      className={`st-td-center col-sitprod ${
+                        hoveredColKey === "sitprod" ? "st-col-hover" : ""
+                      } ${rowHover ? "st-row-hover" : ""} ${
+                        rowHover && hoveredColKey === "sitprod" ? "st-cell-hover" : ""
+                      }`}
+                      onMouseEnter={() => {
+                        setHoveredRowId(rowId);
+                        setHoveredColKey("sitprod");
+                      }}
+                    >
+                      {sitProd === "—" ? "—" : <span className={prodClass}>{sitProd}</span>}
+                    </td>
+
+                    <td
+                      className={`st-td-center col-previsao ${
+                        hoveredColKey === "previsao" ? "st-col-hover" : ""
+                      } ${rowHover ? "st-row-hover" : ""} ${
+                        rowHover && hoveredColKey === "previsao" ? "st-cell-hover" : ""
+                      }`}
+                      onMouseEnter={() => {
+                        setHoveredRowId(rowId);
+                        setHoveredColKey("previsao");
+                      }}
+                    >
+                      {formatBR(previsao)}
+                    </td>
+
+                    <td
+                      className={`st-td-center st-num col-dias ${
+                        hoveredColKey === "dias" ? "st-col-hover" : ""
+                      } ${rowHover ? "st-row-hover" : ""} ${
+                        rowHover && hoveredColKey === "dias" ? "st-cell-hover" : ""
+                      }`}
+                      onMouseEnter={() => {
+                        setHoveredRowId(rowId);
+                        setHoveredColKey("dias");
+                      }}
+                    >
+                      {diasParaParto ?? "—"}
+                    </td>
+
+                    <td
+                      className={`st-td-center col-secagem ${
+                        hoveredColKey === "secagem" ? "st-col-hover" : ""
+                      } ${rowHover ? "st-row-hover" : ""} ${
+                        rowHover && hoveredColKey === "secagem" ? "st-cell-hover" : ""
+                      }`}
+                      onMouseEnter={() => {
+                        setHoveredRowId(rowId);
+                        setHoveredColKey("secagem");
+                      }}
+                    >
+                      {formatBR(dataSecagemIdeal)}
+                    </td>
+
+                    <td
+                      className={`st-td-center col-status ${
+                        hoveredColKey === "status" ? "st-col-hover" : ""
+                      } ${rowHover ? "st-row-hover" : ""} ${
+                        rowHover && hoveredColKey === "status" ? "st-cell-hover" : ""
+                      }`}
+                      onMouseEnter={() => {
+                        setHoveredRowId(rowId);
+                        setHoveredColKey("status");
+                      }}
+                    >
+                      <span className={statusClass}>{statusLabel}</span>
+                    </td>
+
+                    <td
+                      className={`st-td-center col-acoes ${
+                        hoveredColKey === "acoes" ? "st-col-hover" : ""
+                      } ${rowHover ? "st-row-hover" : ""} ${
+                        rowHover && hoveredColKey === "acoes" ? "st-cell-hover" : ""
+                      }`}
+                      onMouseEnter={() => {
+                        setHoveredRowId(rowId);
+                        setHoveredColKey("acoes");
+                      }}
+                    >
+                      <button type="button" className="st-btn" onClick={() => abrirModal(animal)}>
+                        Registrar secagem
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="st-summary-row">
+                <td colSpan={8}>
+                  <div className="st-summary-row__content">
+                    <span>Total exibidos: {resumo.total}</span>
+                    <span>
+                      Média dias para parto: {Number.isFinite(resumo.mediaParto) ? Math.round(resumo.mediaParto) : "—"}
+                    </span>
+                    <span>
+                      Média dias para secagem: {Number.isFinite(resumo.mediaSecagem) ? Math.round(resumo.mediaSecagem) : "—"}
+                    </span>
                   </div>
                 </td>
               </tr>
-            )}
-          </tbody>
-        </table>
-
-        {showModal && selecionado && (
-          <ModalSecagem
-            animal={selecionado}
-            onClose={() => {
-              setShowModal(false);
-              setSelecionado(null);
-            }}
-          />
-        )}
+            </tfoot>
+          </table>
+        </div>
       </div>
+
+      {carregando && <div className="st-loading">Carregando...</div>}
+
+      {modalAberto && animalSelecionado && (
+        <ModalRegistrarSecagem
+          animal={animalSelecionado}
+          onClose={fecharModal}
+          onSave={registrarSecagem}
+        />
+      )}
     </section>
   );
 }
