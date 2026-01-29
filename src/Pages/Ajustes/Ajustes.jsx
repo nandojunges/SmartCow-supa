@@ -53,8 +53,6 @@ export default function Ajustes() {
   const [avisoSemFazenda, setAvisoSemFazenda] = useState("");
 
   const emailNormalizado = useMemo(() => email.trim().toLowerCase(), [email]);
-  const profissionalTipoLabel = profissionalTipo?.value ?? null;
-  const nomeNormalizado = useMemo(() => profissionalNome.trim(), [profissionalNome]);
   const fazendaId = fazendaAtiva?.id ?? null;
   const fazendaNome = fazendaAtiva?.nome ?? "";
 
@@ -91,7 +89,6 @@ export default function Ajustes() {
           ...acesso,
           email: perfil?.email ?? "",
           tipo_conta: perfil?.tipo_conta ?? "",
-          ativo: acesso.ativo ?? true,
         };
       });
 
@@ -118,6 +115,7 @@ export default function Ajustes() {
 
     async function carregarPerfil() {
       setCarregando(true);
+      setAvisoSemFazenda("");
 
       try {
         const { data: authData, error: authError } = await supabase.auth.getUser();
@@ -173,22 +171,13 @@ export default function Ajustes() {
     [convites]
   );
 
-  const acessosAtivos = useMemo(
-    () => acessos.filter((acesso) => acesso.ativo !== false),
-    [acessos]
-  );
-
-  const acessosBloqueados = useMemo(
-    () => acessos.filter((acesso) => acesso.ativo === false),
-    [acessos]
-  );
+  const acessosAtivos = useMemo(() => acessos, [acessos]);
 
   const conviteBloqueado =
     enviando ||
     carregando ||
     !fazendaId ||
     !emailNormalizado ||
-    !profissionalTipoLabel ||
     !validarEmail(emailNormalizado);
 
   const avisoConvite =
@@ -201,11 +190,6 @@ export default function Ajustes() {
 
     if (!emailNormalizado || !validarEmail(emailNormalizado)) {
       toast.error("Informe um e-mail válido para o profissional.");
-      return;
-    }
-
-    if (!profissionalTipoLabel) {
-      toast.error("Selecione o tipo do profissional.");
       return;
     }
 
@@ -254,12 +238,7 @@ export default function Ajustes() {
         return;
       }
 
-      await criarConvite(
-        fazendaIdAtual,
-        emailNormalizado,
-        profissionalTipoLabel,
-        nomeNormalizado
-      );
+      await criarConvite(fazendaIdAtual, emailNormalizado);
 
       setEmail("");
       setProfissionalTipo(null);
@@ -297,34 +276,6 @@ export default function Ajustes() {
         console.error("Erro ao cancelar convite:", err.message);
       }
       toast.error(err.message || "Não foi possível cancelar o convite.");
-    } finally {
-      setProcessandoId(null);
-    }
-  }
-
-  async function handleBloquear(acesso, bloquear) {
-    if (!fazendaId) return;
-
-    try {
-      setProcessandoId(`bloquear-${acesso.id}`);
-      const { error } = await supabase
-        .from("fazenda_acessos")
-        .update({ ativo: !bloquear })
-        .eq("id", acesso.id);
-
-      if (error) {
-        throw error;
-      }
-
-      toast.success(
-        bloquear ? "Acesso bloqueado com sucesso." : "Acesso desbloqueado."
-      );
-      await carregarListas(fazendaId);
-    } catch (err) {
-      if (import.meta.env.DEV) {
-        console.error("Erro ao atualizar acesso:", err.message);
-      }
-      toast.error(err.message || "Não foi possível atualizar o acesso.");
     } finally {
       setProcessandoId(null);
     }
@@ -449,12 +400,6 @@ export default function Ajustes() {
                     {convite.email_convidado || "E-mail não disponível"}
                   </span>
                   <span style={styles.listMeta}>
-                    {convite.tipo_profissional || "Tipo não informado"}
-                    {convite.nome_profissional
-                      ? ` · ${convite.nome_profissional}`
-                      : ""}
-                  </span>
-                  <span style={styles.listMeta}>
                     Enviado em {formatarData(convite.created_at)}
                   </span>
                 </div>
@@ -510,16 +455,6 @@ export default function Ajustes() {
                   <span style={{ ...styles.status, ...styles.statussuccess }}>Ativo</span>
                   <button
                     type="button"
-                    style={styles.secondaryButton}
-                    onClick={() => handleBloquear(acesso, true)}
-                    disabled={processandoId === `bloquear-${acesso.id}`}
-                  >
-                    {processandoId === `bloquear-${acesso.id}`
-                      ? "Bloqueando..."
-                      : "Bloquear"}
-                  </button>
-                  <button
-                    type="button"
                     style={styles.ghostButton}
                     onClick={() => handleRemover(acesso)}
                     disabled={processandoId === `remover-${acesso.id}`}
@@ -535,63 +470,6 @@ export default function Ajustes() {
         )}
       </section>
 
-      <section style={styles.card}>
-        <div style={styles.sectionHeader}>
-          <h2 style={styles.sectionTitle}>Bloqueados</h2>
-          <span style={styles.sectionSubtitle}>
-            Convites aceitos, porém sem acesso liberado.
-          </span>
-        </div>
-
-        {carregandoListas ? (
-          <p style={styles.helperText}>Carregando bloqueios...</p>
-        ) : acessosBloqueados.length === 0 ? (
-          <div style={styles.emptyState}>
-            <p style={styles.emptyTitle}>Nenhum acesso bloqueado.</p>
-            <span style={styles.emptyDescription}>
-              Use o bloqueio para suspender temporariamente o acesso.
-            </span>
-          </div>
-        ) : (
-          <div style={styles.list}>
-            {acessosBloqueados.map((acesso) => (
-              <div key={acesso.id} style={styles.listItem}>
-                <div style={styles.listInfo}>
-                  <span style={styles.listTitle}>
-                    {acesso.email || "E-mail não disponível"}
-                  </span>
-                  <span style={styles.listMeta}>
-                    Bloqueado desde {formatarData(acesso.created_at)}
-                  </span>
-                </div>
-                <div style={styles.listActions}>
-                  <span style={{ ...styles.status, ...styles.statusdanger }}>Bloqueado</span>
-                  <button
-                    type="button"
-                    style={styles.secondaryButton}
-                    onClick={() => handleBloquear(acesso, false)}
-                    disabled={processandoId === `bloquear-${acesso.id}`}
-                  >
-                    {processandoId === `bloquear-${acesso.id}`
-                      ? "Desbloqueando..."
-                      : "Desbloquear"}
-                  </button>
-                  <button
-                    type="button"
-                    style={styles.ghostButton}
-                    onClick={() => handleRemover(acesso)}
-                    disabled={processandoId === `remover-${acesso.id}`}
-                  >
-                    {processandoId === `remover-${acesso.id}`
-                      ? "Revogando..."
-                      : "Revogar"}
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
     </div>
   );
 }

@@ -76,7 +76,7 @@ export async function listarConvitesPendentesProdutor(fazendaId) {
   const { data, error } = await supabase
     .from("convites_acesso")
     .select(
-      `id, ${CONVITE_EMAIL_COL}, tipo_profissional, nome_profissional, status, created_at`
+      `id, ${CONVITE_EMAIL_COL}, status, created_at`
     )
     .eq("fazenda_id", fazendaId)
     .eq("status", "pendente")
@@ -98,15 +98,12 @@ export async function listarConvitesPendentesProdutor(fazendaId) {
   }));
 }
 
-export async function criarConvite(fazendaId, email, tipo, nome) {
+export async function criarConvite(fazendaId, email) {
   if (!fazendaId) {
     throw new Error("Fazenda inválida para criar convite.");
   }
   if (!email) {
     throw new Error("E-mail inválido para criar convite.");
-  }
-  if (!tipo) {
-    throw new Error("Tipo de profissional inválido para criar convite.");
   }
 
   const { data, error } = await insertWithEmailFallback({
@@ -114,8 +111,6 @@ export async function criarConvite(fazendaId, email, tipo, nome) {
     email,
     payloadBase: {
       fazenda_id: fazendaId,
-      tipo_profissional: tipo,
-      nome_profissional: nome || null,
       status: "pendente",
     },
   });
@@ -136,7 +131,7 @@ export async function listarConvitesPendentesTecnico(email) {
 
   const { data, error } = await supabase
     .from("convites_acesso")
-    .select("id, fazenda_id, status, created_at, tipo_profissional, nome_profissional")
+    .select(`id, fazenda_id, status, created_at, ${CONVITE_EMAIL_COL}`)
     .eq(CONVITE_EMAIL_COL, emailNormalizado)
     .eq("status", "pendente")
     .order("created_at", { ascending: false });

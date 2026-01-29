@@ -40,9 +40,8 @@ export default function TecnicoHome() {
 
       const { data: acessosData, error: acessosError } = await supabase
         .from("fazenda_acessos")
-        .select("id, fazenda_id, ativo, created_at")
+        .select("id, fazenda_id, created_at")
         .eq("user_id", user.id)
-        .eq("ativo", true)
         .order("created_at", { ascending: false });
 
       if (acessosError) {
@@ -133,7 +132,7 @@ export default function TecnicoHome() {
     [convites]
   );
 
-  const acessosAtivos = useMemo(() => acessos.filter((acesso) => acesso.ativo), [acessos]);
+  const acessosAtivos = useMemo(() => acessos, [acessos]);
 
   async function handleAceitarConvite(convite) {
     if (!usuario) return;
@@ -223,10 +222,6 @@ export default function TecnicoHome() {
                   <div style={styles.listInfo}>
                     <span style={styles.listTitle}>
                       {convite.fazenda_nome || `Fazenda #${convite.fazenda_id}`}
-                    </span>
-                    <span style={styles.listMeta}>
-                      {convite.tipo_profissional || "Convite profissional"}
-                      {convite.nome_profissional ? ` · ${convite.nome_profissional}` : ""}
                     </span>
                     <span style={styles.listMeta}>
                       Convite enviado em {formatarData(convite.created_at)}
