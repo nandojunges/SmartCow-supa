@@ -1,8 +1,13 @@
 // src/context/FazendaContext.jsx
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
-const STORAGE_KEY = "smartcow:fazendaAtualId";
-const LEGACY_KEYS = ["fazendaAtualId", "fazendaSelecionadaId", "fazendaSelecionada"];
+const STORAGE_KEY = "smartcow:fazenda_id";
+const LEGACY_KEYS = [
+  "smartcow:fazendaAtualId",
+  "fazendaAtualId",
+  "fazendaSelecionadaId",
+  "fazendaSelecionada",
+];
 
 export function getFazendaAtualId() {
   if (typeof localStorage === "undefined") {
@@ -54,6 +59,22 @@ export function FazendaProvider({ children }) {
 
     LEGACY_KEYS.forEach((key) => localStorage.removeItem(key));
   }, [fazendaAtualId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const handleFazendaChange = () => {
+      const nextId = getFazendaAtualId();
+      setFazendaAtualIdState(nextId ? String(nextId) : null);
+    };
+
+    window.addEventListener("fazenda:changed", handleFazendaChange);
+    return () => {
+      window.removeEventListener("fazenda:changed", handleFazendaChange);
+    };
+  }, []);
 
   const value = useMemo(
     () => ({
