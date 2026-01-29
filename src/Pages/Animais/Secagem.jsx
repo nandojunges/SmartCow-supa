@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { enqueue, kvGet, kvSet } from "../../offline/localDB";
 import "../../styles/tabelaModerna.css";
-import ModalRegistrarSecagem from "./Modals/ModalRegistrarSecagem";
+import ModalRegistrarSecagem from "ModalRegistrarSecagem";
 
 export const iconeSecagem = "/icones/secagem.png";
 export const rotuloSecagem = "Secagem";
