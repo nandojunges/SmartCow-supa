@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Select from "react-select";
 import { toast } from "react-toastify";
 import { supabase } from "../../lib/supabaseClient";
+import { useFazenda } from "../../context/FazendaContext";
 import { listAcessosDaFazenda } from "../../lib/fazendaHelpers";
 import {
   criarConvite,
@@ -38,6 +39,7 @@ const selectStyles = {
 };
 
 export default function Ajustes() {
+  const { fazendaAtualId, setFazendaAtualId } = useFazenda();
   const [email, setEmail] = useState("");
   const [profissionalTipo, setProfissionalTipo] = useState(null);
   const [profissionalNome, setProfissionalNome] = useState("");
@@ -61,34 +63,35 @@ export default function Ajustes() {
     setCarregandoListas(true);
 
     try {
-      const [convitesData, acessosData] = await Promise.all([
+      const [convitesData, acessosData, convitesAceitos] = await Promise.all([
         listarConvitesPendentesProdutor(fazendaIdAtual),
         listAcessosDaFazenda(fazendaIdAtual),
+        supabase
+          .from("convites_acesso")
+          .select("id, status, email_convidado, tipo_profissional, nome_profissional")
+          .eq("fazenda_id", fazendaIdAtual)
+          .eq("status", "aceito"),
       ]);
-      const userIds = acessosData.map((acesso) => acesso.user_id).filter(Boolean);
-      let perfis = [];
 
-      if (userIds.length > 0) {
-        const { data: perfisData, error: perfisError } = await supabase
-          .from("profiles")
-          .select("id, email, tipo_conta")
-          .in("id", userIds);
-
-        if (perfisError) {
-          throw perfisError;
-        }
-
-        perfis = perfisData ?? [];
+      if (convitesAceitos.error) {
+        throw convitesAceitos.error;
       }
 
-      const perfisMap = new Map(perfis.map((perfil) => [perfil.id, perfil]));
+      const convitesAceitosMap = new Map(
+        (convitesAceitos.data ?? []).map((convite) => [
+          String(convite.email_convidado || "").toLowerCase(),
+          convite,
+        ])
+      );
 
       const acessosComPerfil = acessosData.map((acesso) => {
-        const perfil = perfisMap.get(acesso.user_id);
+        const emailPerfil = acesso.profiles?.email ?? "";
+        const convite = convitesAceitosMap.get(String(emailPerfil).toLowerCase());
         return {
           ...acesso,
-          email: perfil?.email ?? "",
-          tipo_conta: perfil?.tipo_conta ?? "",
+          email: emailPerfil,
+          tipo_profissional: convite?.tipo_profissional ?? "",
+          nome_profissional: convite?.nome_profissional ?? "",
         };
       });
 
@@ -105,10 +108,29 @@ export default function Ajustes() {
   }, []);
 
   useEffect(() => {
-    if (!fazendaAtiva && fazendas.length > 0) {
+    if (!fazendas.length) {
+      return;
+    }
+
+    const selecionada = fazendaAtualId
+      ? fazendas.find((fazenda) => String(fazenda.id) === String(fazendaAtualId))
+      : null;
+
+    if (selecionada) {
+      setFazendaAtiva(selecionada);
+      return;
+    }
+
+    if (!fazendaAtiva) {
       setFazendaAtiva(fazendas[0]);
     }
-  }, [fazendaAtiva, fazendas]);
+  }, [fazendaAtualId, fazendaAtiva, fazendas]);
+
+  useEffect(() => {
+    if (fazendaAtiva?.id && String(fazendaAtiva.id) !== String(fazendaAtualId || "")) {
+      setFazendaAtualId(fazendaAtiva.id);
+    }
+  }, [fazendaAtiva, fazendaAtualId, setFazendaAtualId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -135,6 +157,7 @@ export default function Ajustes() {
         if (isMounted) {
           setFazendas(fazendasOrdenadas ?? []);
           setFazendaAtiva(fazenda);
+          setFazendaAtualId(fazenda?.id ?? null);
           setAvisoSemFazenda(
             fazendasOrdenadas?.length
               ? ""
@@ -238,7 +261,10 @@ export default function Ajustes() {
         return;
       }
 
-      await criarConvite(fazendaIdAtual, emailNormalizado);
+      await criarConvite(fazendaIdAtual, emailNormalizado, {
+        tipoProfissional: profissionalTipo?.value ?? null,
+        nomeProfissional: profissionalNome?.trim() || null,
+      });
 
       setEmail("");
       setProfissionalTipo(null);
@@ -445,7 +471,11 @@ export default function Ajustes() {
               <div key={acesso.id} style={styles.listItem}>
                 <div style={styles.listInfo}>
                   <span style={styles.listTitle}>
-                    {acesso.email || "E-mail não disponível"}
+                    {acesso.nome_profissional || acesso.email || "Profissional não identificado"}
+                  </span>
+                  <span style={styles.listMeta}>
+                    {(acesso.tipo_profissional || "Tipo não informado") +
+                      (acesso.email ? ` • ${acesso.email}` : "")}
                   </span>
                   <span style={styles.listMeta}>
                     Acesso ativo desde {formatarData(acesso.created_at)}

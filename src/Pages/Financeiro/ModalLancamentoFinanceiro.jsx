@@ -1,6 +1,8 @@
 // src/pages/Financeiro/ModalLancamentoFinanceiro.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import Select from "react-select";
+import { useFazenda } from "../../context/FazendaContext";
+import { withFazendaId } from "../../lib/fazendaScope";
 import { supabase } from "../../lib/supabaseClient";
 
 /* ===================== REACT-SELECT ===================== */
@@ -164,6 +166,7 @@ export default function ModalLancamentoFinanceiro({
   origens = [],
   valorInicial,
 }) {
+  const { fazendaAtualId } = useFazenda();
   const hojeISO = toISODateInput(new Date());
 
   const tipoOpts = useMemo(
@@ -353,6 +356,7 @@ export default function ModalLancamentoFinanceiro({
   function montarPayload() {
     return {
       id: valorInicial?.id,
+      fazenda_id: fazendaAtualId,
       data,
       tipo,
       categoria: categoria.value,
@@ -368,12 +372,15 @@ export default function ModalLancamentoFinanceiro({
 
   async function salvarNoSupabase(payload) {
     const { id, ...dados } = payload;
+    if (!fazendaAtualId) {
+      throw new Error("Selecione uma fazenda antes de salvar o lançamento.");
+    }
 
     if (id) {
-      const { error } = await supabase
-        .from("financeiro_lancamentos")
-        .update(dados)
-        .eq("id", id);
+      const { error } = await withFazendaId(
+        supabase.from("financeiro_lancamentos").update(dados),
+        fazendaAtualId
+      ).eq("id", id);
 
       if (error) throw error;
       return;

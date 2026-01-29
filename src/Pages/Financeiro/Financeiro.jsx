@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useState, useCallback, useLayoutEffect } fro
 import Select from "react-select";
 import { supabase } from "../../lib/supabaseClient";
 import { withFazendaId } from "../../lib/fazendaScope";
-import { useFazendaAtiva } from "../../context/FazendaAtivaContext";
+import { useFazenda } from "../../context/FazendaContext";
 import { enqueue, kvGet, kvSet } from "../../offline/localDB";
 
 import "../../styles/tabelamoderna.css";
@@ -245,7 +245,7 @@ const btnFecharInfo = {
 
 /* ===================== PÁGINA FINANCEIRO ===================== */
 export default function Financeiro() {
-  const { fazendaAtivaId } = useFazendaAtiva();
+  const { fazendaAtualId } = useFazenda();
   const hojeISO = useMemo(() => toISODateInput(new Date()), []);
   const periodoPadrao = useMemo(() => firstLastOfMonth(hojeISO), [hojeISO]);
 
@@ -294,7 +294,7 @@ export default function Financeiro() {
         return;
       }
 
-      if (!fazendaAtivaId) {
+      if (!fazendaAtualId) {
         setLancamentos([]);
         return;
       }
@@ -311,7 +311,7 @@ export default function Financeiro() {
             )
             .gte("data", periodo.ini)
             .lte("data", periodo.fim),
-          fazendaAtivaId
+          fazendaAtualId
         )
           .order("data", { ascending: true })
           .order("created_at", { ascending: true });
@@ -328,7 +328,7 @@ export default function Financeiro() {
             )
             .gte("data", periodo.ini)
             .lte("data", periodo.fim),
-          fazendaAtivaId
+          fazendaAtualId
         )
           .order("data", { ascending: true })
           .order("created_at", { ascending: true });
@@ -349,7 +349,7 @@ export default function Financeiro() {
     } finally {
       setLoading(false);
     }
-  }, [fazendaAtivaId, periodo.ini, periodo.fim]);
+  }, [fazendaAtualId, periodo.ini, periodo.fim]);
 
   // auto-carrega quando muda o período
   useEffect(() => {
@@ -376,13 +376,13 @@ export default function Financeiro() {
     try {
       setLoading(true);
 
-      if (!fazendaAtivaId) {
+      if (!fazendaAtualId) {
         alert("Selecione uma fazenda para salvar lançamentos.");
         return;
       }
 
       const base = {
-        fazenda_id: fazendaAtivaId,
+        fazenda_id: fazendaAtualId,
         data: payload.data,
         tipo: payload.tipo,
         categoria: payload.categoria,
@@ -422,7 +422,7 @@ export default function Financeiro() {
       if (payload.id) {
         const { data, error } = await withFazendaId(
           supabase.from("financeiro_lancamentos").update(base),
-          fazendaAtivaId
+          fazendaAtualId
         )
           .eq("id", payload.id)
           .select(selectCols)
@@ -466,7 +466,7 @@ export default function Financeiro() {
       setLoading(true);
       const { error } = await withFazendaId(
         supabase.from("financeiro_lancamentos").delete(),
-        fazendaAtivaId
+        fazendaAtualId
       ).eq("id", id);
       if (error) throw error;
       await carregarLancamentos();

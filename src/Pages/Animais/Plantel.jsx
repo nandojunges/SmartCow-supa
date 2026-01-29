@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useState, useCallback, useRef } from "react"
 import Select from "react-select";
 import { supabase } from "../../lib/supabaseClient";
 import { withFazendaId } from "../../lib/fazendaScope";
-import { useFazendaAtiva } from "../../context/FazendaAtivaContext";
+import { useFazenda } from "../../context/FazendaContext";
 import { kvGet, kvSet } from "../../offline/localDB";
 import "../../styles/tabelaModerna.css";
 import FichaAnimal from "./FichaAnimal/FichaAnimal";
@@ -102,7 +102,7 @@ function formatProducao(valor) {
 export default function Plantel({ isOnline = navigator.onLine }) {
   const CACHE_KEY = "cache:animais:list";
   const CACHE_FALLBACK_KEY = "cache:animais:plantel:v1";
-  const { fazendaAtivaId } = useFazendaAtiva();
+  const { fazendaAtualId } = useFazenda();
   const [animais, setAnimais] = useState([]);
   const [racaMap, setRacaMap] = useState({});
   const [carregando, setCarregando] = useState(true);
@@ -169,7 +169,7 @@ export default function Plantel({ isOnline = navigator.onLine }) {
   const carregarAnimais = useCallback(async () => {
     const { data, error } = await withFazendaId(
       supabase.from("animais").select("*"),
-      fazendaAtivaId
+      fazendaAtualId
     )
       .eq("ativo", true)
       .order("numero", { ascending: true });
@@ -178,12 +178,12 @@ export default function Plantel({ isOnline = navigator.onLine }) {
     const lista = Array.isArray(data) ? data : [];
     setAnimais(lista);
     return lista;
-  }, [fazendaAtivaId]);
+  }, [fazendaAtualId]);
 
   const carregarLotes = useCallback(async () => {
     const { data, error } = await withFazendaId(
       supabase.from(LOTE_TABLE).select("*"),
-      fazendaAtivaId
+      fazendaAtualId
     ).order("id", { ascending: true });
 
     if (error) {
@@ -195,12 +195,12 @@ export default function Plantel({ isOnline = navigator.onLine }) {
     const lista = Array.isArray(data) ? data : [];
     setLotes(lista);
     return lista;
-  }, [LOTE_TABLE, fazendaAtivaId]);
+  }, [LOTE_TABLE, fazendaAtualId]);
 
   const carregarRacas = useCallback(async () => {
     const { data, error } = await withFazendaId(
       supabase.from("racas").select("id, nome"),
-      fazendaAtivaId
+      fazendaAtualId
     );
 
     if (error) throw error;
@@ -211,7 +211,7 @@ export default function Plantel({ isOnline = navigator.onLine }) {
     });
     setRacaMap(map);
     return map;
-  }, [fazendaAtivaId]);
+  }, [fazendaAtualId]);
 
   const carregarDoCache = useCallback(async () => {
     const cachePrimario = await kvGet(CACHE_KEY);
@@ -249,7 +249,7 @@ export default function Plantel({ isOnline = navigator.onLine }) {
           return;
         }
 
-        if (!fazendaAtivaId) {
+        if (!fazendaAtualId) {
           throw new Error("Selecione uma fazenda para carregar o plantel.");
         }
         if (!ativo) return;
@@ -284,7 +284,7 @@ export default function Plantel({ isOnline = navigator.onLine }) {
     carregarDoCache,
     carregarLotes,
     carregarRacas,
-    fazendaAtivaId,
+    fazendaAtualId,
     isOnline,
   ]);
 
@@ -310,9 +310,6 @@ export default function Plantel({ isOnline = navigator.onLine }) {
         return;
       }
 
-      const tabelasLeite = ["medicoes_leite", "leite_registros", "producoes_leite", "leite"];
-      const camposData = ["data", "created_at"];
-
       const extrairValor = (registro) => {
         const totalRaw =
           registro?.total ??
@@ -334,79 +331,37 @@ export default function Plantel({ isOnline = navigator.onLine }) {
         return Number.isFinite(valor) ? valor : null;
       };
 
-      const buscarMedicoesLeite = async () => {
+      try {
         const { data, error } = await withFazendaId(
           supabase.from("medicoes_leite").select("*"),
-          fazendaAtivaId
+          fazendaAtualId
         )
           .in("animal_id", ids)
-          .order("data", { ascending: false })
+          .order("data_medicao", { ascending: false })
           .limit(800);
 
         if (error) {
           console.error("Erro ao carregar medicoes_leite:", error);
-          return [];
+          if (ativo) setUltProducao({});
+          return;
         }
 
-        return Array.isArray(data) ? data : [];
-      };
-
-      try {
-        for (const tabela of tabelasLeite) {
-          if (tabela === "medicoes_leite") {
-            const data = await buscarMedicoesLeite();
-            if (!data.length) {
-              continue;
-            }
-
-            const mapa = {};
-            data.forEach((registro) => {
-              const animalId = registro?.animal_id;
-              if (!animalId || Object.prototype.hasOwnProperty.call(mapa, animalId)) return;
-              const valor = extrairValor(registro);
-              if (Number.isFinite(valor)) {
-                mapa[animalId] = valor;
-              }
-            });
-            if (ativo) setUltProducao(mapa);
-            return;
-          }
-
-          for (const campoData of camposData) {
-            const { data, error } = await withFazendaId(
-              supabase.from(tabela).select("*"),
-              fazendaAtivaId
-            )
-              .in("animal_id", ids)
-              .order(campoData, { ascending: false })
-              .limit(800);
-
-            if (error) {
-              if (/column .* does not exist/i.test(error.message || "")) {
-                continue;
-              }
-              if (/relation .* does not exist/i.test(error.message || "")) {
-                break;
-              }
-            }
-
-            if (Array.isArray(data)) {
-              const mapa = {};
-              data.forEach((registro) => {
-                const animalId = registro?.animal_id;
-                if (!animalId || Object.prototype.hasOwnProperty.call(mapa, animalId)) return;
-                const valor = extrairValor(registro);
-                if (Number.isFinite(valor)) {
-                  mapa[animalId] = valor;
-                }
-              });
-              if (ativo) setUltProducao(mapa);
-              return;
-            }
-          }
+        const registros = Array.isArray(data) ? data : [];
+        if (!registros.length) {
+          if (ativo) setUltProducao({});
+          return;
         }
 
-        if (ativo) setUltProducao({});
+        const mapa = {};
+        registros.forEach((registro) => {
+          const animalId = registro?.animal_id;
+          if (!animalId || Object.prototype.hasOwnProperty.call(mapa, animalId)) return;
+          const valor = extrairValor(registro);
+          if (Number.isFinite(valor)) {
+            mapa[animalId] = valor;
+          }
+        });
+        if (ativo) setUltProducao(mapa);
       } catch (error) {
         console.error("Erro ao carregar ultima produção de leite:", error);
         if (ativo) setUltProducao({});
@@ -418,7 +373,7 @@ export default function Plantel({ isOnline = navigator.onLine }) {
     return () => {
       ativo = false;
     };
-  }, [animais, fazendaAtivaId, isOnline]);
+  }, [animais, fazendaAtualId, isOnline]);
 
   const linhas = useMemo(() => (Array.isArray(animais) ? animais : []), [animais]);
   const situacoesProdutivas = useMemo(() => {

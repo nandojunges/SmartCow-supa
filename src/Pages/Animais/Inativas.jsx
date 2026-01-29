@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { withFazendaId } from "../../lib/fazendaScope";
-import { useFazendaAtiva } from "../../context/FazendaAtivaContext";
+import { useFazenda } from "../../context/FazendaContext";
 import "../../styles/tabelaModerna.css";
 
 /* ===== helpers ===== */
@@ -43,7 +43,7 @@ export default function Inativas({
   onAtualizar, // função do pai para recarregar listas após reativar
   onVerFicha, // opcional: (animal) => void
 }) {
-  const { fazendaAtivaId } = useFazendaAtiva();
+  const { fazendaAtualId } = useFazenda();
   const [hoveredRowId, setHoveredRowId] = useState(null);
   const [hoveredColKey, setHoveredColKey] = useState(null);
   const [okMsg, setOkMsg] = useState("");
@@ -69,7 +69,7 @@ export default function Inativas({
   const reativar = async (animal) => {
     const { id, saida_id } = animal || {};
     if (!id) return;
-    if (!fazendaAtivaId) {
+    if (!fazendaAtualId) {
       setOkMsg("⚠️ Selecione uma fazenda antes de reativar.");
       setTimeout(() => setOkMsg(""), 2500);
       return;
@@ -85,7 +85,7 @@ export default function Inativas({
       // 1) Volta o animal para ativo
       const { error: erroAtivo } = await withFazendaId(
         supabase.from("animais").update({ ativo: true }),
-        fazendaAtivaId
+        fazendaAtualId
       ).eq("id", id);
 
       if (erroAtivo) throw erroAtivo;
@@ -94,7 +94,7 @@ export default function Inativas({
       if (saida_id) {
         const { error: erroDelete } = await withFazendaId(
           supabase.from("saidas_animais").delete(),
-          fazendaAtivaId
+          fazendaAtualId
         ).eq("id", saida_id);
 
         if (erroDelete) throw erroDelete;

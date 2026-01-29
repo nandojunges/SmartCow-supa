@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState, useCallback } from "react"
 import Select from "react-select";
 import { supabase } from "../../lib/supabaseClient";
 import { withFazendaId } from "../../lib/fazendaScope";
-import { useFazendaAtiva } from "../../context/FazendaAtivaContext";
+import { useFazenda } from "../../context/FazendaContext";
 import ModalMedicaoLeite from "./ModalMedicaoLeite";
 import FichaLeiteira from "./FichaLeiteira";
 import ResumoLeiteDia from "./ResumoLeiteDia";
@@ -680,7 +680,7 @@ function updateLeiteCache({ dateISO, vacas, lotes, medicoesDia, ultimaMedicaoPor
 }
 
 export default function Leite() {
-  const { fazendaAtivaId } = useFazendaAtiva();
+  const { fazendaAtualId } = useFazenda();
   const [vacas, setVacas] = useState([]);
   const [ultimaMedicaoPorAnimal, setUltimaMedicaoPorAnimal] = useState({});
   const [isOffline, setIsOffline] = useState(
@@ -791,13 +791,13 @@ export default function Leite() {
   }, []);
 
   const fetchUltimaDataOnline = useCallback(async () => {
-    if (!fazendaAtivaId) {
+    if (!fazendaAtualId) {
       return { data: null, error: new Error("Fazenda ativa não encontrada") };
     }
 
     const { data, error } = await withFazendaId(
       supabase.from("medicoes_leite").select("data_medicao"),
-      fazendaAtivaId
+      fazendaAtualId
     )
       .order("data_medicao", { ascending: false })
       .limit(1);
@@ -807,7 +807,7 @@ export default function Leite() {
     }
 
     return { data: data?.[0]?.data_medicao || null, error: null };
-  }, [fazendaAtivaId]);
+  }, [fazendaAtualId]);
 
   const loadData = useCallback(
     async (dateISO) => {
@@ -844,14 +844,14 @@ export default function Leite() {
 
       try {
         setLoadingLotes(true);
-        if (!fazendaAtivaId) {
+        if (!fazendaAtualId) {
           console.error("Fazenda ativa não definida.");
           setLoadingLotes(false);
           return;
         }
 
         const [animaisRes, lotesRes, medicoesRes, ultimaRes] = await Promise.all([
-          withFazendaId(supabase.from("animais").select("*"), fazendaAtivaId),
+          withFazendaId(supabase.from("animais").select("*"), fazendaAtualId),
           withFazendaId(
             supabase
               .from("lotes")
@@ -859,7 +859,7 @@ export default function Leite() {
               .eq("funcao", "Lactação")
               .eq("ativo", true)
               .not("nivel_produtivo", "is", null),
-            fazendaAtivaId
+            fazendaAtualId
           ).order("nome", { ascending: true }),
           withFazendaId(
             supabase
@@ -867,7 +867,7 @@ export default function Leite() {
               .select(
                 "id, fazenda_id, animal_id, data_medicao, tipo_lancamento, litros_manha, litros_tarde, litros_terceira, litros_total"
               ),
-            fazendaAtivaId
+            fazendaAtualId
           )
             .eq("data_medicao", dateISO),
           withFazendaId(
@@ -876,7 +876,7 @@ export default function Leite() {
               .select(
                 "animal_id, data_medicao, litros_manha, litros_tarde, litros_terceira, litros_total"
               ),
-            fazendaAtivaId
+            fazendaAtualId
           )
             .order("data_medicao", { ascending: false })
             .limit(2000),
@@ -926,7 +926,7 @@ export default function Leite() {
         setLoadingLotes(false);
       }
     },
-    [fazendaAtivaId, isOffline, montarMapaMedicoes]
+    [fazendaAtualId, isOffline, montarMapaMedicoes]
   );
 
   /* ===== Resumo do dia (baseado na DATA DA TABELA) ===== */
@@ -1138,7 +1138,7 @@ export default function Leite() {
 
       setSalvandoLotes(true);
 
-      if (!fazendaAtivaId) {
+      if (!fazendaAtualId) {
         setSalvandoLotes(false);
         return;
       }
@@ -1163,7 +1163,7 @@ export default function Leite() {
       if (updatesAnimais.length > 0) {
         const results = await Promise.all(
           updatesAnimais.map((u) =>
-            withFazendaId(supabase.from("animais").update({ lote_id: u.lote_id }), fazendaAtivaId).eq(
+            withFazendaId(supabase.from("animais").update({ lote_id: u.lote_id }), fazendaAtualId).eq(
               "id",
               u.animal_id
             )

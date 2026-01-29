@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { toast } from "react-toastify";
-import { useFazendaAtiva } from "../context/FazendaAtivaContext";
+import { useFazenda } from "../context/FazendaContext";
 
 export default function VerificarEmail() {
   const [email, setEmail] = useState("");
@@ -11,7 +11,7 @@ export default function VerificarEmail() {
   const [erro, setErro] = useState("");
   const [cadastro, setCadastro] = useState(null); // dados salvos no localStorage
   const navigate = useNavigate();
-  const { clearFazendaAtiva } = useFazendaAtiva();
+  const { clearFazendaAtualId } = useFazenda();
 
   useEffect(() => {
     const salvo = localStorage.getItem("pendingCadastro");
@@ -131,7 +131,7 @@ export default function VerificarEmail() {
       localStorage.removeItem("pendingCadastro");
 
       if (String(tipoContaFinal ?? "").trim().toUpperCase() === "ASSISTENTE_TECNICO") {
-        clearFazendaAtiva();
+        clearFazendaAtualId();
         navigate("/tecnico", { replace: true });
         return;
       }

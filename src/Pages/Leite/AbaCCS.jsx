@@ -1,6 +1,8 @@
 // src/pages/Leite/AbaCCS.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
+import { withFazendaId } from "../../lib/fazendaScope";
+import { useFazenda } from "../../context/FazendaContext";
 import { enqueue, kvGet, kvSet } from "../../offline/localDB";
 import Select from "react-select";
 import {
@@ -110,6 +112,7 @@ function faixaCCS(v) {
 
 /* ===================== COMPONENT ===================== */
 export default function AbaCCS({ vaca }) {
+  const { fazendaAtualId } = useFazenda();
   if (!vaca?.id) {
     return (
       <div style={{ padding: "1rem", color: "crimson" }}>
@@ -168,14 +171,16 @@ export default function AbaCCS({ vaca }) {
   /* ---------- carregar listas ---------- */
   const carregarListas = async () => {
     const [r1, r2] = await Promise.all([
-      supabase
-        .from("leite_laboratorios")
-        .select("id,nome,ativo")
+      withFazendaId(
+        supabase.from("leite_laboratorios").select("id,nome,ativo"),
+        fazendaAtualId
+      )
         .eq("ativo", true)
         .order("nome", { ascending: true }),
-      supabase
-        .from("leite_responsaveis")
-        .select("id,nome,ativo")
+      withFazendaId(
+        supabase.from("leite_responsaveis").select("id,nome,ativo"),
+        fazendaAtualId
+      )
         .eq("ativo", true)
         .order("nome", { ascending: true }),
     ]);
@@ -191,9 +196,10 @@ export default function AbaCCS({ vaca }) {
 
   /* ---------- lactações via eventos_reprodutivos ---------- */
   const carregarLactacoes = async () => {
-    const { data, error } = await supabase
-      .from("eventos_reprodutivos")
-      .select("id, tipo_evento, data_evento")
+    const { data, error } = await withFazendaId(
+      supabase.from("eventos_reprodutivos").select("id, tipo_evento, data_evento"),
+      fazendaAtualId
+    )
       .eq("animal_id", vaca.id)
       .in("tipo_evento", ["parto", "secagem"])
       .order("data_evento", { ascending: false });
@@ -251,10 +257,11 @@ export default function AbaCCS({ vaca }) {
       return;
     }
 
-    const { data, error } = await supabase
-      .from("leite_ccs_registros")
-      .select(
-        `
+    const { data, error } = await withFazendaId(
+      supabase
+        .from("leite_ccs_registros")
+        .select(
+          `
         id,
         animal_id,
         dia,
@@ -266,7 +273,9 @@ export default function AbaCCS({ vaca }) {
         leite_laboratorios: laboratorio_id ( id, nome ),
         leite_responsaveis: responsavel_id ( id, nome )
       `
-      )
+        ),
+      fazendaAtualId
+    )
       .eq("animal_id", vaca.id)
       .order("dia", { ascending: false });
 
@@ -286,11 +295,14 @@ export default function AbaCCS({ vaca }) {
   };
 
   useEffect(() => {
+    if (!fazendaAtualId) {
+      return;
+    }
     carregarListas();
     carregarHistorico();
     carregarLactacoes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vaca?.id]);
+  }, [vaca?.id, fazendaAtualId]);
 
   /* ===========================================================
      AUTO-PREENCHER PELO DIA (histórico completo)
@@ -394,7 +406,7 @@ export default function AbaCCS({ vaca }) {
 
     const { data, error } = await supabase
       .from("leite_laboratorios")
-      .insert({ nome, ativo: true })
+      .insert({ nome, ativo: true, fazenda_id: fazendaAtualId })
       .select("id,nome")
       .single();
 
@@ -422,7 +434,7 @@ export default function AbaCCS({ vaca }) {
 
     const { data, error } = await supabase
       .from("leite_responsaveis")
-      .insert({ nome, ativo: true })
+      .insert({ nome, ativo: true, fazenda_id: fazendaAtualId })
       .select("id,nome")
       .single();
 
@@ -458,6 +470,7 @@ export default function AbaCCS({ vaca }) {
     setSalvando(true);
 
     const payload = {
+      fazenda_id: fazendaAtualId,
       animal_id: vaca.id,
       dia,
       ccs,
@@ -529,7 +542,10 @@ export default function AbaCCS({ vaca }) {
     setErro("");
     setSalvando(true);
 
-    const { error } = await supabase.from("leite_ccs_registros").delete().eq("id", id);
+    const { error } = await withFazendaId(
+      supabase.from("leite_ccs_registros").delete(),
+      fazendaAtualId
+    ).eq("id", id);
 
     if (!mountedRef.current) return;
 

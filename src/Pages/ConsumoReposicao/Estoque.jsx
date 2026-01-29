@@ -3,7 +3,7 @@ import React, { useMemo, useState, useEffect, useCallback } from "react";
 import Select from "react-select";
 import { supabase } from "../../lib/supabaseClient";
 import { withFazendaId } from "../../lib/fazendaScope";
-import { useFazendaAtiva } from "../../context/FazendaAtivaContext";
+import { useFazenda } from "../../context/FazendaContext";
 import { enqueue, kvGet, kvSet } from "../../offline/localDB";
 
 import "../../styles/tabelaModerna.css";
@@ -86,7 +86,7 @@ function sortProdutosByNome(list) {
 }
 
 export default function Estoque({ onCountChange }) {
-  const { fazendaAtivaId } = useFazendaAtiva();
+  const { fazendaAtualId } = useFazenda();
   const categoriasFixas = useMemo(
     () => [
       { value: "Todos", label: "Todos" },
@@ -156,10 +156,10 @@ export default function Estoque({ onCountChange }) {
   }
 
   function requireFazendaId() {
-    if (!fazendaAtivaId) {
+    if (!fazendaAtualId) {
       throw new Error("Selecione uma fazenda para continuar.");
     }
-    return fazendaAtivaId;
+    return fazendaAtualId;
   }
 
   // ✅ Busca rápida do produto (nome + unidade) para descrever a compra no Financeiro
@@ -254,7 +254,7 @@ export default function Estoque({ onCountChange }) {
           return;
         }
 
-        if (!fazendaAtivaId) {
+        if (!fazendaAtualId) {
           throw new Error("Selecione uma fazenda para carregar o estoque.");
         }
 
@@ -277,7 +277,7 @@ export default function Estoque({ onCountChange }) {
             updated_at
           `
             ),
-          fazendaAtivaId
+          fazendaAtualId
         ).order("nome_comercial", { ascending: true });
 
         if (errP) throw errP;
@@ -303,7 +303,7 @@ export default function Estoque({ onCountChange }) {
               valor_total
             `
               ),
-            fazendaAtivaId
+            fazendaAtualId
           ).in("produto_id", ids);
 
           if (errL) throw errL;
@@ -320,7 +320,7 @@ export default function Estoque({ onCountChange }) {
         try {
           const { data: dietasDb, error: eD } = await withFazendaId(
             supabase.from("dietas").select("id, lote_id, dia, numvacas_snapshot"),
-            fazendaAtivaId
+            fazendaAtualId
           )
             .order("dia", { ascending: false })
             .limit(200);
@@ -337,7 +337,7 @@ export default function Estoque({ onCountChange }) {
             if (dietaIds.length) {
               const { data: itensDb, error: eI } = await withFazendaId(
                 supabase.from("dietas_itens").select("dieta_id, produto_id, quantidade_kg_vaca"),
-                fazendaAtivaId
+                fazendaAtualId
               ).in("dieta_id", dietaIds);
 
               if (!eI && Array.isArray(itensDb)) {
@@ -411,13 +411,13 @@ export default function Estoque({ onCountChange }) {
         setLoading(false);
       }
     },
-    [categoriaSelecionada, fazendaAtivaId, tourosBase, updateCache]
+    [categoriaSelecionada, fazendaAtualId, tourosBase, updateCache]
   );
 
   useEffect(() => {
     carregar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categoriaSelecionada?.value, fazendaAtivaId]);
+  }, [categoriaSelecionada?.value, fazendaAtualId]);
 
   useEffect(() => {
     onCountChange?.(produtos.length || 0);
@@ -522,7 +522,7 @@ export default function Estoque({ onCountChange }) {
 
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       const localId = generateLocalId();
-      const fazendaId = fazendaAtivaId;
+      const fazendaId = fazendaAtualId;
       const payload = {
         id: localId,
         ...db,
@@ -674,7 +674,7 @@ export default function Estoque({ onCountChange }) {
       await enqueue("estoque.lote.insert", {
         lote: {
           id: loteId,
-          fazenda_id: fazendaAtivaId || null,
+          fazenda_id: fazendaAtualId || null,
           produto_id: produtoId,
           data_entrada: toDateOnly(new Date()),
           validade,
@@ -683,7 +683,7 @@ export default function Estoque({ onCountChange }) {
           valor_total: Number.isFinite(valorTotal) ? valorTotal : 0,
         },
         movimento: {
-          fazenda_id: fazendaAtivaId || null,
+          fazenda_id: fazendaAtualId || null,
           produto_id: produtoId,
           lote_id: loteId,
           tipo: "entrada",
