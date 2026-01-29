@@ -1,3 +1,8 @@
+import {
+  EMAIL_COLS,
+  isMissingColumnError,
+  selectByEmailWithFallback,
+} from "../utils/supabaseFallback";
 import { supabase } from "./supabaseClient";
 
 export async function getFazendaDoProdutor(userId) {
@@ -10,14 +15,13 @@ export async function getFazendaDoProdutor(userId) {
     .select("id, nome, created_at")
     .eq("owner_user_id", userId)
     .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
 
   if (error) {
     throw error;
   }
 
-  return data ?? null;
+  return data?.[0] ?? null;
 }
 
 export async function getEmailDoUsuario(userId) {
@@ -43,17 +47,34 @@ export async function listConvitesDaFazenda(fazendaId) {
     throw new Error("Fazenda inválida para carregar convites.");
   }
 
-  const { data, error } = await supabase
-    .from("convites_acesso")
-    .select("id, convidado_email, tipo_profissional, nome_profissional, status, created_at")
-    .eq("fazenda_id", fazendaId)
-    .order("created_at", { ascending: false });
+  let lastError;
 
-  if (error) {
-    throw error;
+  for (const col of EMAIL_COLS) {
+    const { data, error } = await supabase
+      .from("convites_acesso")
+      .select(`id, ${col}, tipo_profissional, nome_profissional, status, created_at`)
+      .eq("fazenda_id", fazendaId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      if (isMissingColumnError(error, col)) {
+        lastError = error;
+        continue;
+      }
+      throw error;
+    }
+
+    return (data ?? []).map((convite) => ({
+      ...convite,
+      email_convite: convite[col] ?? "",
+    }));
   }
 
-  return data ?? [];
+  if (lastError) {
+    throw lastError;
+  }
+
+  return [];
 }
 
 export async function listAcessosDaFazenda(fazendaId) {
@@ -79,20 +100,22 @@ export async function listConvitesDoTecnico(email) {
     throw new Error("E-mail inválido para carregar convites.");
   }
 
-  const { data, error } = await supabase
-    .from("convites_acesso")
-    .select(
-      "id, fazenda_id, convidado_email, status, created_at, tipo_profissional, nome_profissional"
-    )
-    .eq("convidado_email", email)
-    .eq("status", "pendente")
-    .order("created_at", { ascending: false });
+  const { data, error, emailColumn } = await selectByEmailWithFallback({
+    table: "convites_acesso",
+    select: "id, fazenda_id, status, created_at, tipo_profissional, nome_profissional",
+    email,
+    extraFilters: (query) =>
+      query.eq("status", "pendente").order("created_at", { ascending: false }),
+  });
 
   if (error) {
     throw error;
   }
 
-  return data ?? [];
+  return (data ?? []).map((convite) => ({
+    ...convite,
+    email_convite: emailColumn ? convite[emailColumn] ?? "" : "",
+  }));
 }
 
 export async function aceitarConvite(convite, userId) {
@@ -100,16 +123,19 @@ export async function aceitarConvite(convite, userId) {
     throw new Error("Convite inválido para aceite.");
   }
 
-  const { data: acessoExistente, error: acessoError } = await supabase
+  const { data: acessosData, error: acessoError } = await supabase
     .from("fazenda_acessos")
     .select("id")
     .eq("fazenda_id", convite.fazenda_id)
     .eq("user_id", userId)
-    .maybeSingle();
+    .order("created_at", { ascending: true })
+    .limit(1);
 
   if (acessoError) {
     throw acessoError;
   }
+
+  const acessoExistente = acessosData?.[0];
 
   if (acessoExistente?.id) {
     const { error: updateError } = await supabase
