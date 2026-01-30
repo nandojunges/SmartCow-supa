@@ -24,6 +24,10 @@
     box-shadow: none !important;
   }
 
+  .relatorios-card {
+    padding: 0 !important;
+  }
+
   .report-composer {
     padding: 0 !important;
   }

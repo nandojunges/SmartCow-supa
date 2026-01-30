@@ -41,6 +41,26 @@ const getAgeLabel = (value) => {
     : `${years} anos`;
 };
 
+const getDelLabel = (value) => {
+  if (!value) {
+    return "—";
+  }
+
+  const partoDate = new Date(value);
+  if (Number.isNaN(partoDate.getTime())) {
+    return "—";
+  }
+
+  const now = new Date();
+  const diff = now.getTime() - partoDate.getTime();
+  if (diff < 0) {
+    return "—";
+  }
+
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  return `${days}`;
+};
+
 export const PLANTEL_COLUMNS = [
   {
     key: "numero",
@@ -88,7 +108,7 @@ export const PLANTEL_COLUMNS = [
     width: 120,
     type: "date",
     group: "Reprodução",
-    valueGetter: (row) => formatDate(row.data_parto),
+    valueGetter: (row) => getDelLabel(row.data_parto),
   },
   {
     key: "idade",
