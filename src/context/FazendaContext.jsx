@@ -2,22 +2,41 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 const FazendaContext = createContext(null);
+const STORAGE_KEY = "smartcow:currentFarmId";
 let fazendaAtualIdCache = null;
 
+function getStoredFazendaId() {
+  if (typeof localStorage === "undefined") {
+    return null;
+  }
+
+  return localStorage.getItem(STORAGE_KEY);
+}
+
 export function FazendaProvider({ children }) {
-  const [fazendaAtualId, setFazendaAtualIdState] = useState(null);
+  const [fazendaAtualId, setFazendaAtualIdState] = useState(() => getStoredFazendaId());
 
   const setFazendaAtualId = useCallback((fazendaId) => {
     if (!fazendaId) {
       setFazendaAtualIdState(null);
+      if (typeof localStorage !== "undefined") {
+        localStorage.removeItem(STORAGE_KEY);
+      }
       return;
     }
 
-    setFazendaAtualIdState(String(fazendaId));
+    const nextId = String(fazendaId);
+    setFazendaAtualIdState(nextId);
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(STORAGE_KEY, nextId);
+    }
   }, []);
 
   const clearFazendaAtualId = useCallback(() => {
     setFazendaAtualIdState(null);
+    if (typeof localStorage !== "undefined") {
+      localStorage.removeItem(STORAGE_KEY);
+    }
   }, []);
 
   useEffect(() => {
