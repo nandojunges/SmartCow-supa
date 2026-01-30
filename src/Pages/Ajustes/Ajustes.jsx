@@ -291,33 +291,97 @@ export default function Ajustes() {
     try {
       setEnviandoConvite(true);
 
-      const { data: conviteExistente, error: conviteError } = await supabase
-        .from("convites_acesso")
-        .select("id")
-        .eq("fazenda_id", fazendaAtualId)
-        .eq("email_convidado", emailConviteNormalizado)
-        .eq("status", "pendente")
-        .limit(1)
+      const { data: perfilData, error: perfilError } = await supabase
+        .from("profiles")
+        .select("id, email")
+        .eq("email", emailConviteNormalizado)
         .maybeSingle();
 
-      if (conviteError) {
-        throw conviteError;
+      if (perfilError) {
+        throw perfilError;
       }
 
-      if (conviteExistente?.id) {
-        toast.info("Convite pendente já enviado para este e-mail.");
-        return;
-      }
+      if (perfilData?.id) {
+        const { data: acessoExistente, error: acessoError } = await supabase
+          .from("fazenda_acessos")
+          .select("id")
+          .eq("fazenda_id", fazendaAtualId)
+          .eq("user_id", perfilData.id)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
 
-      await criarConvite(fazendaAtualId, emailConviteNormalizado, {
-        tipoProfissional: profissionalTipo?.value ?? null,
-        nomeProfissional: profissionalNome?.trim() || null,
-      });
+        if (acessoError) {
+          throw acessoError;
+        }
+
+        const payload = {
+          status: "ATIVO",
+          tipo_profissional: profissionalTipo?.value ?? null,
+          nome_profissional: profissionalNome?.trim() || null,
+        };
+
+        if (acessoExistente?.id) {
+          const { error: updateError } = await supabase
+            .from("fazenda_acessos")
+            .update(payload)
+            .eq("id", acessoExistente.id);
+
+          if (updateError) {
+            throw updateError;
+          }
+        } else {
+          const { error: insertError } = await supabase.from("fazenda_acessos").insert({
+            fazenda_id: fazendaAtualId,
+            user_id: perfilData.id,
+            ...payload,
+          });
+
+          if (insertError) {
+            throw insertError;
+          }
+        }
+
+        toast.success("Acesso reativado com sucesso.");
+      } else {
+        const { data: conviteExistente, error: conviteError } = await supabase
+          .from("convites_acesso")
+          .select("id")
+          .eq("fazenda_id", fazendaAtualId)
+          .eq("email_convidado", emailConviteNormalizado)
+          .limit(1)
+          .maybeSingle();
+
+        if (conviteError) {
+          throw conviteError;
+        }
+
+        if (conviteExistente?.id) {
+          const { error: updateError } = await supabase
+            .from("convites_acesso")
+            .update({
+              status: "pendente",
+              tipo_profissional: profissionalTipo?.value ?? null,
+              nome_profissional: profissionalNome?.trim() || null,
+            })
+            .eq("id", conviteExistente.id);
+
+          if (updateError) {
+            throw updateError;
+          }
+        } else {
+          await criarConvite(fazendaAtualId, emailConviteNormalizado, {
+            tipoProfissional: profissionalTipo?.value ?? null,
+            nomeProfissional: profissionalNome?.trim() || null,
+          });
+        }
+
+        toast.success("Convite enviado! O profissional verá ao acessar.");
+      }
 
       setEmailConvite("");
       setProfissionalTipo(null);
       setProfissionalNome("");
-      toast.success("Convite enviado! O profissional verá ao acessar.");
       await carregarAcessos(fazendaAtualId);
     } catch (error) {
       if (import.meta.env.DEV) {
@@ -362,7 +426,7 @@ export default function Ajustes() {
       setProcessandoId(`remover-${acesso.id}`);
       const { error } = await supabase
         .from("fazenda_acessos")
-        .delete()
+        .update({ status: "REVOGADO" })
         .eq("id", acesso.id);
 
       if (error) {
@@ -376,6 +440,32 @@ export default function Ajustes() {
         console.error("Erro ao remover acesso:", error?.message);
       }
       toast.error(error?.message || "Não foi possível remover o acesso.");
+    } finally {
+      setProcessandoId(null);
+    }
+  }
+
+  async function handleAtualizarStatus(acesso, status) {
+    if (!fazendaAtualId) return;
+
+    try {
+      setProcessandoId(`status-${acesso.id}`);
+      const { error } = await supabase
+        .from("fazenda_acessos")
+        .update({ status })
+        .eq("id", acesso.id);
+
+      if (error) {
+        throw error;
+      }
+
+      toast.success("Status atualizado com sucesso.");
+      await carregarAcessos(fazendaAtualId);
+    } catch (error) {
+      if (import.meta.env.DEV) {
+        console.error("Erro ao atualizar status:", error?.message);
+      }
+      toast.error(error?.message || "Não foi possível atualizar o status.");
     } finally {
       setProcessandoId(null);
     }
@@ -518,23 +608,65 @@ export default function Ajustes() {
                     acesso.profiles?.email ||
                     acesso.user_id ||
                     "Sem nome";
+                  const statusLabel = formatarStatus(acesso.status);
 
                   return (
                     <div key={acesso.id} className="ajustes-list__item">
                       <div>
                         <strong>{nomeCompleto}</strong>
-                        <span>Acesso ativo desde {formatarData(acesso.created_at)}</span>
+                        <span>
+                          {(acesso.tipo_profissional || "Tipo não informado") +
+                            (acesso.nome_profissional
+                              ? ` • ${acesso.nome_profissional}`
+                              : " • Apelido não informado")}
+                        </span>
+                        <span>
+                          {statusLabel} desde {formatarData(acesso.created_at)}
+                        </span>
                       </div>
-                      <button
-                        type="button"
-                        className="ajustes-button ajustes-button--link"
-                        onClick={() => handleRemoverAcesso(acesso)}
-                        disabled={processandoId === `remover-${acesso.id}`}
-                      >
-                        {processandoId === `remover-${acesso.id}`
-                          ? "Revogando..."
-                          : "Revogar"}
-                      </button>
+                      <div className="ajustes-list__actions">
+                        <span
+                          className={`ajustes-status-badge ajustes-status-badge--${statusLabel.toLowerCase()}`}
+                        >
+                          {statusLabel}
+                        </span>
+                        {acesso.status !== "BLOQUEADO" && (
+                          <button
+                            type="button"
+                            className="ajustes-button ajustes-button--ghost"
+                            onClick={() => handleAtualizarStatus(acesso, "BLOQUEADO")}
+                            disabled={processandoId === `status-${acesso.id}`}
+                          >
+                            {processandoId === `status-${acesso.id}`
+                              ? "Bloqueando..."
+                              : "Bloquear"}
+                          </button>
+                        )}
+                        {acesso.status !== "REVOGADO" && (
+                          <button
+                            type="button"
+                            className="ajustes-button ajustes-button--link"
+                            onClick={() => handleRemoverAcesso(acesso)}
+                            disabled={processandoId === `remover-${acesso.id}`}
+                          >
+                            {processandoId === `remover-${acesso.id}`
+                              ? "Revogando..."
+                              : "Revogar"}
+                          </button>
+                        )}
+                        {acesso.status !== "ATIVO" && (
+                          <button
+                            type="button"
+                            className="ajustes-button ajustes-button--secondary"
+                            onClick={() => handleAtualizarStatus(acesso, "ATIVO")}
+                            disabled={processandoId === `status-${acesso.id}`}
+                          >
+                            {processandoId === `status-${acesso.id}`
+                              ? "Reativando..."
+                              : "Reativar"}
+                          </button>
+                        )}
+                      </div>
                     </div>
                   );
                 })
@@ -701,4 +833,11 @@ function formatarData(valor) {
     month: "2-digit",
     year: "numeric",
   });
+}
+
+function formatarStatus(status) {
+  const statusNormalizado = String(status || "").toUpperCase();
+  if (statusNormalizado === "BLOQUEADO") return "Bloqueado";
+  if (statusNormalizado === "REVOGADO") return "Revogado";
+  return "Ativo";
 }

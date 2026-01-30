@@ -77,10 +77,9 @@ export async function listAcessosDaFazenda(fazendaId) {
   const { data, error } = await supabase
     .from("fazenda_acessos")
     .select(
-      "id, user_id, created_at, status, permissoes, profiles (id, email, full_name, tipo_conta)"
+      "id, user_id, created_at, status, permissoes, tipo_profissional, nome_profissional, profiles (id, email, full_name, tipo_conta)"
     )
     .eq("fazenda_id", fazendaId)
-    .eq("status", "ATIVO")
     .order("created_at", { ascending: false });
 
   if (error) {
