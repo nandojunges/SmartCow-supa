@@ -5,7 +5,6 @@ import { toast } from "react-toastify";
 import { supabase } from "../../lib/supabaseClient";
 import { useFazenda } from "../../context/FazendaContext";
 import { aceitarConvite, getEmailDoUsuario } from "../../lib/fazendaHelpers";
-import { atualizarLastFarmUsuario, setLastFarmId } from "../../lib/farmSelection";
 import { listarConvitesPendentesTecnico } from "../../services/acessos";
 
 const STATUS_LABELS = {
@@ -189,8 +188,6 @@ export default function TecnicoHome() {
 
   async function handleAcessarFazenda(fazendaId) {
     setFazendaAtualId(fazendaId);
-    setLastFarmId(fazendaId);
-    await atualizarLastFarmUsuario({ userId: usuario?.id, farmId: fazendaId });
     navigate("/inicio", { replace: true });
   }
 

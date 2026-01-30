@@ -137,3 +137,35 @@ export async function listarFazendasAcessiveis(userId) {
     return aTime - bTime;
   });
 }
+
+export async function listarFazendasAutorizadasConsultor(userId) {
+  if (!userId) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from("fazenda_acessos")
+    .select("fazenda_id, fazendas (id, nome, created_at)")
+    .eq("user_id", userId)
+    .eq("ativo", true)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw error;
+  }
+
+  const fazendasMap = new Map();
+
+  (data ?? []).forEach((acesso) => {
+    const fazenda = acesso?.fazendas;
+    if (fazenda?.id) {
+      fazendasMap.set(String(fazenda.id), fazenda);
+    }
+  });
+
+  return Array.from(fazendasMap.values()).sort((a, b) => {
+    const aTime = a?.created_at ? new Date(a.created_at).getTime() : 0;
+    const bTime = b?.created_at ? new Date(b.created_at).getTime() : 0;
+    return aTime - bTime;
+  });
+}

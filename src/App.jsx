@@ -1,6 +1,6 @@
 // src/App.jsx
 import { useEffect, useState } from "react";
-import { Routes, Route, Navigate, Outlet, useNavigate } from "react-router-dom";
+import { Routes, Route, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { ToastContainer, toast } from "react-toastify";
 import Select from "react-select";
 import "react-toastify/dist/ReactToastify.css";
@@ -38,6 +38,7 @@ import TecnicoHome from "./Pages/Tecnico/TecnicoHome.jsx";
 
 export default function App() {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState(null);
@@ -118,6 +119,8 @@ export default function App() {
     useFarmSelection({
       userId: session?.user?.id,
       tipoConta,
+      autoSelect: !isAssistenteTecnico,
+      persistSelection: !isAssistenteTecnico,
       onSelect: () => {
         navigate("/inicio", { replace: true });
       },
@@ -193,7 +196,7 @@ export default function App() {
           </>
         )}
       </Routes>
-      {mostrarSeletor && (
+      {!isAssistenteTecnico && mostrarSeletor && pathname !== "/tecnico" && (
         <SelecaoFazendaModal
           fazendas={fazendas}
           onSelecionar={(fazendaId) => {

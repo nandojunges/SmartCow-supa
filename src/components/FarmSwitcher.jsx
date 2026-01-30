@@ -11,6 +11,8 @@ export default function FarmSwitcher({ style, readOnly = false }) {
   const [tipoConta, setTipoConta] = useState(null);
   const [aberto, setAberto] = useState(false);
   const containerRef = useRef(null);
+  const isAssistenteTecnico = tipoConta === "ASSISTENTE_TECNICO";
+  const podeAutoSelecionar = tipoConta ? !isAssistenteTecnico : false;
 
   useEffect(() => {
     let isMounted = true;
@@ -63,6 +65,8 @@ export default function FarmSwitcher({ style, readOnly = false }) {
   const { fazendas, loading, selecionarFazenda } = useFarmSelection({
     userId,
     tipoConta,
+    autoSelect: podeAutoSelecionar,
+    persistSelection: podeAutoSelecionar,
     onSelect: (fazendaId) => {
       if (typeof window !== "undefined") {
         const queryClient = window.__SMARTCOW_QUERY_CLIENT__;

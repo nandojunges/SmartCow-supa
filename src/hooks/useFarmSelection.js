@@ -3,12 +3,20 @@ import { ensureFazendaDoProdutor } from "../services/acessos";
 import {
   atualizarLastFarmUsuario,
   getLastFarmId,
+  listarFazendasAutorizadasConsultor,
   listarFazendasAcessiveis,
   setLastFarmId,
 } from "../lib/farmSelection";
 import { useFazenda } from "../context/FazendaContext";
 
-export function useFarmSelection({ userId, tipoConta, onSelect, onError }) {
+export function useFarmSelection({
+  userId,
+  tipoConta,
+  onSelect,
+  onError,
+  autoSelect = true,
+  persistSelection = true,
+}) {
   const { fazendaAtualId, setFazendaAtualId } = useFazenda();
   const [fazendas, setFazendas] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -20,6 +28,12 @@ export function useFarmSelection({ userId, tipoConta, onSelect, onError }) {
   useEffect(() => {
     tipoContaRef.current = tipoConta;
   }, [tipoConta]);
+
+  useEffect(() => {
+    if (!autoSelect) {
+      setMostrarSeletor(false);
+    }
+  }, [autoSelect]);
 
   useEffect(() => {
     onErrorRef.current = onError;
@@ -41,14 +55,16 @@ export function useFarmSelection({ userId, tipoConta, onSelect, onError }) {
         console.info("[farm-selection] currentFarmId:", String(fazendaId));
       }
       setMostrarSeletor(false);
-      setLastFarmId(fazendaId);
-      await atualizarLastFarmUsuario({ userId, farmId: fazendaId });
+      if (persistSelection) {
+        setLastFarmId(fazendaId);
+        await atualizarLastFarmUsuario({ userId, farmId: fazendaId });
+      }
 
       if (onSelect) {
         onSelect(fazendaId);
       }
     },
-    [fazendaAtualId, onSelect, setFazendaAtualId, userId]
+    [fazendaAtualId, onSelect, persistSelection, setFazendaAtualId, userId]
   );
 
   const carregarFazendas = useCallback(async () => {
@@ -66,7 +82,12 @@ export function useFarmSelection({ userId, tipoConta, onSelect, onError }) {
     }
 
     try {
-      let fazendasDisponiveis = await listarFazendasAcessiveis(userId);
+      let fazendasDisponiveis = [];
+      if (tipoContaRef.current === "ASSISTENTE_TECNICO") {
+        fazendasDisponiveis = await listarFazendasAutorizadasConsultor(userId);
+      } else {
+        fazendasDisponiveis = await listarFazendasAcessiveis(userId);
+      }
 
       if (tipoContaRef.current === "PRODUTOR" && !fazendasDisponiveis.length) {
         const { fazendas: fazendasCriadas } = await ensureFazendaDoProdutor(userId);
@@ -149,11 +170,19 @@ export function useFarmSelection({ userId, tipoConta, onSelect, onError }) {
   }, [carregarFazendas, userId]);
 
   useEffect(() => {
-    if (loading || fazendas.length === 0) {
+    if (!userId || !isMountedRef.current) {
       return;
     }
 
-    const lastFarmId = getLastFarmId();
+    carregarFazendas();
+  }, [carregarFazendas, tipoConta, userId]);
+
+  useEffect(() => {
+    if (!autoSelect || loading || fazendas.length === 0) {
+      return;
+    }
+
+    const lastFarmId = persistSelection ? getLastFarmId() : null;
     const lastFarm = lastFarmId
       ? fazendas.find((fazenda) => String(fazenda.id) === String(lastFarmId))
       : null;
@@ -172,7 +201,7 @@ export function useFarmSelection({ userId, tipoConta, onSelect, onError }) {
     if (fazendas.length > 1) {
       setMostrarSeletor(true);
     }
-  }, [fazendaAtualId, fazendas, loading, selecionarFazenda]);
+  }, [autoSelect, fazendaAtualId, fazendas, loading, persistSelection, selecionarFazenda]);
 
   const value = useMemo(
     () => ({
