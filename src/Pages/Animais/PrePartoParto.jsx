@@ -1,5 +1,5 @@
 // src/pages/Animais/PrePartoParto.jsx
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { withFazendaId } from "../../lib/fazendaScope";
 import { useFazenda } from "../../context/FazendaContext";
@@ -10,6 +10,61 @@ import ModalRegistrarParto from "./ModalRegistrarParto";
 
 export const iconePreParto = "/icones/preparto.png";
 export const rotuloPreParto = "Pré-parto/Parto";
+
+const KEY = "cfg_manejo_repro";
+const DEFAULT_CFG = {
+  dias_antes_parto_para_secagem: 60,
+  dias_antecedencia_preparar_secagem: 7,
+  dias_antes_parto_para_preparto: 30,
+};
+
+async function loadCfg(userId) {
+  if (!userId) return { ...DEFAULT_CFG };
+  try {
+    const { data, error, status } = await supabase
+      .from("config_manejo_repro")
+      .select("*")
+      .eq("user_id", userId)
+      .single();
+
+    if (error) {
+      if (status === 406 || error.code === "PGRST116") {
+        const defaults = { ...DEFAULT_CFG, user_id: userId };
+        await supabase
+          .from("config_manejo_repro")
+          .upsert(defaults, { onConflict: "user_id" });
+        await kvSet(KEY, defaults);
+        return defaults;
+      }
+      throw error;
+    }
+
+    if (data) {
+      await kvSet(KEY, data);
+      return { ...DEFAULT_CFG, ...data };
+    }
+  } catch (error) {
+    const cached = await kvGet(KEY);
+    return { ...DEFAULT_CFG, ...(cached || {}), user_id: userId };
+  }
+  return { ...DEFAULT_CFG, user_id: userId };
+}
+
+async function saveCfg(userId, patch) {
+  if (!userId) return null;
+  const cached = (await kvGet(KEY)) || {};
+  const merged = { ...cached, ...patch, user_id: userId };
+  await kvSet(KEY, merged);
+  try {
+    const { error } = await supabase
+      .from("config_manejo_repro")
+      .upsert(merged, { onConflict: "user_id" });
+    if (error) throw error;
+  } catch (error) {
+    await enqueue("cfg_manejo_upsert", merged);
+  }
+  return merged;
+}
 
 /* ========= helpers de data ========= */
 function parseDateFlexible(s) {
@@ -81,10 +136,10 @@ export default function PrePartoParto({ isOnline = navigator.onLine }) {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
   const [offlineAviso, setOfflineAviso] = useState("");
-  const [hasCache, setHasCache] = useState(false);
-  const [cacheMetadata, setCacheMetadata] = useState(null);
 
   const [diasPreParto, setDiasPreParto] = useState(30);
+  const [userId, setUserId] = useState(null);
+  const saveTimeoutRef = useRef(null);
 
   const [hoveredRowId, setHoveredRowId] = useState(null);
   const [hoveredColKey, setHoveredColKey] = useState(null);
@@ -152,8 +207,6 @@ export default function PrePartoParto({ isOnline = navigator.onLine }) {
       setAnimais(lista.filter((animal) => animal?.ativo !== false));
     }
 
-    setHasCache(lista.length > 0);
-    setCacheMetadata(cache?.updatedAt ? { updatedAt: cache.updatedAt } : null);
     return lista.length > 0;
   }, [CACHE_FALLBACK_KEY, CACHE_KEY]);
 
@@ -189,8 +242,6 @@ export default function PrePartoParto({ isOnline = navigator.onLine }) {
           updatedAt: new Date().toISOString(),
         };
         await kvSet(CACHE_KEY, payloadCache);
-        setHasCache(animaisData.length > 0);
-        setCacheMetadata({ updatedAt: payloadCache.updatedAt });
       } catch (e) {
         console.error("Erro ao carregar pré-parto/parto:", e);
         if (!ativo) return;
@@ -217,19 +268,41 @@ export default function PrePartoParto({ isOnline = navigator.onLine }) {
     isOnline,
   ]);
 
-  const statusSyncTexto = useMemo(() => {
-    if (!isOnline) {
-      if (hasCache && cacheMetadata?.updatedAt) {
-        const textoData = new Date(cacheMetadata.updatedAt).toLocaleString("pt-BR");
-        return `Offline: usando dados salvos em ${textoData}`;
-      }
-      if (hasCache) {
-        return "Offline: usando dados salvos no computador";
-      }
-      return "Offline: sem dados salvos no computador";
+  useEffect(() => {
+    let ativo = true;
+
+    async function carregarConfig() {
+      const { data, error } = await supabase.auth.getUser();
+      if (error || !data?.user?.id) return;
+      const uid = data.user.id;
+      if (!ativo) return;
+      setUserId(uid);
+      const cfg = await loadCfg(uid);
+      if (!ativo) return;
+      setDiasPreParto(Number(cfg.dias_antes_parto_para_preparto ?? 30));
     }
-    return "";
-  }, [cacheMetadata, hasCache, isOnline]);
+
+    carregarConfig();
+    return () => {
+      ativo = false;
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const scheduleSave = useCallback(
+    (patch) => {
+      if (!userId) return;
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+      saveTimeoutRef.current = setTimeout(() => {
+        saveCfg(userId, patch);
+      }, 400);
+    },
+    [userId]
+  );
 
   const linhasOrdenadas = useMemo(() => {
     const hoje = new Date();
@@ -343,16 +416,21 @@ export default function PrePartoParto({ isOnline = navigator.onLine }) {
           Dias antes do parto para entrar em pré-parto
           <input
             className="st-filter-input"
-            style={{ width: 90 }}
+            style={{ width: 130 }}
             type="number"
             min={1}
             value={diasPreParto}
-            onChange={(event) => setDiasPreParto(Number(event.target.value || 0))}
+            onChange={(event) => {
+              const value = Number(event.target.value || 0);
+              setDiasPreParto(value);
+              scheduleSave({ dias_antes_parto_para_preparto: value });
+            }}
+            onBlur={() =>
+              saveCfg(userId, { dias_antes_parto_para_preparto: diasPreParto })
+            }
           />
         </label>
       </div>
-
-      {statusSyncTexto && <div className="st-filter-hint">{statusSyncTexto}</div>}
 
       <div className="st-table-container">
         <div className="st-table-wrap">
