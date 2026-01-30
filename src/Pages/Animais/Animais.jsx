@@ -268,7 +268,9 @@ export default function Animais() {
     console.log("[animais] online -> buscando supabase");
     try {
       if (!fazendaAtualId) {
-        throw new Error("Selecione uma fazenda para carregar os animais.");
+        setAnimaisAtivos([]);
+        setAnimaisInativos([]);
+        return;
       }
 
       const { data: ativos, error: erroAtivos } = await withFazendaId(
@@ -353,8 +355,11 @@ export default function Animais() {
   }, [fazendaAtualId, isOnline]);
 
   useEffect(() => {
+    if (!fazendaAtualId) {
+      return;
+    }
     carregarAnimais();
-  }, [carregarAnimais]);
+  }, [carregarAnimais, fazendaAtualId]);
 
   useEffect(() => {
     const overflowOriginal = document.body.style.overflow;

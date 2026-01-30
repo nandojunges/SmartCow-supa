@@ -230,6 +230,11 @@ export default function Plantel({ isOnline = navigator.onLine }) {
   }, [CACHE_FALLBACK_KEY, CACHE_KEY]);
 
   useEffect(() => {
+    if (!fazendaAtualId) {
+      setCarregando(false);
+      return undefined;
+    }
+
     let ativo = true;
 
     async function carregarDados() {
@@ -249,9 +254,6 @@ export default function Plantel({ isOnline = navigator.onLine }) {
           return;
         }
 
-        if (!fazendaAtualId) {
-          throw new Error("Selecione uma fazenda para carregar o plantel.");
-        }
         if (!ativo) return;
 
         const [animaisData, lotesData, racasData] = await Promise.all([

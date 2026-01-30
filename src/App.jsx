@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { Routes, Route, Navigate, Outlet, useNavigate } from "react-router-dom";
 import { ToastContainer, toast } from "react-toastify";
+import Select from "react-select";
 import "react-toastify/dist/ReactToastify.css";
 import { supabase } from "./lib/supabaseClient";
 import { syncAnimaisSeed, syncPending } from "./offline/sync";
@@ -243,6 +244,15 @@ function SelecaoFazendaModal({ fazendas, onSelecionar }) {
     return null;
   }
 
+  const opcoesFazenda = fazendas.map((fazenda) => ({
+    value: fazenda.id,
+    label: fazenda.name ?? fazenda.nome ?? `Fazenda ${fazenda.id}`,
+  }));
+  const fazendaSelecionada =
+    opcoesFazenda.find(
+      (opcao) => String(opcao.value) === String(selecionada ?? "")
+    ) ?? null;
+
   return (
     <div style={modalStyles.overlay}>
       <div style={modalStyles.card}>
@@ -250,17 +260,26 @@ function SelecaoFazendaModal({ fazendas, onSelecionar }) {
         <p style={modalStyles.subtitle}>
           Escolha qual fazenda deseja acessar agora.
         </p>
-        <select
-          style={modalStyles.select}
-          value={selecionada}
-          onChange={(event) => setSelecionada(event.target.value)}
-        >
-          {fazendas.map((fazenda) => (
-            <option key={fazenda.id} value={fazenda.id}>
-              {fazenda.nome || `Fazenda ${fazenda.id}`}
-            </option>
-          ))}
-        </select>
+        <Select
+          options={opcoesFazenda}
+          value={fazendaSelecionada}
+          onChange={(opcao) =>
+            setSelecionada(opcao?.value ? String(opcao.value) : null)
+          }
+          styles={{
+            control: (base) => ({
+              ...base,
+              borderRadius: 12,
+              borderColor: "#e2e8f0",
+              minHeight: 42,
+              boxShadow: "none",
+            }),
+            menu: (base) => ({
+              ...base,
+              zIndex: 5,
+            }),
+          }}
+        />
         <button
           type="button"
           style={modalStyles.button}
