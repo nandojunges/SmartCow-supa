@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { canUseOffline, saveOfflineSession } from "../offline/offlineAuth";
+import { useFazenda } from "../context/FazendaContext";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -14,6 +15,7 @@ export default function Login() {
   const [offlineError, setOfflineError] = useState("");
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [canInstall, setCanInstall] = useState(false);
+  const { setFazendaAtualId } = useFazenda();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -143,6 +145,20 @@ export default function Login() {
       const tipoConta = tipoContaPerfil
         ? String(tipoContaPerfil).trim().toUpperCase()
         : "PRODUTOR";
+
+      if (tipoConta === "PRODUTOR") {
+        const { data: fazendas, error: fazendasError } = await supabase
+          .from("fazendas")
+          .select("id")
+          .eq("owner_user_id", userId)
+          .order("created_at", { ascending: true });
+
+        if (fazendasError) {
+          console.warn("Erro ao buscar fazendas do produtor:", fazendasError.message);
+        } else if (fazendas?.length === 1) {
+          setFazendaAtualId(fazendas[0].id);
+        }
+      }
 
       // 🔍 DEBUG: ver o que está vindo
       console.log("DEBUG LOGIN:", {

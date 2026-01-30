@@ -39,7 +39,8 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
-  const { hasFazendaAtual } = useFazenda();
+  const [fazendasLoading, setFazendasLoading] = useState(false);
+  const { hasFazendaAtual, setFazendaAtualId } = useFazenda();
 
   // Ouve sessão do Supabase
   useEffect(() => {
@@ -111,7 +112,51 @@ export default function App() {
   const isAssistenteTecnico = tipoConta === "ASSISTENTE_TECNICO";
   const hasFazendaSelecionada = hasFazendaAtual;
 
-  const fazendasLoading = false;
+  useEffect(() => {
+    if (!session?.user?.id) {
+      return;
+    }
+
+    if (tipoConta !== "PRODUTOR") {
+      return;
+    }
+
+    if (hasFazendaAtual) {
+      return;
+    }
+
+    let isMounted = true;
+    setFazendasLoading(true);
+
+    supabase
+      .from("fazendas")
+      .select("id")
+      .eq("owner_user_id", session.user.id)
+      .order("created_at", { ascending: true })
+      .then(({ data, error }) => {
+        if (!isMounted) {
+          return;
+        }
+
+        if (error) {
+          console.warn("Erro ao buscar fazendas do produtor:", error.message);
+          return;
+        }
+
+        if (data?.length === 1) {
+          setFazendaAtualId(data[0].id);
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setFazendasLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [hasFazendaAtual, session?.user?.id, setFazendaAtualId, tipoConta]);
 
   if (loading) {
     return null; // ou um spinner de "Carregando..."
