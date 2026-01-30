@@ -1,11 +1,31 @@
 import { supabase } from "./supabaseClient";
 
 export const LAST_FARM_ID_KEY = "smartcow:lastFarmId";
+const USER_SETTINGS_MISSING_KEY = "smartcow:user_settings_missing";
 let missingUserSettingsTableWarned = false;
 
 function isMissingUserSettingsTableError(error) {
   const message = error?.message?.toLowerCase?.() ?? "";
-  return message.includes("could not find the table");
+  return (
+    error?.code === "42P01" ||
+    error?.status === 404 ||
+    message.includes("42p01") ||
+    message.includes("could not find the table")
+  );
+}
+
+function isUserSettingsMissing() {
+  if (typeof localStorage === "undefined") {
+    return false;
+  }
+  return localStorage.getItem(USER_SETTINGS_MISSING_KEY) === "1";
+}
+
+function marcarUserSettingsMissing() {
+  if (typeof localStorage === "undefined") {
+    return;
+  }
+  localStorage.setItem(USER_SETTINGS_MISSING_KEY, "1");
 }
 
 export function getLastFarmId() {
@@ -32,6 +52,10 @@ export async function atualizarLastFarmUsuario({ userId, farmId }) {
     return;
   }
 
+  if (isUserSettingsMissing()) {
+    return;
+  }
+
   try {
     const { error } = await supabase
       .from("user_settings")
@@ -42,6 +66,7 @@ export async function atualizarLastFarmUsuario({ userId, farmId }) {
     }
 
     if (isMissingUserSettingsTableError(error)) {
+      marcarUserSettingsMissing();
       if (!missingUserSettingsTableWarned) {
         console.warn("Tabela user_settings não encontrada; ignorando last_farm_id.");
         missingUserSettingsTableWarned = true;
@@ -54,6 +79,7 @@ export async function atualizarLastFarmUsuario({ userId, farmId }) {
     }
   } catch (error) {
     if (isMissingUserSettingsTableError(error)) {
+      marcarUserSettingsMissing();
       if (!missingUserSettingsTableWarned) {
         console.warn("Tabela user_settings não encontrada; ignorando last_farm_id.");
         missingUserSettingsTableWarned = true;
