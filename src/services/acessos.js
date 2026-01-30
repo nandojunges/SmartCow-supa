@@ -133,8 +133,10 @@ export async function listarConvitesPendentesTecnico(email) {
 
   const { data, error } = await supabase
     .from("convites_acesso")
-    .select(`id, fazenda_id, status, created_at, ${CONVITE_EMAIL_COL}, tipo_profissional, nome_profissional`)
-    .eq(CONVITE_EMAIL_COL, emailNormalizado)
+    .select(
+      `id, fazenda_id, status, created_at, ${CONVITE_EMAIL_COL}, tipo_profissional, nome_profissional`
+    )
+    .ilike(CONVITE_EMAIL_COL, emailNormalizado)
     .eq("status", "PENDENTE")
     .order("created_at", { ascending: false });
 
