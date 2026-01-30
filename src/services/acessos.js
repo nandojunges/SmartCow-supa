@@ -79,7 +79,7 @@ export async function listarConvitesPendentesProdutor(fazendaId) {
       `id, ${CONVITE_EMAIL_COL}, status, created_at, tipo_profissional, nome_profissional`
     )
     .eq("fazenda_id", fazendaId)
-    .eq("status", "pendente")
+    .eq("status", "PENDENTE")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -111,7 +111,7 @@ export async function criarConvite(fazendaId, email, { tipoProfissional, nomePro
     email,
     payloadBase: {
       fazenda_id: fazendaId,
-      status: "pendente",
+      status: "PENDENTE",
       tipo_profissional: tipoProfissional ?? null,
       nome_profissional: nomeProfissional ?? null,
     },
@@ -134,8 +134,8 @@ export async function listarConvitesPendentesTecnico(email) {
   const { data, error } = await supabase
     .from("convites_acesso")
     .select(`id, fazenda_id, status, created_at, ${CONVITE_EMAIL_COL}, tipo_profissional, nome_profissional`)
-    .eq(CONVITE_EMAIL_COL, emailNormalizado)
-    .eq("status", "pendente")
+    .filter(`lower(${CONVITE_EMAIL_COL})`, "eq", emailNormalizado)
+    .eq("status", "PENDENTE")
     .order("created_at", { ascending: false });
 
   if (error) {

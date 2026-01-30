@@ -4,7 +4,7 @@ import { toast } from "react-toastify";
 import { supabase } from "../../lib/supabaseClient";
 import { useFazenda } from "../../context/FazendaContext";
 import { listAcessosDaFazenda } from "../../lib/fazendaHelpers";
-import { criarConvite, listarConvitesPendentesProdutor } from "../../services/acessos";
+import { listarConvitesPendentesProdutor } from "../../services/acessos";
 import "./Ajustes.css";
 
 const PROFISSIONAIS_OPTIONS = [
@@ -99,6 +99,23 @@ export default function Ajustes() {
       toast.error(error?.message || "Não foi possível carregar os acessos.");
     } finally {
       setCarregandoAcessos(false);
+    }
+  }, []);
+
+  const carregarConvitesPendentes = useCallback(async (fazendaIdAtual) => {
+    if (!fazendaIdAtual) {
+      setConvites([]);
+      return;
+    }
+
+    try {
+      const convitesData = await listarConvitesPendentesProdutor(fazendaIdAtual);
+      setConvites(convitesData ?? []);
+    } catch (error) {
+      if (import.meta.env.DEV) {
+        console.error("Erro ao carregar convites:", error?.message);
+      }
+      toast.error(error?.message || "Não foi possível carregar os convites.");
     }
   }, []);
 
@@ -291,98 +308,30 @@ export default function Ajustes() {
     try {
       setEnviandoConvite(true);
 
-      const { data: perfilData, error: perfilError } = await supabase
-        .from("profiles")
-        .select("id, email")
-        .eq("email", emailConviteNormalizado)
-        .maybeSingle();
-
-      if (perfilError) {
-        throw perfilError;
-      }
-
-      if (perfilData?.id) {
-        const { data: acessoExistente, error: acessoError } = await supabase
-          .from("fazenda_acessos")
-          .select("id")
-          .eq("fazenda_id", fazendaAtualId)
-          .eq("user_id", perfilData.id)
-          .order("created_at", { ascending: true })
-          .limit(1)
-          .maybeSingle();
-
-        if (acessoError) {
-          throw acessoError;
-        }
-
-        const payload = {
-          status: "ATIVO",
-          tipo_profissional: profissionalTipo?.value ?? null,
-          nome_profissional: profissionalNome?.trim() || null,
-        };
-
-        if (acessoExistente?.id) {
-          const { error: updateError } = await supabase
-            .from("fazenda_acessos")
-            .update(payload)
-            .eq("id", acessoExistente.id);
-
-          if (updateError) {
-            throw updateError;
-          }
-        } else {
-          const { error: insertError } = await supabase.from("fazenda_acessos").insert({
+      const { error: upsertError } = await supabase
+        .from("convites_acesso")
+        .upsert(
+          {
             fazenda_id: fazendaAtualId,
-            user_id: perfilData.id,
-            ...payload,
-          });
+            email_convidado: emailConviteNormalizado,
+            status: "PENDENTE",
+            permissoes: null,
+            tipo_profissional: profissionalTipo?.value ?? null,
+            nome_profissional: profissionalNome?.trim() || null,
+          },
+          { onConflict: "fazenda_id,email_convidado" }
+        );
 
-          if (insertError) {
-            throw insertError;
-          }
-        }
-
-        toast.success("Acesso reativado com sucesso.");
-      } else {
-        const { data: conviteExistente, error: conviteError } = await supabase
-          .from("convites_acesso")
-          .select("id")
-          .eq("fazenda_id", fazendaAtualId)
-          .eq("email_convidado", emailConviteNormalizado)
-          .limit(1)
-          .maybeSingle();
-
-        if (conviteError) {
-          throw conviteError;
-        }
-
-        if (conviteExistente?.id) {
-          const { error: updateError } = await supabase
-            .from("convites_acesso")
-            .update({
-              status: "pendente",
-              tipo_profissional: profissionalTipo?.value ?? null,
-              nome_profissional: profissionalNome?.trim() || null,
-            })
-            .eq("id", conviteExistente.id);
-
-          if (updateError) {
-            throw updateError;
-          }
-        } else {
-          await criarConvite(fazendaAtualId, emailConviteNormalizado, {
-            tipoProfissional: profissionalTipo?.value ?? null,
-            nomeProfissional: profissionalNome?.trim() || null,
-          });
-        }
-
-        toast.success("Convite enviado! O profissional verá ao acessar.");
+      if (upsertError) {
+        throw new Error("Não foi possível enviar o convite. Tente novamente.");
       }
+
+      toast.success("Convite enviado! O profissional verá ao acessar.");
 
       setEmailConvite("");
       setProfissionalTipo(null);
       setProfissionalNome("");
-      await carregarAcessos(fazendaAtualId);
+      await carregarConvitesPendentes(fazendaAtualId);
     } catch (error) {
       if (import.meta.env.DEV) {
         console.error("Erro ao enviar convite:", error?.message);
@@ -608,12 +557,15 @@ export default function Ajustes() {
                     acesso.profiles?.email ||
                     acesso.user_id ||
                     "Sem nome";
+                  const emailProfissional =
+                    acesso.profiles?.email || "E-mail não disponível";
                   const statusLabel = formatarStatus(acesso.status);
 
                   return (
                     <div key={acesso.id} className="ajustes-list__item">
                       <div>
                         <strong>{nomeCompleto}</strong>
+                        <span>{emailProfissional}</span>
                         <span>
                           {(acesso.tipo_profissional || "Tipo não informado") +
                             (acesso.nome_profissional
