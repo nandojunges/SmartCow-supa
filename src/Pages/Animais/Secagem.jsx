@@ -1,9 +1,10 @@
 // src/Pages/Animais/Secagem.jsx
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { withFazendaId } from "../../lib/fazendaScope";
 import { useFazenda } from "../../context/FazendaContext";
 import { enqueue, kvGet, kvSet } from "../../offline/localDB";
+import { getConfigManejo, saveConfigManejo } from "../../repo/configManejoRepo";
 import "../../styles/tabelaModerna.css";
 import ModalRegistrarSecagem from "./ModalRegistrarSecagem";
 
@@ -84,6 +85,10 @@ export default function Secagem({ isOnline = navigator.onLine }) {
 
   const [diasAntes, setDiasAntes] = useState(60);
   const [diasAviso, setDiasAviso] = useState(7);
+  const [userId, setUserId] = useState(null);
+  const [configLoaded, setConfigLoaded] = useState(false);
+
+  const saveTimeoutRef = useRef(null);
 
   const [hoveredRowId, setHoveredRowId] = useState(null);
   const [hoveredColKey, setHoveredColKey] = useState(null);
@@ -159,6 +164,46 @@ export default function Secagem({ isOnline = navigator.onLine }) {
   useEffect(() => {
     let ativo = true;
 
+    async function carregarUsuario() {
+      const { data, error } = await supabase.auth.getUser();
+      if (!ativo) return;
+      if (error) {
+        console.error("Erro ao identificar usuário:", error);
+      }
+      setUserId(data?.user?.id ?? null);
+    }
+
+    carregarUsuario();
+    return () => {
+      ativo = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ativo = true;
+
+    async function carregarConfig() {
+      if (!userId) {
+        setConfigLoaded(true);
+        return;
+      }
+      const cfg = await getConfigManejo({ userId });
+      if (!ativo) return;
+      setDiasAntes(Number(cfg?.dias_antes_parto_para_secagem ?? 60));
+      setDiasAviso(Number(cfg?.dias_antecedencia_preparar_secagem ?? 7));
+      setConfigLoaded(true);
+    }
+
+    setConfigLoaded(false);
+    carregarConfig();
+    return () => {
+      ativo = false;
+    };
+  }, [userId]);
+
+  useEffect(() => {
+    let ativo = true;
+
     async function carregarDados() {
       setCarregando(true);
       setErro("");
@@ -215,6 +260,28 @@ export default function Secagem({ isOnline = navigator.onLine }) {
     fazendaAtualId,
     isOnline,
   ]);
+
+  useEffect(() => {
+    if (!userId || !configLoaded) return;
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+    saveTimeoutRef.current = setTimeout(() => {
+      saveConfigManejo({
+        userId,
+        patch: {
+          dias_antes_parto_para_secagem: diasAntes,
+          dias_antecedencia_preparar_secagem: diasAviso,
+        },
+      });
+    }, 400);
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [configLoaded, diasAntes, diasAviso, userId]);
 
   const statusSyncTexto = useMemo(() => {
     if (!isOnline) {
@@ -355,6 +422,13 @@ export default function Secagem({ isOnline = navigator.onLine }) {
             placeholder="Ex: 60"
             value={diasAntes}
             onChange={(event) => setDiasAntes(Number(event.target.value || 0))}
+            onBlur={() => {
+              if (!userId || !configLoaded) return;
+              saveConfigManejo({
+                userId,
+                patch: { dias_antes_parto_para_secagem: diasAntes },
+              });
+            }}
           />
         </label>
         <label
@@ -370,6 +444,13 @@ export default function Secagem({ isOnline = navigator.onLine }) {
             placeholder="Ex: 7"
             value={diasAviso}
             onChange={(event) => setDiasAviso(Number(event.target.value || 0))}
+            onBlur={() => {
+              if (!userId || !configLoaded) return;
+              saveConfigManejo({
+                userId,
+                patch: { dias_antecedencia_preparar_secagem: diasAviso },
+              });
+            }}
           />
         </label>
       </div>
