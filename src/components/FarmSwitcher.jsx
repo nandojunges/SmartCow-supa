@@ -92,7 +92,8 @@ export default function FarmSwitcher({ style }) {
     return fazendas.find((fazenda) => String(fazenda.id) === String(fazendaAtualId)) ?? null;
   }, [fazendaAtualId, fazendas]);
 
-  const nomeFazenda = fazendaAtiva?.nome ?? (loading ? "Carregando..." : "-");
+  const nomeFazenda =
+    fazendaAtiva?.nome ?? fazendaAtiva?.name ?? (loading ? "Carregando..." : "-");
   const temDropdown = fazendas.length > 1;
 
   useEffect(() => {
@@ -202,7 +203,7 @@ export default function FarmSwitcher({ style }) {
                   textAlign: "left",
                 }}
               >
-                {fazenda.nome}
+                {fazenda.nome ?? fazenda.name}
               </button>
             );
           })}

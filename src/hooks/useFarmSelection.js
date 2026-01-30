@@ -37,6 +37,9 @@ export function useFarmSelection({ userId, tipoConta, onSelect, onError }) {
       }
 
       setFazendaAtualId(fazendaId);
+      if (import.meta.env.DEV) {
+        console.info("[farm-selection] currentFarmId:", String(fazendaId));
+      }
       setMostrarSeletor(false);
       setLastFarmId(fazendaId);
       await atualizarLastFarmUsuario({ userId, farmId: fazendaId });
@@ -74,7 +77,54 @@ export function useFarmSelection({ userId, tipoConta, onSelect, onError }) {
         return;
       }
 
-      setFazendas(fazendasDisponiveis);
+      const fazendasNormalizadas = (fazendasDisponiveis ?? [])
+        .map((fazenda) => {
+          const id =
+            fazenda?.id ??
+            fazenda?.farm_id ??
+            fazenda?.fazenda_id ??
+            fazenda?.fazendas?.id ??
+            fazenda?.farms?.id;
+          const nome =
+            fazenda?.nome ??
+            fazenda?.name ??
+            fazenda?.fazendas?.nome ??
+            fazenda?.farms?.nome;
+
+          if (!id || !nome) {
+            return null;
+          }
+
+          return {
+            ...fazenda,
+            id,
+            nome,
+            name: nome,
+          };
+        })
+        .filter(Boolean);
+
+      const fazendasDeduplicadas = new Map();
+      fazendasNormalizadas.forEach((fazenda) => {
+        const key = String(fazenda.id);
+        if (!fazendasDeduplicadas.has(key)) {
+          fazendasDeduplicadas.set(key, fazenda);
+        }
+      });
+
+      const fazendasFinal = Array.from(fazendasDeduplicadas.values());
+
+      if (import.meta.env.DEV) {
+        console.info(
+          "[farm-selection] fazendas recebidas:",
+          fazendasFinal.map((fazenda) => ({
+            id: fazenda.id,
+            nome: fazenda.nome ?? fazenda.name,
+          }))
+        );
+      }
+
+      setFazendas(fazendasFinal);
     } catch (error) {
       if (import.meta.env.DEV) {
         console.error("Erro ao carregar fazendas:", error?.message);
