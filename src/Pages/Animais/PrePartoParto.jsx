@@ -1,5 +1,5 @@
 // src/pages/Animais/PrePartoParto.jsx
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { withFazendaId } from "../../lib/fazendaScope";
 import { useFazenda } from "../../context/FazendaContext";
@@ -18,47 +18,55 @@ const DEFAULT_CFG = {
   dias_antes_parto_para_preparto: 30,
 };
 
-async function loadCfg(userId) {
-  if (!userId) return { ...DEFAULT_CFG };
+const cfgKey = (userId, fazendaId) => `${KEY}:${userId || "anon"}:${fazendaId || "none"}`;
+
+async function loadCfg(userId, fazendaId) {
+  if (!userId || !fazendaId) return { ...DEFAULT_CFG };
   try {
     const { data, error, status } = await supabase
       .from("config_manejo_repro")
       .select("*")
       .eq("user_id", userId)
+      .eq("fazenda_id", fazendaId)
       .single();
 
     if (error) {
       if (status === 406 || error.code === "PGRST116") {
-        const defaults = { ...DEFAULT_CFG, user_id: userId };
+        const defaults = { ...DEFAULT_CFG, user_id: userId, fazenda_id: fazendaId };
         await supabase
           .from("config_manejo_repro")
-          .upsert(defaults, { onConflict: "user_id" });
-        await kvSet(KEY, defaults);
+          .upsert(defaults, { onConflict: "user_id,fazenda_id" });
+        await kvSet(cfgKey(userId, fazendaId), defaults);
         return defaults;
       }
       throw error;
     }
 
     if (data) {
-      await kvSet(KEY, data);
+      await kvSet(cfgKey(userId, fazendaId), data);
       return { ...DEFAULT_CFG, ...data };
     }
   } catch (error) {
-    const cached = await kvGet(KEY);
-    return { ...DEFAULT_CFG, ...(cached || {}), user_id: userId };
+    const cached = await kvGet(cfgKey(userId, fazendaId));
+    return { ...DEFAULT_CFG, ...(cached || {}), user_id: userId, fazenda_id: fazendaId };
   }
-  return { ...DEFAULT_CFG, user_id: userId };
+  return { ...DEFAULT_CFG, user_id: userId, fazenda_id: fazendaId };
 }
 
-async function saveCfg(userId, patch) {
-  if (!userId) return null;
-  const cached = (await kvGet(KEY)) || {};
-  const merged = { ...cached, ...patch, user_id: userId };
-  await kvSet(KEY, merged);
+async function saveCfg(userId, fazendaId, patch) {
+  if (!userId || !fazendaId) return null;
+  const cached = (await kvGet(cfgKey(userId, fazendaId))) || {};
+  const merged = {
+    ...cached,
+    ...patch,
+    user_id: userId,
+    fazenda_id: fazendaId,
+  };
+  await kvSet(cfgKey(userId, fazendaId), merged);
   try {
     const { error } = await supabase
       .from("config_manejo_repro")
-      .upsert(merged, { onConflict: "user_id" });
+      .upsert(merged, { onConflict: "user_id,fazenda_id" });
     if (error) throw error;
   } catch (error) {
     await enqueue("cfg_manejo_upsert", merged);
@@ -139,8 +147,6 @@ export default function PrePartoParto({ isOnline = navigator.onLine }) {
 
   const [diasPreParto, setDiasPreParto] = useState(30);
   const [userId, setUserId] = useState(null);
-  const saveTimeoutRef = useRef(null);
-
   const [hoveredRowId, setHoveredRowId] = useState(null);
   const [hoveredColKey, setHoveredColKey] = useState(null);
 
@@ -277,7 +283,11 @@ export default function PrePartoParto({ isOnline = navigator.onLine }) {
       const uid = data.user.id;
       if (!ativo) return;
       setUserId(uid);
-      const cfg = await loadCfg(uid);
+      if (!fazendaAtualId) {
+        setErro("Selecione uma fazenda para ajustar os parâmetros de pré-parto.");
+        return;
+      }
+      const cfg = await loadCfg(uid, fazendaAtualId);
       if (!ativo) return;
       setDiasPreParto(Number(cfg.dias_antes_parto_para_preparto ?? 30));
     }
@@ -285,24 +295,8 @@ export default function PrePartoParto({ isOnline = navigator.onLine }) {
     carregarConfig();
     return () => {
       ativo = false;
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
     };
-  }, []);
-
-  const scheduleSave = useCallback(
-    (patch) => {
-      if (!userId) return;
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-      saveTimeoutRef.current = setTimeout(() => {
-        saveCfg(userId, patch);
-      }, 400);
-    },
-    [userId]
-  );
+  }, [fazendaAtualId]);
 
   const linhasOrdenadas = useMemo(() => {
     const hoje = new Date();
@@ -412,22 +406,21 @@ export default function PrePartoParto({ isOnline = navigator.onLine }) {
           marginBottom: 12,
         }}
       >
-        <label className="st-filter__label" style={{ maxWidth: 220, flex: "1 1 220px" }}>
+        <label className="st-filter__label" style={{ maxWidth: 260, flex: "1 1 260px" }}>
           Dias antes do parto para entrar em pré-parto
           <input
             className="st-filter-input"
-            style={{ width: 130 }}
+            style={{ width: 90 }}
             type="number"
             min={1}
             value={diasPreParto}
             onChange={(event) => {
               const value = Number(event.target.value || 0);
               setDiasPreParto(value);
-              scheduleSave({ dias_antes_parto_para_preparto: value });
+              saveCfg(userId, fazendaAtualId, {
+                dias_antes_parto_para_preparto: value,
+              });
             }}
-            onBlur={() =>
-              saveCfg(userId, { dias_antes_parto_para_preparto: diasPreParto })
-            }
           />
         </label>
       </div>

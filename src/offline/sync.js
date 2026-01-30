@@ -259,7 +259,7 @@ export async function syncPending() {
         const payload = item.payload || {};
         const { error } = await supabase
           .from("config_manejo_repro")
-          .upsert(payload, { onConflict: "user_id" });
+          .upsert(payload, { onConflict: "user_id,fazenda_id" });
         if (error) throw error;
         await markDone(item.id);
         continue;
