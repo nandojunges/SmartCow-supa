@@ -255,6 +255,16 @@ export async function syncPending() {
         continue;
       }
 
+      if (item.action === "config_manejo_repro.upsert") {
+        const payload = item.payload || {};
+        const { error } = await supabase
+          .from("config_manejo_repro")
+          .upsert(payload, { onConflict: "user_id" });
+        if (error) throw error;
+        await markDone(item.id);
+        continue;
+      }
+
       await markFailed(item.id, `Ação não suportada: ${item.action}`);
     } catch (error) {
       console.error("[sync] Falha ao processar item:", item, error);
