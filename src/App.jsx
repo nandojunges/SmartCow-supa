@@ -1,9 +1,8 @@
 // src/App.jsx
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import { supabase } from "./lib/supabaseClient";
 import { syncAnimaisSeed, syncPending } from "./offline/sync";
 import { useFazenda } from "./context/FazendaContext";
 
@@ -35,29 +34,14 @@ import Admin from "./Pages/Admin/Admin.jsx";
 import TecnicoHome from "./Pages/Tecnico/TecnicoHome.jsx";
 
 export default function App() {
-  const [session, setSession] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [profile, setProfile] = useState(null);
-  const [profileLoading, setProfileLoading] = useState(false);
-  const [fazendasLoading, setFazendasLoading] = useState(false);
-  const { hasFazendaAtual, setFazendaAtualId } = useFazenda();
-
-  // Ouve sessão do Supabase
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoading(false);
-    });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
+  const {
+    ready,
+    session,
+    tipoConta,
+    hasFazendaAtual,
+    profileLoading,
+    fazendasLoading,
+  } = useFazenda();
 
   useEffect(() => {
     const handleOnline = () => {
@@ -75,95 +59,28 @@ export default function App() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!session?.user?.id) {
-      setProfile(null);
-      setProfileLoading(false);
-      return;
-    }
-
-    let isMounted = true;
-    setProfileLoading(true);
-
-    supabase
-      .from("profiles")
-      .select("id, tipo_conta, role")
-      .eq("id", session.user.id)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (!isMounted) return;
-        if (error) {
-          console.warn("Erro ao carregar perfil:", error.message);
-        }
-        setProfile(data ?? null);
-        setProfileLoading(false);
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [session?.user?.id]);
-
-  const tipoContaRaw =
-    profile?.tipo_conta ??
-    session?.user?.user_metadata?.tipo_conta ??
-    session?.user?.user_metadata?.tipoConta;
-  const tipoConta = tipoContaRaw ? String(tipoContaRaw).trim().toUpperCase() : "PRODUTOR";
-  const isAssistenteTecnico = tipoConta === "ASSISTENTE_TECNICO";
+  const tipoContaNormalizada = tipoConta ? String(tipoConta).trim().toUpperCase() : null;
+  const isAssistenteTecnico = tipoContaNormalizada === "ASSISTENTE_TECNICO";
   const hasFazendaSelecionada = hasFazendaAtual;
+  const isProdutor = tipoContaNormalizada === "PRODUTOR";
 
-  useEffect(() => {
-    if (!session?.user?.id) {
-      return;
-    }
-
-    if (profileLoading) {
-      return;
-    }
-
-    if (tipoConta !== "PRODUTOR") {
-      return;
-    }
-
-    if (hasFazendaAtual) {
-      return;
-    }
-
-    let isMounted = true;
-    setFazendasLoading(true);
-
-    supabase
-      .from("fazendas")
-      .select("id")
-      .eq("owner_user_id", session.user.id)
-      .order("created_at", { ascending: true })
-      .then(({ data, error }) => {
-        if (!isMounted) {
-          return;
-        }
-
-        if (error) {
-          console.warn("Erro ao buscar fazendas do produtor:", error.message);
-          return;
-        }
-
-        if (data?.length > 0) {
-          setFazendaAtualId(data[0].id);
-        }
-      })
-      .finally(() => {
-        if (isMounted) {
-          setFazendasLoading(false);
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [hasFazendaAtual, profileLoading, session?.user?.id, setFazendaAtualId, tipoConta]);
-
-  if (loading) {
-    return null; // ou um spinner de "Carregando..."
+  if (!ready) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 16,
+          fontWeight: 600,
+          color: "#1f2937",
+          background: "#f8fafc",
+        }}
+      >
+        Carregando...
+      </div>
+    );
   }
 
   return (
@@ -199,7 +116,7 @@ export default function App() {
                   isAssistenteTecnico={isAssistenteTecnico}
                   hasFazendaSelecionada={hasFazendaSelecionada}
                   loading={profileLoading}
-                  isProdutor={tipoConta === "PRODUTOR"}
+                  isProdutor={isProdutor}
                   selecionandoFazenda={fazendasLoading}
                 />
               }
