@@ -1,13 +1,11 @@
 // src/App.jsx
 import { useEffect, useState } from "react";
-import { Routes, Route, Navigate, Outlet, useNavigate } from "react-router-dom";
+import { Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { ToastContainer, toast } from "react-toastify";
-import Select from "react-select";
 import "react-toastify/dist/ReactToastify.css";
 import { supabase } from "./lib/supabaseClient";
 import { syncAnimaisSeed, syncPending } from "./offline/sync";
 import { useFazenda } from "./context/FazendaContext";
-import { useFarmSelection } from "./hooks/useFarmSelection";
 
 // Telas
 import Login from "./Auth/Login";
@@ -37,7 +35,6 @@ import Admin from "./Pages/Admin/Admin.jsx";
 import TecnicoHome from "./Pages/Tecnico/TecnicoHome.jsx";
 
 export default function App() {
-  const navigate = useNavigate();
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState(null);
@@ -114,17 +111,7 @@ export default function App() {
   const isAssistenteTecnico = tipoConta === "ASSISTENTE_TECNICO";
   const hasFazendaSelecionada = hasFazendaAtual;
 
-  const { fazendas, mostrarSeletor, selecionarFazenda, loading: fazendasLoading } =
-    useFarmSelection({
-      userId: session?.user?.id,
-      tipoConta,
-      onSelect: () => {
-        navigate("/inicio", { replace: true });
-      },
-      onError: () => {
-        toast.error("Não foi possível localizar suas fazendas.");
-      },
-    });
+  const fazendasLoading = false;
 
   if (loading) {
     return null; // ou um spinner de "Carregando..."
@@ -164,7 +151,7 @@ export default function App() {
                   hasFazendaSelecionada={hasFazendaSelecionada}
                   loading={profileLoading}
                   isProdutor={tipoConta === "PRODUTOR"}
-                  selecionandoFazenda={fazendasLoading || mostrarSeletor}
+                  selecionandoFazenda={fazendasLoading}
                 />
               }
             >
@@ -193,14 +180,6 @@ export default function App() {
           </>
         )}
       </Routes>
-      {mostrarSeletor && (
-        <SelecaoFazendaModal
-          fazendas={fazendas}
-          onSelecionar={(fazendaId) => {
-            selecionarFazenda(fazendaId);
-          }}
-        />
-      )}
       <ToastContainer position="top-right" autoClose={3500} pauseOnFocusLoss={false} />
     </>
   );
@@ -232,113 +211,3 @@ function AssistenteGuard({
 
   return <Outlet />;
 }
-
-function SelecaoFazendaModal({ fazendas, onSelecionar }) {
-  const [selecionada, setSelecionada] = useState(fazendas?.[0]?.id ?? "");
-
-  useEffect(() => {
-    setSelecionada(fazendas?.[0]?.id ?? "");
-  }, [fazendas]);
-
-  if (!fazendas?.length) {
-    return null;
-  }
-
-  const opcoesFazenda = fazendas.map((fazenda) => ({
-    value: fazenda.id,
-    label: fazenda.name ?? fazenda.nome ?? `Fazenda ${fazenda.id}`,
-  }));
-  const fazendaSelecionada =
-    opcoesFazenda.find(
-      (opcao) => String(opcao.value) === String(selecionada ?? "")
-    ) ?? null;
-
-  return (
-    <div style={modalStyles.overlay}>
-      <div style={modalStyles.card}>
-        <h2 style={modalStyles.title}>Selecione a fazenda</h2>
-        <p style={modalStyles.subtitle}>
-          Escolha qual fazenda deseja acessar agora.
-        </p>
-        <Select
-          options={opcoesFazenda}
-          value={fazendaSelecionada}
-          onChange={(opcao) =>
-            setSelecionada(opcao?.value ? String(opcao.value) : null)
-          }
-          styles={{
-            control: (base) => ({
-              ...base,
-              borderRadius: 12,
-              borderColor: "#e2e8f0",
-              minHeight: 42,
-              boxShadow: "none",
-            }),
-            menu: (base) => ({
-              ...base,
-              zIndex: 5,
-            }),
-          }}
-        />
-        <button
-          type="button"
-          style={modalStyles.button}
-          onClick={() => onSelecionar(selecionada)}
-          disabled={!selecionada}
-        >
-          Acessar
-        </button>
-      </div>
-    </div>
-  );
-}
-
-const modalStyles = {
-  overlay: {
-    position: "fixed",
-    inset: 0,
-    background: "rgba(15, 23, 42, 0.35)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 9999,
-    padding: 16,
-  },
-  card: {
-    background: "#fff",
-    borderRadius: 16,
-    padding: 24,
-    width: "100%",
-    maxWidth: 420,
-    display: "flex",
-    flexDirection: "column",
-    gap: 12,
-    boxShadow: "0 12px 40px rgba(15, 23, 42, 0.2)",
-  },
-  title: {
-    margin: 0,
-    fontSize: 20,
-    fontWeight: 700,
-    color: "#0f172a",
-  },
-  subtitle: {
-    margin: 0,
-    fontSize: 13,
-    color: "#64748b",
-  },
-  select: {
-    borderRadius: 12,
-    border: "1px solid #e2e8f0",
-    padding: "10px 12px",
-    fontSize: 14,
-  },
-  button: {
-    borderRadius: 12,
-    border: "none",
-    background: "#2563eb",
-    color: "#fff",
-    fontWeight: 600,
-    padding: "10px 14px",
-    cursor: "pointer",
-  },
-};
