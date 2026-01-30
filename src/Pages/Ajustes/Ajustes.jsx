@@ -308,22 +308,23 @@ export default function Ajustes() {
     try {
       setEnviandoConvite(true);
 
-      const { error: upsertError } = await supabase
-        .from("convites_acesso")
-        .upsert(
-          {
-            fazenda_id: fazendaAtualId,
-            email_convidado: emailConviteNormalizado,
-            status: "PENDENTE",
-            permissoes: null,
-            tipo_profissional: profissionalTipo?.value ?? null,
-            nome_profissional: profissionalNome?.trim() || null,
-          },
-          { onConflict: "fazenda_id,email_convidado" }
-        );
+      const payload = {
+        fazenda_id: fazendaAtualId,
+        email_convidado: emailConviteNormalizado.trim().toLowerCase(),
+        status: "PENDENTE",
+        permissoes: null,
+        tipo_profissional: profissionalTipo?.value ?? null,
+        nome_profissional: profissionalNome?.trim() || null,
+      };
 
-      if (upsertError) {
-        throw new Error("Não foi possível enviar o convite. Tente novamente.");
+      const { error } = await supabase
+        .from("convites_acesso")
+        .upsert([payload], { onConflict: "fazenda_id,email_convidado" })
+        .select()
+        .single();
+
+      if (error) {
+        throw error;
       }
 
       toast.success("Convite enviado! O profissional verá ao acessar.");
@@ -333,9 +334,7 @@ export default function Ajustes() {
       setProfissionalNome("");
       await carregarConvitesPendentes(fazendaAtualId);
     } catch (error) {
-      if (import.meta.env.DEV) {
-        console.error("Erro ao enviar convite:", error?.message);
-      }
+      console.error("Erro supabase:", error);
       toast.error(error?.message || "Não foi possível enviar o convite.");
     } finally {
       setEnviandoConvite(false);
