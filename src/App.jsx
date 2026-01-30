@@ -117,6 +117,10 @@ export default function App() {
       return;
     }
 
+    if (profileLoading) {
+      return;
+    }
+
     if (tipoConta !== "PRODUTOR") {
       return;
     }
@@ -143,7 +147,7 @@ export default function App() {
           return;
         }
 
-        if (data?.length === 1) {
+        if (data?.length > 0) {
           setFazendaAtualId(data[0].id);
         }
       })
@@ -156,7 +160,7 @@ export default function App() {
     return () => {
       isMounted = false;
     };
-  }, [hasFazendaAtual, session?.user?.id, setFazendaAtualId, tipoConta]);
+  }, [hasFazendaAtual, profileLoading, session?.user?.id, setFazendaAtualId, tipoConta]);
 
   if (loading) {
     return null; // ou um spinner de "Carregando..."

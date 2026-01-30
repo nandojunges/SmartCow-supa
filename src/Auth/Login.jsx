@@ -155,25 +155,10 @@ export default function Login() {
 
         if (fazendasError) {
           console.warn("Erro ao buscar fazendas do produtor:", fazendasError.message);
-        } else if (fazendas?.length === 1) {
+        } else if (fazendas?.length > 0) {
           setFazendaAtualId(fazendas[0].id);
         }
       }
-
-      // 🔍 DEBUG: ver o que está vindo
-      console.log("DEBUG LOGIN:", {
-        userId,
-        emailAuth: user.email,
-        perfilRecebido: perfil,
-        roleCalculado: role,
-        tipoConta,
-      });
-      // isso é só provisório pra você ver na tela
-      alert(
-        `DEBUG\nuserId: ${userId}\nemail auth: ${user.email}\nrole detectado: ${role}\nperfil.id: ${
-          perfil?.id || "nenhum"
-        }`
-      );
 
       // 4) Decide rota com base no role e tipo de conta
       if (role === "admin") {
