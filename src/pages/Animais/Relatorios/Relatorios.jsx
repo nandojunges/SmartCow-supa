@@ -1,23 +1,31 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import DatasetBuilder from "./DatasetBuilder";
 import ReportComposer from "./ReportComposer";
 import SmartGrid from "./SmartGrid";
+import { getColumnsForDataset } from "./ColumnsCatalog";
 import { MOCK_DATASETS } from "./mockDatasets";
 import "./smartGrid.css";
 import "./print.css";
 
-const initialColumns = [
-  { key: "numero", label: "Número", width: 90 },
-  { key: "brinco", label: "Brinco", width: 140 },
-  { key: "categoria", label: "Categoria", width: 140 },
-  { key: "grupo", label: "Grupo", width: 140 },
-];
-
 export default function Relatorios() {
   const [activeTab, setActiveTab] = useState("planilha");
+  const [datasetKey, setDatasetKey] = useState("plantel");
   const [rows, setRows] = useState(MOCK_DATASETS.plantel.rows);
-  const [columns, setColumns] = useState(initialColumns);
+  const [columns, setColumns] = useState(
+    getColumnsForDataset("plantel").slice(0, 4)
+  );
+
+  const datasetOptions = useMemo(
+    () => [{ key: "plantel", label: "Plantel" }],
+    []
+  );
+
+  useEffect(() => {
+    const dataset = MOCK_DATASETS[datasetKey];
+    setRows(dataset?.rows ?? []);
+    setColumns(getColumnsForDataset(datasetKey).slice(0, 4));
+  }, [datasetKey]);
 
   const handleChangeCell = (rowId, columnKey, value) => {
     const column = columns.find((item) => item.key === columnKey);
@@ -28,6 +36,14 @@ export default function Relatorios() {
     setRows((prevRows) =>
       prevRows.map((row) =>
         row.id === rowId ? { ...row, [columnKey]: value } : row
+      )
+    );
+  };
+
+  const handleResizeColumn = (columnKey, width) => {
+    setColumns((prevColumns) =>
+      prevColumns.map((column) =>
+        column.key === columnKey ? { ...column, width } : column
       )
     );
   };
@@ -48,8 +64,8 @@ export default function Relatorios() {
           </button>
           <button
             type="button"
-            className={activeTab === "final" ? "is-active" : ""}
-            onClick={() => setActiveTab("final")}
+            className={activeTab === "relatorio" ? "is-active" : ""}
+            onClick={() => setActiveTab("relatorio")}
           >
             Relatório Final
           </button>
@@ -60,10 +76,22 @@ export default function Relatorios() {
         {activeTab === "planilha" ? (
           <div className="relatorios-planilha">
             <aside className="relatorios-sidebar">
+              <label className="dataset-builder__search">
+                <span>Dataset</span>
+                <select
+                  value={datasetKey}
+                  onChange={(event) => setDatasetKey(event.target.value)}
+                >
+                  {datasetOptions.map((option) => (
+                    <option key={option.key} value={option.key}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <DatasetBuilder
-                rows={rows}
+                datasetKey={datasetKey}
                 columns={columns}
-                setRows={setRows}
                 setColumns={setColumns}
               />
             </aside>
@@ -72,11 +100,16 @@ export default function Relatorios() {
                 rows={rows}
                 columns={columns}
                 onChangeCell={handleChangeCell}
+                onResizeColumn={handleResizeColumn}
               />
             </div>
           </div>
         ) : (
-          <ReportComposer totalAnimals={rows.length} />
+          <ReportComposer
+            datasetKey={datasetKey}
+            rows={rows}
+            columns={columns}
+          />
         )}
       </div>
     </section>
