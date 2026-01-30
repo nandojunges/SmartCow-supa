@@ -1,5 +1,5 @@
 // src/App.jsx
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -40,9 +40,7 @@ export default function App() {
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [fazendasLoading, setFazendasLoading] = useState(false);
-  const { fazendaAtualId, hasFazendaAtual, setFazendaAtualId, clearFazendaAtualId } = useFazenda();
-  const lastUserIdRef = useRef(null);
-  const LAST_USER_KEY = "smartcow:lastUserId";
+  const { hasFazendaAtual, setFazendaAtualId } = useFazenda();
 
   // Ouve sessão do Supabase
   useEffect(() => {
@@ -76,51 +74,6 @@ export default function App() {
       window.removeEventListener("online", handleOnline);
     };
   }, []);
-
-  const clearFarmStorage = useCallback(() => {
-    if (typeof localStorage === "undefined") {
-      return;
-    }
-
-    [
-      "smartcow:currentFarmId",
-      "smartcow:fazendaAtivaId",
-      "smartcow:fazendaAtivaNome",
-      "currentFarmId",
-      "last_farm_id",
-      "lastFarmId",
-    ].forEach((key) => localStorage.removeItem(key));
-  }, []);
-
-  useEffect(() => {
-    const userId = session?.user?.id ?? null;
-
-    if (!userId) {
-      clearFazendaAtualId();
-      clearFarmStorage();
-      if (typeof localStorage !== "undefined") {
-        localStorage.removeItem(LAST_USER_KEY);
-      }
-      lastUserIdRef.current = null;
-      return;
-    }
-
-    const storedLastUser =
-      typeof localStorage !== "undefined" ? localStorage.getItem(LAST_USER_KEY) : null;
-    if (
-      (lastUserIdRef.current && lastUserIdRef.current !== userId) ||
-      (storedLastUser && storedLastUser !== userId)
-    ) {
-      clearFazendaAtualId();
-      clearFarmStorage();
-    }
-
-    if (typeof localStorage !== "undefined") {
-      localStorage.setItem(LAST_USER_KEY, userId);
-    }
-
-    lastUserIdRef.current = userId;
-  }, [clearFarmStorage, clearFazendaAtualId, session?.user?.id]);
 
   useEffect(() => {
     if (!session?.user?.id) {
@@ -172,6 +125,10 @@ export default function App() {
       return;
     }
 
+    if (hasFazendaAtual) {
+      return;
+    }
+
     let isMounted = true;
     setFazendasLoading(true);
 
@@ -190,14 +147,7 @@ export default function App() {
           return;
         }
 
-        if (!data?.length) {
-          clearFazendaAtualId();
-          return;
-        }
-
-        const fazendaIds = data.map((fazenda) => String(fazenda.id));
-        const idAtual = fazendaAtualId ? String(fazendaAtualId) : null;
-        if (!idAtual || !fazendaIds.includes(idAtual)) {
+        if (data?.length > 0) {
           setFazendaAtualId(data[0].id);
         }
       })
@@ -210,14 +160,7 @@ export default function App() {
     return () => {
       isMounted = false;
     };
-  }, [
-    clearFazendaAtualId,
-    fazendaAtualId,
-    profileLoading,
-    session?.user?.id,
-    setFazendaAtualId,
-    tipoConta,
-  ]);
+  }, [hasFazendaAtual, profileLoading, session?.user?.id, setFazendaAtualId, tipoConta]);
 
   if (loading) {
     return null; // ou um spinner de "Carregando..."

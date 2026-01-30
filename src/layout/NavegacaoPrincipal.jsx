@@ -1,5 +1,5 @@
 // src/layout/NavegacaoPrincipal.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import StatusConexao from "../components/StatusConexao";
@@ -28,17 +28,13 @@ function useAbaAtiva(pathname, abas) {
 export default function NavegacaoPrincipal({ tipoConta }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { fazendaAtualId, clearFazendaAtualId, setFazendaAtualId } = useFazenda();
+  const { fazendaAtualId, clearFazendaAtualId } = useFazenda();
   const [tipoContaPerfil, setTipoContaPerfil] = useState(null);
-  const [fazendas, setFazendas] = useState([]);
-  const [fazendasLoading, setFazendasLoading] = useState(false);
   const consultorStorageKeys = [
     "modo",
     "consultorSession",
     "currentFarmId",
     "smartcow:currentFarmId",
-    "smartcow:fazendaAtivaId",
-    "smartcow:fazendaAtivaNome",
   ];
 
   useEffect(() => {
@@ -97,87 +93,12 @@ export default function NavegacaoPrincipal({ tipoConta }) {
   const TXT_MUTED = "rgba(255,255,255,0.72)";
 
   const ativa = abas.find((a) => a.id === abaAtiva);
-  const fazendaAtual = useMemo(
-    () => fazendas.find((fazenda) => String(fazenda.id) === String(fazendaAtualId)),
-    [fazendaAtualId, fazendas]
-  );
   const limparDadosConsultor = () => {
     clearFazendaAtualId();
     if (typeof localStorage !== "undefined") {
       consultorStorageKeys.forEach((key) => localStorage.removeItem(key));
     }
   };
-
-  useEffect(() => {
-    let isMounted = true;
-
-    async function carregarFazendas() {
-      if (isAssistenteTecnico) {
-        if (isMounted) {
-          setFazendas([]);
-        }
-        return;
-      }
-
-      setFazendasLoading(true);
-
-      try {
-        const { data: authData, error: authError } = await supabase.auth.getUser();
-        if (authError) {
-          throw authError;
-        }
-
-        const userId = authData?.user?.id;
-        if (!userId) {
-          setFazendas([]);
-          return;
-        }
-
-        const { data, error } = await supabase
-          .from("fazendas")
-          .select("id, nome, created_at")
-          .eq("owner_user_id", userId)
-          .order("created_at", { ascending: true });
-
-        if (error) {
-          throw error;
-        }
-
-        const deduplicadas = Array.from(
-          new Map((data ?? []).map((fazenda) => [String(fazenda.id), fazenda])).values()
-        );
-
-        if (isMounted) {
-          setFazendas(deduplicadas);
-        }
-
-        if (deduplicadas.length === 0) {
-          clearFazendaAtualId();
-          return;
-        }
-
-        const fazendaIds = deduplicadas.map((fazenda) => String(fazenda.id));
-        if (!fazendaAtualId || !fazendaIds.includes(String(fazendaAtualId))) {
-          setFazendaAtualId(deduplicadas[0].id);
-        }
-      } catch (error) {
-        console.warn("Erro ao carregar fazendas:", error.message);
-        if (isMounted) {
-          setFazendas([]);
-        }
-      } finally {
-        if (isMounted) {
-          setFazendasLoading(false);
-        }
-      }
-    }
-
-    carregarFazendas();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [clearFazendaAtualId, fazendaAtualId, isAssistenteTecnico, setFazendaAtualId]);
 
   return (
     <header
@@ -313,53 +234,6 @@ export default function NavegacaoPrincipal({ tipoConta }) {
             );
           })}
         </nav>
-
-        {!isAssistenteTecnico && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 200 }}>
-            <span
-              style={{
-                fontSize: 11,
-                color: TXT_MUTED,
-                fontWeight: 700,
-                textTransform: "uppercase",
-                letterSpacing: 0.4,
-              }}
-            >
-              Fazenda ativa
-            </span>
-            <select
-              value={fazendaAtualId ?? ""}
-              onChange={(event) => setFazendaAtualId(event.target.value || null)}
-              disabled={fazendasLoading || fazendas.length === 0}
-              style={{
-                background: "rgba(255,255,255,0.1)",
-                color: TXT,
-                border: "1px solid rgba(255,255,255,0.18)",
-                borderRadius: 10,
-                padding: "6px 10px",
-                fontSize: 12.5,
-                fontWeight: 700,
-                minHeight: 34,
-                outline: "none",
-              }}
-            >
-              {fazendas.length === 0 ? (
-                <option value="">Nenhuma fazenda</option>
-              ) : (
-                fazendas.map((fazenda) => (
-                  <option key={fazenda.id} value={fazenda.id}>
-                    {fazenda.nome || `Fazenda #${fazenda.id}`}
-                  </option>
-                ))
-              )}
-            </select>
-            {fazendaAtual && (
-              <span style={{ fontSize: 11, color: TXT_MUTED }}>
-                {fazendaAtual.nome || `Fazenda #${fazendaAtual.id}`}
-              </span>
-            )}
-          </div>
-        )}
 
         {/* Sair (ghost, menos chamativo, combina com paleta) */}
         <button
