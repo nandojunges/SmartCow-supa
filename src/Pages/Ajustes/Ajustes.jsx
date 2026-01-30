@@ -312,6 +312,17 @@ export default function Ajustes() {
       const permissoesPayload =
         permissoes && typeof permissoes === "object" ? permissoes : {};
 
+      const { data: conviteExistente, error: conviteExistenteError } = await supabase
+        .from("convites_acesso")
+        .select("id, status")
+        .eq("fazenda_id", fazendaAtualId)
+        .eq("email_convidado", emailConviteNormalizado)
+        .maybeSingle();
+
+      if (conviteExistenteError) {
+        throw conviteExistenteError;
+      }
+
       const payload = {
         fazenda_id: fazendaAtualId,
         email_convidado: emailConviteNormalizado.trim().toLowerCase(),
@@ -331,7 +342,16 @@ export default function Ajustes() {
         throw error;
       }
 
-      toast.success("Convite enviado! O profissional verá ao acessar.");
+      if (
+        conviteExistente &&
+        String(conviteExistente.status || "").toUpperCase() === "PENDENTE"
+      ) {
+        toast.info("Convite já estava pendente (atualizado).");
+      } else if (conviteExistente) {
+        toast.success("Convite reativado! O profissional verá ao acessar.");
+      } else {
+        toast.success("Convite enviado! O profissional verá ao acessar.");
+      }
 
       setEmailConvite("");
       setProfissionalTipo(null);
@@ -555,13 +575,10 @@ export default function Ajustes() {
                 </div>
               ) : (
                 acessos.map((acesso) => {
-                  const nomeCompleto =
-                    acesso.profiles?.full_name ||
-                    acesso.profiles?.email ||
-                    acesso.user_id ||
-                    "Sem nome";
                   const emailProfissional =
                     acesso.profiles?.email || "E-mail não disponível";
+                  const nomeCompleto =
+                    acesso.profiles?.full_name || emailProfissional || "Sem nome";
                   const statusLabel = formatarStatus(acesso.status);
 
                   return (
@@ -585,42 +602,38 @@ export default function Ajustes() {
                         >
                           {statusLabel}
                         </span>
-                        {acesso.status !== "BLOQUEADO" && (
-                          <button
-                            type="button"
-                            className="ajustes-button ajustes-button--ghost"
-                            onClick={() => handleAtualizarStatus(acesso, "BLOQUEADO")}
-                            disabled={processandoId === `status-${acesso.id}`}
-                          >
-                            {processandoId === `status-${acesso.id}`
-                              ? "Bloqueando..."
+                        <button
+                          type="button"
+                          className="ajustes-button ajustes-button--ghost"
+                          onClick={() =>
+                            handleAtualizarStatus(
+                              acesso,
+                              acesso.status === "BLOQUEADO" ? "ATIVO" : "BLOQUEADO"
+                            )
+                          }
+                          disabled={processandoId === `status-${acesso.id}`}
+                        >
+                          {processandoId === `status-${acesso.id}`
+                            ? acesso.status === "BLOQUEADO"
+                              ? "Desbloqueando..."
+                              : "Bloqueando..."
+                            : acesso.status === "BLOQUEADO"
+                              ? "Desbloquear"
                               : "Bloquear"}
-                          </button>
-                        )}
-                        {acesso.status !== "REVOGADO" && (
-                          <button
-                            type="button"
-                            className="ajustes-button ajustes-button--link"
-                            onClick={() => handleRemoverAcesso(acesso)}
-                            disabled={processandoId === `remover-${acesso.id}`}
-                          >
-                            {processandoId === `remover-${acesso.id}`
-                              ? "Revogando..."
-                              : "Revogar"}
-                          </button>
-                        )}
-                        {acesso.status !== "ATIVO" && (
-                          <button
-                            type="button"
-                            className="ajustes-button ajustes-button--secondary"
-                            onClick={() => handleAtualizarStatus(acesso, "ATIVO")}
-                            disabled={processandoId === `status-${acesso.id}`}
-                          >
-                            {processandoId === `status-${acesso.id}`
-                              ? "Reativando..."
-                              : "Reativar"}
-                          </button>
-                        )}
+                        </button>
+                        <button
+                          type="button"
+                          className="ajustes-button ajustes-button--link"
+                          onClick={() => handleRemoverAcesso(acesso)}
+                          disabled={
+                            processandoId === `remover-${acesso.id}` ||
+                            acesso.status === "REVOGADO"
+                          }
+                        >
+                          {processandoId === `remover-${acesso.id}`
+                            ? "Revogando..."
+                            : "Revogar"}
+                        </button>
                       </div>
                     </div>
                   );
