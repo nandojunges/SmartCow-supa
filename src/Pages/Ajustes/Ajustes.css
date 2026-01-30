@@ -40,55 +40,10 @@
   font-weight: 600;
 }
 
-.ajustes-search {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.ajustes-search__label {
-  font-size: 13px;
-  font-weight: 600;
-  color: #1e293b;
-}
-
-.ajustes-search__field {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 10px 14px;
-  box-shadow: 0 1px 6px rgba(15, 23, 42, 0.04);
-}
-
-.ajustes-search__field input {
-  border: none;
-  outline: none;
-  font-size: 14px;
-  flex: 1;
-  color: #0f172a;
-  background: transparent;
-}
-
-.ajustes-search__field input:focus-visible {
-  outline: none;
-}
-
-.ajustes-search__field:focus-within {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
-}
-
-.ajustes-search__icon {
-  font-size: 16px;
-}
-
 .ajustes-grid {
   display: grid;
   gap: 18px;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(12, minmax(0, 1fr));
 }
 
 .ajustes-card {
@@ -98,7 +53,7 @@
   padding: 18px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
@@ -115,16 +70,19 @@
 }
 
 .ajustes-card--large {
-  grid-column: span 2;
-  min-height: 220px;
+  grid-column: span 8;
+  min-height: 240px;
 }
 
 .ajustes-card--medium {
-  min-height: 200px;
+  grid-column: span 4;
+  min-height: 240px;
 }
 
 .ajustes-card--small {
-  min-height: 180px;
+  grid-column: span 4;
+  min-height: 200px;
+  justify-content: space-between;
 }
 
 .ajustes-card--disabled {
@@ -145,9 +103,9 @@
 
 .ajustes-card__header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 8px;
+  gap: 12px;
 }
 
 .ajustes-card__header h2 {
@@ -157,47 +115,96 @@
   color: #0f172a;
 }
 
-.ajustes-card__body {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.ajustes-card__body p {
-  margin: 0;
+.ajustes-card__header p {
+  margin: 4px 0 0;
   font-size: 13px;
   color: #64748b;
 }
 
-.ajustes-card__action {
-  margin-top: auto;
-  align-self: flex-start;
+.ajustes-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.ajustes-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.ajustes-field input {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  font-size: 14px;
+  color: #0f172a;
+  background: #ffffff;
+}
+
+.ajustes-field input:disabled {
+  background: #f8fafc;
+  color: #94a3b8;
+}
+
+.ajustes-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ajustes-button {
+  border-radius: 12px;
   border: none;
-  border-radius: 999px;
-  padding: 8px 16px;
+  padding: 10px 16px;
   font-size: 12px;
   font-weight: 600;
-  background: #2563eb;
-  color: #ffffff;
   cursor: pointer;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.ajustes-card__action:hover {
+.ajustes-button--primary {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.ajustes-button--primary:hover {
   transform: translateY(-1px);
   box-shadow: 0 6px 12px rgba(37, 99, 235, 0.2);
 }
 
-.ajustes-card__action:focus-visible {
-  outline: 2px solid rgba(37, 99, 235, 0.5);
-  outline-offset: 2px;
+.ajustes-button--ghost {
+  background: #ffffff;
+  color: #475569;
+  border: 1px solid #e2e8f0;
 }
 
-.ajustes-card__action:disabled {
+.ajustes-button--ghost:hover {
+  border-color: #cbd5f5;
+}
+
+.ajustes-button--link {
+  background: transparent;
+  color: #2563eb;
+  padding: 6px 8px;
+}
+
+.ajustes-button:disabled {
   background: #cbd5f5;
   color: #64748b;
   cursor: not-allowed;
   box-shadow: none;
+}
+
+.ajustes-button--ghost:disabled,
+.ajustes-button--link:disabled {
+  background: transparent;
+  color: #94a3b8;
+  border-color: #e2e8f0;
 }
 
 .ajustes-badge {
@@ -208,6 +215,48 @@
   font-size: 11px;
   font-weight: 600;
   border: 1px solid #fde68a;
+  align-self: flex-start;
+}
+
+.ajustes-helper {
+  margin: 0;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.ajustes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.ajustes-list__item {
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  padding: 12px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ajustes-list__item div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 200px;
+}
+
+.ajustes-list__item strong {
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.ajustes-list__item span {
+  font-size: 12px;
+  color: #64748b;
 }
 
 .ajustes-empty {
@@ -230,15 +279,88 @@
   gap: 16px;
 }
 
-@media (max-width: 900px) {
+.ajustes-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 1000;
+}
+
+.ajustes-modal {
+  width: min(720px, 100%);
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 20px;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ajustes-modal__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.ajustes-modal__header h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.ajustes-modal__header p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.ajustes-modal__form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.ajustes-modal__section {
+  border-top: 1px solid #e2e8f0;
+  padding-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ajustes-modal__section h4 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+@media (max-width: 1100px) {
   .ajustes-card--large {
-    grid-column: span 1;
+    grid-column: span 12;
+  }
+
+  .ajustes-card--medium {
+    grid-column: span 6;
+  }
+
+  .ajustes-card--small {
+    grid-column: span 6;
   }
 }
 
-@media (max-width: 600px) {
-  .ajustes-header {
-    align-items: flex-start;
+@media (max-width: 700px) {
+  .ajustes-card--medium,
+  .ajustes-card--small {
+    grid-column: span 12;
   }
 
   .ajustes-status {
