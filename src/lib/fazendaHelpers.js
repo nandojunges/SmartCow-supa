@@ -47,9 +47,7 @@ export async function listConvitesDaFazenda(fazendaId) {
 
   const { data, error } = await supabase
     .from("convites_acesso")
-    .select(
-      `id, ${CONVITE_EMAIL_COL}, status, created_at, tipo_profissional, nome_profissional`
-    )
+    .select(`id, ${CONVITE_EMAIL_COL}, status, created_at, nome_profissional`)
     .eq("fazenda_id", fazendaId)
     .order("created_at", { ascending: false });
 
@@ -77,7 +75,7 @@ export async function listAcessosDaFazenda(fazendaId) {
   const { data, error } = await supabase
     .from("fazenda_acessos")
     .select(
-      "id, user_id, created_at, status, permissoes, tipo_profissional, nome_profissional, profiles (id, email, full_name, tipo_conta)"
+      "id, user_id, created_at, status, permissoes, nome_profissional, profiles (id, email, full_name, tipo_conta)"
     )
     .eq("fazenda_id", fazendaId)
     .eq("status", "ATIVO")
@@ -140,7 +138,6 @@ export async function aceitarConvite(convite, userId) {
       .from("fazenda_acessos")
       .update({
         ativo: true,
-        tipo_profissional: convite.tipo_profissional ?? null,
         nome_profissional: convite.nome_profissional ?? null,
       })
       .eq("id", acessoExistente.id);
@@ -153,7 +150,6 @@ export async function aceitarConvite(convite, userId) {
       fazenda_id: convite.fazenda_id,
       user_id: userId,
       ativo: true,
-      tipo_profissional: convite.tipo_profissional ?? null,
       nome_profissional: convite.nome_profissional ?? null,
     });
 

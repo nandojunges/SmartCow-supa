@@ -1,44 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import Select from "react-select";
 import { toast } from "react-toastify";
 import { supabase } from "../../lib/supabaseClient";
 import { useFazenda } from "../../context/FazendaContext";
 import { listAcessosDaFazenda } from "../../lib/fazendaHelpers";
 import { criarConvite, listarConvitesPendentesProdutor } from "../../services/acessos";
 
-const PROFISSIONAIS_OPTIONS = [
-  { value: "Veterinário (Reprodução)", label: "Veterinário (Reprodução)" },
-  { value: "Veterinário (Clínica)", label: "Veterinário (Clínica)" },
-  { value: "Nutricionista", label: "Nutricionista" },
-  { value: "Agrônomo", label: "Agrônomo" },
-  { value: "Técnico de Campo", label: "Técnico de Campo" },
-  { value: "Consultor", label: "Consultor" },
-  { value: "Outro", label: "Outro" },
-];
-
-const selectStyles = {
-  control: (base) => ({
-    ...base,
-    borderRadius: 12,
-    borderColor: "#e2e8f0",
-    minHeight: 42,
-    boxShadow: "none",
-    fontSize: 14,
-  }),
-  menu: (base) => ({
-    ...base,
-    borderRadius: 12,
-    overflow: "hidden",
-    fontSize: 14,
-  }),
-};
-
 export default function AjustesAcessos() {
   const navigate = useNavigate();
   const { fazendaAtualId } = useFazenda();
   const [email, setEmail] = useState("");
-  const [profissionalTipo, setProfissionalTipo] = useState(null);
   const [profissionalNome, setProfissionalNome] = useState("");
   const [carregandoPerfil, setCarregandoPerfil] = useState(true);
   const [carregandoListas, setCarregandoListas] = useState(false);
@@ -49,7 +20,6 @@ export default function AjustesAcessos() {
   const [fazendaNome, setFazendaNome] = useState("");
   const [tipoConta, setTipoConta] = useState(null);
   const [editandoId, setEditandoId] = useState(null);
-  const [editTipo, setEditTipo] = useState(null);
   const [editApelido, setEditApelido] = useState("");
 
   const emailNormalizado = useMemo(() => email.trim().toLowerCase(), [email]);
@@ -241,12 +211,10 @@ export default function AjustesAcessos() {
       }
 
       await criarConvite(fazendaAtualId, emailNormalizado, {
-        tipoProfissional: profissionalTipo?.value ?? null,
         nomeProfissional: profissionalNome?.trim() || null,
       });
 
       setEmail("");
-      setProfissionalTipo(null);
       setProfissionalNome("");
       toast.success("Convite enviado! O profissional verá ao acessar.");
       await carregarListas(fazendaAtualId);
@@ -313,17 +281,12 @@ export default function AjustesAcessos() {
   }
 
   function iniciarEdicao(acesso) {
-    const opcaoAtual = PROFISSIONAIS_OPTIONS.find(
-      (option) => option.value === acesso.tipo_profissional
-    );
     setEditandoId(acesso.id);
-    setEditTipo(opcaoAtual ?? null);
     setEditApelido(acesso.nome_profissional ?? "");
   }
 
   function cancelarEdicao() {
     setEditandoId(null);
-    setEditTipo(null);
     setEditApelido("");
   }
 
@@ -335,7 +298,6 @@ export default function AjustesAcessos() {
       const { error } = await supabase
         .from("fazenda_acessos")
         .update({
-          tipo_profissional: editTipo?.value ?? null,
           nome_profissional: editApelido?.trim() || null,
         })
         .eq("id", acesso.id);
@@ -401,18 +363,6 @@ export default function AjustesAcessos() {
           </label>
 
           <label style={styles.label}>
-            Tipo do profissional
-            <Select
-              styles={selectStyles}
-              placeholder="Selecione..."
-              options={PROFISSIONAIS_OPTIONS}
-              value={profissionalTipo}
-              onChange={setProfissionalTipo}
-              isClearable
-            />
-          </label>
-
-          <label style={styles.label}>
             Nome/Apelido (opcional)
             <input
               type="text"
@@ -460,10 +410,9 @@ export default function AjustesAcessos() {
                     {convite.email_convidado || "E-mail não disponível"}
                   </span>
                   <span style={styles.listMeta}>
-                    {(convite.tipo_profissional || "Tipo não informado") +
-                      (convite.nome_profissional
-                        ? ` • ${convite.nome_profissional}`
-                        : " • Apelido não informado")}
+                    {convite.nome_profissional
+                      ? `Apelido: ${convite.nome_profissional}`
+                      : "Apelido não informado"}
                   </span>
                   <span style={styles.listMeta}>
                     Enviado em {formatarData(convite.created_at)}
@@ -522,10 +471,10 @@ export default function AjustesAcessos() {
                     {!emEdicao ? (
                       <>
                         <span style={styles.listMeta}>
-                          {(acesso.tipo_profissional || "Tipo não informado") +
-                            (acesso.nome_profissional
-                              ? ` • ${acesso.nome_profissional}`
-                              : " • Apelido não informado")}
+                          {formatarTipoProfissional(acesso)}
+                          {acesso.nome_profissional
+                            ? ` • ${acesso.nome_profissional}`
+                            : " • Apelido não informado"}
                         </span>
                         <span style={styles.listMeta}>
                           Acesso ativo desde {formatarData(acesso.created_at)}
@@ -533,17 +482,6 @@ export default function AjustesAcessos() {
                       </>
                     ) : (
                       <div style={styles.editFields}>
-                        <div style={styles.editField}>
-                          <span style={styles.editLabel}>Tipo</span>
-                          <Select
-                            styles={selectStyles}
-                            placeholder="Selecione..."
-                            options={PROFISSIONAIS_OPTIONS}
-                            value={editTipo}
-                            onChange={setEditTipo}
-                            isClearable
-                          />
-                        </div>
                         <div style={styles.editField}>
                           <span style={styles.editLabel}>Apelido</span>
                           <input
@@ -614,6 +552,32 @@ export default function AjustesAcessos() {
 
 function validarEmail(valor) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(valor);
+}
+
+function formatarTipoProfissional(acesso) {
+  const tipoConta = acesso?.profiles?.tipo_conta;
+  if (tipoConta) {
+    return `Perfil: ${formatarTipoConta(tipoConta)}`;
+  }
+
+  const permissoes = acesso?.permissoes;
+  if (Array.isArray(permissoes) && permissoes.length) {
+    return `Permissões: ${permissoes.join(", ")}`;
+  }
+
+  if (typeof permissoes === "string" && permissoes.trim()) {
+    return `Permissões: ${permissoes}`;
+  }
+
+  return "Perfil não informado";
+}
+
+function formatarTipoConta(valor) {
+  return String(valor)
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
 function formatarData(valor) {
