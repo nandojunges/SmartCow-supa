@@ -1,9 +1,10 @@
 // src/layout/NavegacaoPrincipal.jsx
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import StatusConexao from "../components/StatusConexao";
 import { useFazenda } from "../context/FazendaContext";
+import { useAuth } from "../contexts/AuthContext";
 
 const ABAS_BASE = [
   { id: "inicio",     label: "Início",            title: "Página inicial" },
@@ -25,11 +26,11 @@ function useAbaAtiva(pathname, abas) {
   return abas.some((a) => a.id === seg) ? seg : abas[0]?.id || "inicio";
 }
 
-export default function NavegacaoPrincipal({ tipoConta }) {
+export default function NavegacaoPrincipal() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { fazendaAtualId, clearFazendaAtualId } = useFazenda();
-  const [tipoContaPerfil, setTipoContaPerfil] = useState(null);
+  const { role, ready } = useAuth();
   const consultorStorageKeys = [
     "modo",
     "consultorSession",
@@ -37,53 +38,12 @@ export default function NavegacaoPrincipal({ tipoConta }) {
     "smartcow:currentFarmId",
   ];
 
-  useEffect(() => {
-    let isMounted = true;
+  if (!ready || !role) {
+    return null;
+  }
 
-    async function carregarPerfil() {
-      const { data: authData, error: authError } = await supabase.auth.getUser();
-      if (authError) {
-        console.warn("Erro ao carregar usuário:", authError.message);
-        return;
-      }
-
-      const userId = authData?.user?.id;
-      if (!userId) {
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("tipo_conta")
-        .eq("id", userId)
-        .maybeSingle();
-
-      if (error) {
-        console.warn("Erro ao carregar perfil:", error.message);
-        return;
-      }
-
-      if (isMounted) {
-        setTipoContaPerfil(data?.tipo_conta ?? null);
-      }
-    }
-
-    carregarPerfil();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  const tipoContaAtual = tipoContaPerfil ?? tipoConta;
-  const isAssistenteTecnico =
-    String(tipoContaAtual ?? "").trim().toUpperCase() === "ASSISTENTE_TECNICO";
-  const isModoConsultor = isAssistenteTecnico && Boolean(fazendaAtualId);
-  const usarMenuTecnico = isAssistenteTecnico && !fazendaAtualId;
-  const abasBase = isModoConsultor
-    ? ABAS_BASE.filter((aba) => aba.id !== "ajustes")
-    : ABAS_BASE;
-  const abas = usarMenuTecnico ? ABAS_TECNICO : abasBase;
+  const isAssistenteTecnico = role === "tecnico";
+  const abas = isAssistenteTecnico ? ABAS_TECNICO : ABAS_BASE;
   const abaAtiva = useAbaAtiva(pathname, abas);
 
   // ===== PALETA “AgTech premium” =====

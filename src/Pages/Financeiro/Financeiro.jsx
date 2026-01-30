@@ -5,6 +5,7 @@ import { supabase } from "../../lib/supabaseClient";
 import { withFazendaId } from "../../lib/fazendaScope";
 import { useFazenda } from "../../context/FazendaContext";
 import { enqueue, kvGet, kvSet } from "../../offline/localDB";
+import SelecioneFazenda from "../../components/SelecioneFazenda";
 
 import "../../styles/tabelamoderna.css";
 import "../../styles/botoes.css";
@@ -671,6 +672,10 @@ export default function Financeiro() {
     marginLeft: 10,
     whiteSpace: "nowrap",
   };
+
+  if (!fazendaAtualId) {
+    return <SelecioneFazenda />;
+  }
 
   return (
     <div style={{ padding: "14px 16px" }}>
