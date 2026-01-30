@@ -1,11 +1,10 @@
 // src/App.jsx
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import { supabase } from "./lib/supabaseClient";
 import { syncAnimaisSeed, syncPending } from "./offline/sync";
-import { useFazenda } from "./context/FazendaContext";
+import { useAuth } from "./contexts/AuthContext";
 
 // Telas
 import Login from "./Auth/Login";
@@ -35,29 +34,16 @@ import Admin from "./Pages/Admin/Admin.jsx";
 import TecnicoHome from "./Pages/Tecnico/TecnicoHome.jsx";
 
 export default function App() {
-  const [session, setSession] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [profile, setProfile] = useState(null);
-  const [profileLoading, setProfileLoading] = useState(false);
-  const [fazendasLoading, setFazendasLoading] = useState(false);
-  const { hasFazendaAtual, setFazendaAtualId } = useFazenda();
-
-  // Ouve sessão do Supabase
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoading(false);
-    });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
+  const {
+    session,
+    loading,
+    profileLoading,
+    fazendasLoading,
+    tipoConta,
+    isAssistenteTecnico,
+    role,
+    hasFazendaAtual,
+  } = useAuth();
 
   useEffect(() => {
     const handleOnline = () => {
@@ -75,92 +61,9 @@ export default function App() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!session?.user?.id) {
-      setProfile(null);
-      setProfileLoading(false);
-      return;
-    }
-
-    let isMounted = true;
-    setProfileLoading(true);
-
-    supabase
-      .from("profiles")
-      .select("id, tipo_conta, role")
-      .eq("id", session.user.id)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (!isMounted) return;
-        if (error) {
-          console.warn("Erro ao carregar perfil:", error.message);
-        }
-        setProfile(data ?? null);
-        setProfileLoading(false);
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [session?.user?.id]);
-
-  const tipoContaRaw =
-    profile?.tipo_conta ??
-    session?.user?.user_metadata?.tipo_conta ??
-    session?.user?.user_metadata?.tipoConta;
-  const tipoConta = tipoContaRaw ? String(tipoContaRaw).trim().toUpperCase() : "PRODUTOR";
-  const isAssistenteTecnico = tipoConta === "ASSISTENTE_TECNICO";
   const hasFazendaSelecionada = hasFazendaAtual;
-
-  useEffect(() => {
-    if (!session?.user?.id) {
-      return;
-    }
-
-    if (profileLoading) {
-      return;
-    }
-
-    if (tipoConta !== "PRODUTOR") {
-      return;
-    }
-
-    if (hasFazendaAtual) {
-      return;
-    }
-
-    let isMounted = true;
-    setFazendasLoading(true);
-
-    supabase
-      .from("fazendas")
-      .select("id")
-      .eq("owner_user_id", session.user.id)
-      .order("created_at", { ascending: true })
-      .then(({ data, error }) => {
-        if (!isMounted) {
-          return;
-        }
-
-        if (error) {
-          console.warn("Erro ao buscar fazendas do produtor:", error.message);
-          return;
-        }
-
-        if (data?.length > 0) {
-          setFazendaAtualId(data[0].id);
-        }
-      })
-      .finally(() => {
-        if (isMounted) {
-          setFazendasLoading(false);
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [hasFazendaAtual, profileLoading, session?.user?.id, setFazendaAtualId, tipoConta]);
+  const isAdmin =
+    role === "admin" || session?.user?.email === "ferjunges@outlook.com";
 
   if (loading) {
     return null; // ou um spinner de "Carregando..."
@@ -189,21 +92,26 @@ export default function App() {
             <Route path="/" element={<Navigate to="/inicio" replace />} />
 
             {/* 🟥 ADMIN FORA DO LAYOUT (sem menu azul) */}
-            <Route path="/admin" element={<Admin />} />
+            <Route
+              path="/admin"
+              element={
+                profileLoading ? null : isAdmin ? <Admin /> : <Navigate to="/inicio" replace />
+              }
+            />
 
             {/* 🟦 DEMAIS PÁGINAS DENTRO DO SISTEMABASE (com menu azul) */}
             <Route element={<SistemaBase tipoConta={tipoConta} />}>
               <Route
                 element={
-                <AssistenteGuard
-                  isAssistenteTecnico={isAssistenteTecnico}
-                  hasFazendaSelecionada={hasFazendaSelecionada}
-                  loading={profileLoading}
-                  isProdutor={tipoConta === "PRODUTOR"}
-                  selecionandoFazenda={fazendasLoading}
-                />
-              }
-            >
+                  <AssistenteGuard
+                    isAssistenteTecnico={isAssistenteTecnico}
+                    hasFazendaSelecionada={hasFazendaSelecionada}
+                    loading={profileLoading}
+                    isProdutor={tipoConta === "PRODUTOR"}
+                    selecionandoFazenda={fazendasLoading}
+                  />
+                }
+              >
                 <Route path="/inicio" element={<Inicio />} />
                 <Route path="/animais" element={<Animais />} />
                 <Route path="/bezerras" element={<Bezerras />} />

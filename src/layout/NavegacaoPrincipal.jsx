@@ -1,9 +1,10 @@
 // src/layout/NavegacaoPrincipal.jsx
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import StatusConexao from "../components/StatusConexao";
 import { useFazenda } from "../context/FazendaContext";
+import { useAuth } from "../contexts/AuthContext";
 
 const ABAS_BASE = [
   { id: "inicio",     label: "Início",            title: "Página inicial" },
@@ -29,54 +30,16 @@ export default function NavegacaoPrincipal({ tipoConta }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { fazendaAtualId, clearFazendaAtualId } = useFazenda();
-  const [tipoContaPerfil, setTipoContaPerfil] = useState(null);
+  const { tipoConta: tipoContaAuth, isAssistenteTecnico: isAssistenteTecnicoAuth } = useAuth();
   const consultorStorageKeys = [
     "modo",
     "consultorSession",
     "currentFarmId",
     "smartcow:currentFarmId",
   ];
-
-  useEffect(() => {
-    let isMounted = true;
-
-    async function carregarPerfil() {
-      const { data: authData, error: authError } = await supabase.auth.getUser();
-      if (authError) {
-        console.warn("Erro ao carregar usuário:", authError.message);
-        return;
-      }
-
-      const userId = authData?.user?.id;
-      if (!userId) {
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("tipo_conta")
-        .eq("id", userId)
-        .maybeSingle();
-
-      if (error) {
-        console.warn("Erro ao carregar perfil:", error.message);
-        return;
-      }
-
-      if (isMounted) {
-        setTipoContaPerfil(data?.tipo_conta ?? null);
-      }
-    }
-
-    carregarPerfil();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  const tipoContaAtual = tipoContaPerfil ?? tipoConta;
+  const tipoContaAtual = tipoContaAuth ?? tipoConta;
   const isAssistenteTecnico =
+    isAssistenteTecnicoAuth ??
     String(tipoContaAtual ?? "").trim().toUpperCase() === "ASSISTENTE_TECNICO";
   const isModoConsultor = isAssistenteTecnico && Boolean(fazendaAtualId);
   const usarMenuTecnico = isAssistenteTecnico && !fazendaAtualId;
