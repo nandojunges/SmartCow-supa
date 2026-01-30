@@ -5,7 +5,6 @@ import { supabase } from "../lib/supabaseClient";
 import StatusConexao from "../components/StatusConexao";
 import FarmSwitcher from "../components/FarmSwitcher";
 import { useFazenda } from "../context/FazendaContext";
-import { LAST_FARM_ID_KEY, setLastFarmId } from "../lib/farmSelection";
 
 const ABAS_BASE = [
   { id: "inicio",     label: "Início",            title: "Página inicial" },
@@ -36,9 +35,7 @@ export default function NavegacaoPrincipal({ tipoConta }) {
     "modo",
     "consultorSession",
     "currentFarmId",
-    "lastFarmId",
     "smartcow:currentFarmId",
-    LAST_FARM_ID_KEY,
   ];
 
   useEffect(() => {
@@ -99,7 +96,6 @@ export default function NavegacaoPrincipal({ tipoConta }) {
   const ativa = abas.find((a) => a.id === abaAtiva);
   const limparDadosConsultor = () => {
     clearFazendaAtualId();
-    setLastFarmId(null);
     if (typeof localStorage !== "undefined") {
       consultorStorageKeys.forEach((key) => localStorage.removeItem(key));
     }
@@ -253,7 +249,7 @@ export default function NavegacaoPrincipal({ tipoConta }) {
             if (isAssistenteTecnico) {
               if (fazendaAtualId) {
                 limparDadosConsultor();
-                navigate("/consultor");
+                navigate("/tecnico");
                 return;
               }
               clearFazendaAtualId();

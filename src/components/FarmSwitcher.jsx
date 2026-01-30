@@ -87,9 +87,11 @@ export default function FarmSwitcher({ style, readOnly = false }) {
 
   const fazendaAtiva = useMemo(() => {
     if (!fazendaAtualId) {
-      return fazendas[0] ?? null;
+      return null;
     }
-    return fazendas.find((fazenda) => String(fazenda.id) === String(fazendaAtualId)) ?? null;
+    return (
+      fazendas.find((fazenda) => String(fazenda.id) === String(fazendaAtualId)) ?? null
+    );
   }, [fazendaAtualId, fazendas]);
 
   const nomeFazenda =

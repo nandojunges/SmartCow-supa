@@ -1,18 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ensureFazendaDoProdutor } from "../services/acessos";
-import {
-  atualizarLastFarmUsuario,
-  getLastFarmId,
-  listarFazendasAcessiveis,
-  setLastFarmId,
-} from "../lib/farmSelection";
+import { listarFazendasAcessiveis } from "../lib/farmSelection";
 import { useFazenda } from "../context/FazendaContext";
 
 export function useFarmSelection({ userId, tipoConta, onSelect, onError }) {
   const { fazendaAtualId, setFazendaAtualId } = useFazenda();
   const [fazendas, setFazendas] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [mostrarSeletor, setMostrarSeletor] = useState(false);
   const isMountedRef = useRef(false);
   const tipoContaRef = useRef(tipoConta);
   const onErrorRef = useRef(onError);
@@ -32,7 +26,6 @@ export function useFarmSelection({ userId, tipoConta, onSelect, onError }) {
       }
 
       if (fazendaAtualId && String(fazendaAtualId) === String(fazendaId)) {
-        setMostrarSeletor(false);
         return;
       }
 
@@ -40,9 +33,6 @@ export function useFarmSelection({ userId, tipoConta, onSelect, onError }) {
       if (import.meta.env.DEV) {
         console.info("[farm-selection] currentFarmId:", String(fazendaId));
       }
-      setMostrarSeletor(false);
-      setLastFarmId(fazendaId);
-      await atualizarLastFarmUsuario({ userId, farmId: fazendaId });
 
       if (onSelect) {
         onSelect(fazendaId);
@@ -55,7 +45,6 @@ export function useFarmSelection({ userId, tipoConta, onSelect, onError }) {
     if (!userId) {
       if (isMountedRef.current) {
         setFazendas([]);
-        setMostrarSeletor(false);
         setLoading(false);
       }
       return;
@@ -148,40 +137,13 @@ export function useFarmSelection({ userId, tipoConta, onSelect, onError }) {
     };
   }, [carregarFazendas, userId]);
 
-  useEffect(() => {
-    if (loading || fazendas.length === 0) {
-      return;
-    }
-
-    const lastFarmId = getLastFarmId();
-    const lastFarm = lastFarmId
-      ? fazendas.find((fazenda) => String(fazenda.id) === String(lastFarmId))
-      : null;
-    const fazendaAutoSelecionada = lastFarm?.id ?? (fazendas.length === 1 ? fazendas[0].id : null);
-
-    if (fazendaAutoSelecionada) {
-      if (fazendaAtualId && String(fazendaAtualId) === String(fazendaAutoSelecionada)) {
-        setMostrarSeletor(false);
-        return;
-      }
-
-      selecionarFazenda(fazendaAutoSelecionada);
-      return;
-    }
-
-    if (fazendas.length > 1) {
-      setMostrarSeletor(true);
-    }
-  }, [fazendaAtualId, fazendas, loading, selecionarFazenda]);
-
   const value = useMemo(
     () => ({
       fazendas,
       loading,
-      mostrarSeletor,
       selecionarFazenda,
     }),
-    [fazendas, loading, mostrarSeletor, selecionarFazenda]
+    [fazendas, loading, selecionarFazenda]
   );
 
   return value;
