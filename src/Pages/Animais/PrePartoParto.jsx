@@ -20,7 +20,7 @@ const DEFAULT_CFG = {
 
 const cfgKey = (userId, fazendaId) => `${KEY}:${userId || "anon"}:${fazendaId || "none"}`;
 
-async function loadCfg(userId, fazendaId) {
+async function loadConfigManejo(userId, fazendaId) {
   if (!userId || !fazendaId) return { ...DEFAULT_CFG };
   try {
     const { data, error, status } = await supabase
@@ -145,7 +145,8 @@ export default function PrePartoParto({ isOnline = navigator.onLine }) {
   const [erro, setErro] = useState("");
   const [offlineAviso, setOfflineAviso] = useState("");
 
-  const [diasPreParto, setDiasPreParto] = useState(30);
+  const [cfg, setCfg] = useState(null);
+  const [loadingCfg, setLoadingCfg] = useState(true);
   const [userId, setUserId] = useState(null);
   const [hoveredRowId, setHoveredRowId] = useState(null);
   const [hoveredColKey, setHoveredColKey] = useState(null);
@@ -278,18 +279,18 @@ export default function PrePartoParto({ isOnline = navigator.onLine }) {
     let ativo = true;
 
     async function carregarConfig() {
+      setLoadingCfg(true);
       const { data, error } = await supabase.auth.getUser();
-      if (error || !data?.user?.id) return;
-      const uid = data.user.id;
+      const uid = !error && data?.user?.id ? data.user.id : null;
       if (!ativo) return;
       setUserId(uid);
       if (!fazendaAtualId) {
         setErro("Selecione uma fazenda para ajustar os parâmetros de pré-parto.");
-        return;
       }
-      const cfg = await loadCfg(uid, fazendaAtualId);
+      const cfgCarregada = await loadConfigManejo(uid, fazendaAtualId);
       if (!ativo) return;
-      setDiasPreParto(Number(cfg.dias_antes_parto_para_preparto ?? 30));
+      setCfg(cfgCarregada);
+      setLoadingCfg(false);
     }
 
     carregarConfig();
@@ -298,7 +299,10 @@ export default function PrePartoParto({ isOnline = navigator.onLine }) {
     };
   }, [fazendaAtualId]);
 
+  const diasPreParto = cfg?.dias_antes_parto_para_preparto;
+
   const linhasOrdenadas = useMemo(() => {
+    if (loadingCfg) return [];
     const hoje = new Date();
     const base = Array.isArray(animais) ? animais : [];
     const filtrados = base
@@ -311,7 +315,7 @@ export default function PrePartoParto({ isOnline = navigator.onLine }) {
       .filter(Boolean);
 
     return filtrados.sort((a, b) => (a.diasParaParto ?? 0) - (b.diasParaParto ?? 0));
-  }, [animais]);
+  }, [animais, loadingCfg]);
 
   const resumo = useMemo(() => {
     const total = linhasOrdenadas.length;
@@ -406,23 +410,27 @@ export default function PrePartoParto({ isOnline = navigator.onLine }) {
           marginBottom: 12,
         }}
       >
-        <label className="st-filter__label" style={{ maxWidth: 260, flex: "1 1 260px" }}>
-          Dias antes do parto para entrar em pré-parto
-          <input
-            className="st-filter-input"
-            style={{ width: 90 }}
-            type="number"
-            min={1}
-            value={diasPreParto}
-            onChange={(event) => {
-              const value = Number(event.target.value || 0);
-              setDiasPreParto(value);
-              saveCfg(userId, fazendaAtualId, {
-                dias_antes_parto_para_preparto: value,
-              });
-            }}
-          />
-        </label>
+        {!loadingCfg && cfg && (
+          <label className="st-filter__label" style={{ maxWidth: 260, flex: "1 1 260px" }}>
+            Dias antes do parto para entrar em pré-parto
+            <input
+              className="st-filter-input"
+              style={{ width: 90 }}
+              type="number"
+              min={1}
+              value={diasPreParto}
+              onChange={(event) => {
+                const value = Number(event.target.value || 0);
+                setCfg((prev) =>
+                  prev ? { ...prev, dias_antes_parto_para_preparto: value } : prev
+                );
+                saveCfg(userId, fazendaAtualId, {
+                  dias_antes_parto_para_preparto: value,
+                });
+              }}
+            />
+          </label>
+        )}
       </div>
 
       <div className="st-table-container">
