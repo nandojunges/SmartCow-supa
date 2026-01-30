@@ -5,6 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 import StatusConexao from "../components/StatusConexao";
 import FarmSwitcher from "../components/FarmSwitcher";
 import { useFazenda } from "../context/FazendaContext";
+import { LAST_FARM_ID_KEY, setLastFarmId } from "../lib/farmSelection";
 
 const ABAS_BASE = [
   { id: "inicio",     label: "Início",            title: "Página inicial" },
@@ -31,6 +32,14 @@ export default function NavegacaoPrincipal({ tipoConta }) {
   const { pathname } = useLocation();
   const { fazendaAtualId, clearFazendaAtualId } = useFazenda();
   const [tipoContaPerfil, setTipoContaPerfil] = useState(null);
+  const consultorStorageKeys = [
+    "modo",
+    "consultorSession",
+    "currentFarmId",
+    "lastFarmId",
+    "smartcow:currentFarmId",
+    LAST_FARM_ID_KEY,
+  ];
 
   useEffect(() => {
     let isMounted = true;
@@ -88,6 +97,13 @@ export default function NavegacaoPrincipal({ tipoConta }) {
   const TXT_MUTED = "rgba(255,255,255,0.72)";
 
   const ativa = abas.find((a) => a.id === abaAtiva);
+  const limparDadosConsultor = () => {
+    clearFazendaAtualId();
+    setLastFarmId(null);
+    if (typeof localStorage !== "undefined") {
+      consultorStorageKeys.forEach((key) => localStorage.removeItem(key));
+    }
+  };
 
   return (
     <header
@@ -162,6 +178,7 @@ export default function NavegacaoPrincipal({ tipoConta }) {
           </span>
 
           <FarmSwitcher
+            readOnly={isAssistenteTecnico}
             style={{
               marginLeft: 20,
               marginTop: 4,
@@ -235,8 +252,8 @@ export default function NavegacaoPrincipal({ tipoConta }) {
           onClick={async () => {
             if (isAssistenteTecnico) {
               if (fazendaAtualId) {
-                clearFazendaAtualId();
-                navigate("/tecnico");
+                limparDadosConsultor();
+                navigate("/consultor");
                 return;
               }
               clearFazendaAtualId();
@@ -262,7 +279,7 @@ export default function NavegacaoPrincipal({ tipoConta }) {
           title={
             isAssistenteTecnico
               ? fazendaAtualId
-                ? "Sair da fazenda"
+                ? "Sair do modo consultor"
                 : "Sair do sistema"
               : "Sair do sistema"
           }

@@ -5,7 +5,7 @@ import { useFazenda } from "../context/FazendaContext";
 
 const TXT_MUTED = "rgba(255,255,255,0.72)";
 
-export default function FarmSwitcher({ style }) {
+export default function FarmSwitcher({ style, readOnly = false }) {
   const { fazendaAtualId } = useFazenda();
   const [userId, setUserId] = useState(null);
   const [tipoConta, setTipoConta] = useState(null);
@@ -124,91 +124,99 @@ export default function FarmSwitcher({ style }) {
 
   return (
     <div ref={containerRef} style={{ position: "relative", display: "inline-flex", ...style }}>
-      <button
-        type="button"
-        disabled={!temDropdown || loading}
-        onClick={() => {
-          if (temDropdown && !loading) {
-            setAberto((prev) => !prev);
-          }
-        }}
-        style={{
-          border: "none",
-          background: "transparent",
-          color: TXT_MUTED,
-          fontSize: 11.5,
-          fontWeight: 700,
-          cursor: temDropdown && !loading ? "pointer" : "default",
-          padding: 0,
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 6,
-          lineHeight: 1.2,
-        }}
-        aria-expanded={aberto}
-        aria-haspopup={temDropdown ? "listbox" : undefined}
-      >
-        <span>Fazenda: {nomeFazenda}</span>
-        {temDropdown ? (
-          <span
-            aria-hidden="true"
-            style={{
-              transform: aberto ? "rotate(180deg)" : "none",
-              transition: "transform 0.12s ease",
+      {readOnly ? (
+        <span style={{ color: TXT_MUTED, fontSize: 11.5, fontWeight: 700, lineHeight: 1.2 }}>
+          Fazenda: {nomeFazenda}
+        </span>
+      ) : (
+        <>
+          <button
+            type="button"
+            disabled={!temDropdown || loading}
+            onClick={() => {
+              if (temDropdown && !loading) {
+                setAberto((prev) => !prev);
+              }
             }}
+            style={{
+              border: "none",
+              background: "transparent",
+              color: TXT_MUTED,
+              fontSize: 11.5,
+              fontWeight: 700,
+              cursor: temDropdown && !loading ? "pointer" : "default",
+              padding: 0,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              lineHeight: 1.2,
+            }}
+            aria-expanded={aberto}
+            aria-haspopup={temDropdown ? "listbox" : undefined}
           >
-            ▾
-          </span>
-        ) : null}
-      </button>
-
-      {aberto && temDropdown ? (
-        <div
-          role="listbox"
-          aria-label="Selecionar fazenda"
-          style={{
-            position: "absolute",
-            top: "calc(100% + 6px)",
-            left: 0,
-            minWidth: 200,
-            background: "rgba(11,31,58,0.98)",
-            border: "1px solid rgba(255,255,255,0.12)",
-            borderRadius: 10,
-            boxShadow: "0 10px 24px rgba(0,0,0,0.28)",
-            padding: 6,
-            zIndex: 80,
-          }}
-        >
-          {fazendas.map((fazenda) => {
-            const isAtiva = String(fazenda.id) === String(fazendaAtiva?.id ?? "");
-
-            return (
-              <button
-                key={fazenda.id}
-                type="button"
-                onClick={async () => {
-                  await selecionarFazenda(fazenda.id);
-                  setAberto(false);
-                }}
+            <span>Fazenda: {nomeFazenda}</span>
+            {temDropdown ? (
+              <span
+                aria-hidden="true"
                 style={{
-                  width: "100%",
-                  border: "none",
-                  background: isAtiva ? "rgba(25,182,164,0.2)" : "transparent",
-                  color: "rgba(255,255,255,0.9)",
-                  fontWeight: isAtiva ? 800 : 600,
-                  fontSize: 12.5,
-                  padding: "8px 10px",
-                  borderRadius: 8,
-                  cursor: "pointer",
-                  textAlign: "left",
+                  transform: aberto ? "rotate(180deg)" : "none",
+                  transition: "transform 0.12s ease",
                 }}
               >
-                {fazenda.nome ?? fazenda.name}
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
+                ▾
+              </span>
+            ) : null}
+          </button>
+
+          {aberto && temDropdown ? (
+            <div
+              role="listbox"
+              aria-label="Selecionar fazenda"
+              style={{
+                position: "absolute",
+                top: "calc(100% + 6px)",
+                left: 0,
+                minWidth: 200,
+                background: "rgba(11,31,58,0.98)",
+                border: "1px solid rgba(255,255,255,0.12)",
+                borderRadius: 10,
+                boxShadow: "0 10px 24px rgba(0,0,0,0.28)",
+                padding: 6,
+                zIndex: 80,
+              }}
+            >
+              {fazendas.map((fazenda) => {
+                const isAtiva = String(fazenda.id) === String(fazendaAtiva?.id ?? "");
+
+                return (
+                  <button
+                    key={fazenda.id}
+                    type="button"
+                    onClick={async () => {
+                      await selecionarFazenda(fazenda.id);
+                      setAberto(false);
+                    }}
+                    style={{
+                      width: "100%",
+                      border: "none",
+                      background: isAtiva ? "rgba(25,182,164,0.2)" : "transparent",
+                      color: "rgba(255,255,255,0.9)",
+                      fontWeight: isAtiva ? 800 : 600,
+                      fontSize: 12.5,
+                      padding: "8px 10px",
+                      borderRadius: 8,
+                      cursor: "pointer",
+                      textAlign: "left",
+                    }}
+                  >
+                    {fazenda.nome ?? fazenda.name}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+        </>
+      )}
     </div>
   );
 }
