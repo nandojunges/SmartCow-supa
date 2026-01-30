@@ -19,6 +19,7 @@ import SaidaAnimal from "./SaidaAnimal";
 import Inativas from "./Inativas";
 import CadastroAnimal from "./CadastroAnimal";
 import FichaAnimal from "./FichaAnimal/FichaAnimal";
+import Relatorios from "../../pages/Animais/Relatorios/Relatorios";
 
 // =========================
 //   CONSTANTES DE LAYOUT
@@ -407,7 +408,7 @@ export default function Animais() {
         );
 
       case "relatorio":
-        return <div className="p-4">Relatórios — em construção.</div>;
+        return <Relatorios />;
 
       case "importar":
         return <div className="p-4">Importar Dados — em construção.</div>;
