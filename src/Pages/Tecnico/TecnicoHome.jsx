@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { supabase } from "../../lib/supabaseClient";
 import { useFazenda } from "../../context/FazendaContext";
-import { aceitarConvite, getEmailDoUsuario } from "../../lib/fazendaHelpers";
+import { getEmailDoUsuario } from "../../lib/fazendaHelpers";
 import { listarConvitesPendentesTecnico } from "../../services/acessos";
 
 const STATUS_LABELS = {
@@ -40,9 +40,9 @@ export default function TecnicoHome() {
 
       const { data: acessosData, error: acessosError } = await supabase
         .from("fazenda_acessos")
-        .select("id, fazenda_id, created_at, ativo, fazendas (id, nome, owner_user_id)")
+        .select("id, fazenda_id, created_at, status, fazendas (id, nome, owner_user_id)")
         .eq("user_id", user.id)
-        .eq("ativo", true)
+        .eq("status", "ATIVO")
         .order("created_at", { ascending: false });
 
       if (acessosError) {
@@ -147,7 +147,13 @@ export default function TecnicoHome() {
     setProcessandoId(`aceitar-${convite.id}`);
 
     try {
-      await aceitarConvite(convite, usuario.id);
+      const { error } = await supabase.rpc("accept_convite_acesso", {
+        p_convite_id: convite.id,
+      });
+
+      if (error) {
+        throw error;
+      }
 
       toast.success("Convite aceito! A fazenda já está disponível para você.");
 
@@ -167,7 +173,7 @@ export default function TecnicoHome() {
       setProcessandoId(`recusar-${convite.id}`);
       const { error } = await supabase
         .from("convites_acesso")
-        .update({ status: "recusado" })
+        .update({ status: "RECUSADO" })
         .eq("id", convite.id);
 
       if (error) {

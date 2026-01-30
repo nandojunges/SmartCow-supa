@@ -80,6 +80,7 @@ export async function listAcessosDaFazenda(fazendaId) {
       "id, user_id, created_at, status, permissoes, tipo_profissional, nome_profissional, profiles (id, email, full_name, tipo_conta)"
     )
     .eq("fazenda_id", fazendaId)
+    .eq("status", "ATIVO")
     .order("created_at", { ascending: false });
 
   if (error) {
