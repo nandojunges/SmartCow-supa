@@ -19,7 +19,7 @@ const DEFAULT_CFG = {
 
 const cfgKey = (userId, fazendaId) => `${KEY}:${userId || "anon"}:${fazendaId || "none"}`;
 
-async function loadCfg(userId, fazendaId) {
+async function loadConfigManejo(userId, fazendaId) {
   if (!userId || !fazendaId) return { ...DEFAULT_CFG };
   try {
     const { data, error, status } = await supabase
@@ -142,8 +142,8 @@ export default function Secagem({ isOnline = navigator.onLine }) {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
   const [offlineAviso, setOfflineAviso] = useState("");
-  const [diasAntes, setDiasAntes] = useState(60);
-  const [diasAviso, setDiasAviso] = useState(7);
+  const [cfg, setCfg] = useState(null);
+  const [loadingCfg, setLoadingCfg] = useState(true);
   const [userId, setUserId] = useState(null);
   const [hoveredRowId, setHoveredRowId] = useState(null);
   const [hoveredColKey, setHoveredColKey] = useState(null);
@@ -276,19 +276,18 @@ export default function Secagem({ isOnline = navigator.onLine }) {
     let ativo = true;
 
     async function carregarConfig() {
+      setLoadingCfg(true);
       const { data, error } = await supabase.auth.getUser();
-      if (error || !data?.user?.id) return;
-      const uid = data.user.id;
+      const uid = !error && data?.user?.id ? data.user.id : null;
       if (!ativo) return;
       setUserId(uid);
       if (!fazendaAtualId) {
         setErro("Selecione uma fazenda para ajustar os parâmetros de secagem.");
-        return;
       }
-      const cfg = await loadCfg(uid, fazendaAtualId);
+      const cfgCarregada = await loadConfigManejo(uid, fazendaAtualId);
       if (!ativo) return;
-      setDiasAntes(Number(cfg.dias_antes_parto_para_secagem ?? 60));
-      setDiasAviso(Number(cfg.dias_antecedencia_preparar_secagem ?? 7));
+      setCfg(cfgCarregada);
+      setLoadingCfg(false);
     }
 
     carregarConfig();
@@ -297,7 +296,11 @@ export default function Secagem({ isOnline = navigator.onLine }) {
     };
   }, [fazendaAtualId]);
 
+  const diasAntes = cfg?.dias_antes_parto_para_secagem;
+  const diasAviso = cfg?.dias_antecedencia_preparar_secagem;
+
   const linhasOrdenadas = useMemo(() => {
+    if (loadingCfg || diasAntes == null) return [];
     const hoje = new Date();
     const janelaMax = addDays(hoje, 120);
     const base = Array.isArray(animais) ? animais : [];
@@ -330,7 +333,7 @@ export default function Secagem({ isOnline = navigator.onLine }) {
       const diffB = Math.abs(b.diasParaSecagem ?? 0);
       return diffA - diffB;
     });
-  }, [animais, diasAntes]);
+  }, [animais, diasAntes, loadingCfg]);
 
   const resumo = useMemo(() => {
     const total = linhasOrdenadas.length;
@@ -409,46 +412,56 @@ export default function Secagem({ isOnline = navigator.onLine }) {
           marginBottom: 12,
         }}
       >
-        <label
-          className="st-filter__label"
-          style={{ maxWidth: 260, flex: "1 1 260px" }}
-        >
-          Dias antes do parto para secar
-          <input
-            className="st-filter-input"
-            style={{ width: 90 }}
-            type="number"
-            min={1}
-            placeholder="Ex: 60"
-            value={diasAntes}
-            onChange={(event) => {
-              const value = Number(event.target.value || 0);
-              setDiasAntes(value);
-              saveCfg(userId, fazendaAtualId, { dias_antes_parto_para_secagem: value });
-            }}
-          />
-        </label>
-        <label
-          className="st-filter__label"
-          style={{ maxWidth: 260, flex: "1 1 260px" }}
-        >
-          Avisar/preparar com antecedência
-          <input
-            className="st-filter-input"
-            style={{ width: 90 }}
-            type="number"
-            min={0}
-            placeholder="Ex: 7"
-            value={diasAviso}
-            onChange={(event) => {
-              const value = Number(event.target.value || 0);
-              setDiasAviso(value);
-              saveCfg(userId, fazendaAtualId, {
-                dias_antecedencia_preparar_secagem: value,
-              });
-            }}
-          />
-        </label>
+        {!loadingCfg && cfg && (
+          <>
+            <label
+              className="st-filter__label"
+              style={{ maxWidth: 260, flex: "1 1 260px" }}
+            >
+              Dias antes do parto para secar
+              <input
+                className="st-filter-input"
+                style={{ width: 90 }}
+                type="number"
+                min={1}
+                value={diasAntes}
+                onChange={(event) => {
+                  const value = Number(event.target.value || 0);
+                  setCfg((prev) =>
+                    prev ? { ...prev, dias_antes_parto_para_secagem: value } : prev
+                  );
+                  saveCfg(userId, fazendaAtualId, {
+                    dias_antes_parto_para_secagem: value,
+                  });
+                }}
+              />
+            </label>
+            <label
+              className="st-filter__label"
+              style={{ maxWidth: 260, flex: "1 1 260px" }}
+            >
+              Avisar/preparar com antecedência
+              <input
+                className="st-filter-input"
+                style={{ width: 90 }}
+                type="number"
+                min={0}
+                value={diasAviso}
+                onChange={(event) => {
+                  const value = Number(event.target.value || 0);
+                  setCfg((prev) =>
+                    prev
+                      ? { ...prev, dias_antecedencia_preparar_secagem: value }
+                      : prev
+                  );
+                  saveCfg(userId, fazendaAtualId, {
+                    dias_antecedencia_preparar_secagem: value,
+                  });
+                }}
+              />
+            </label>
+          </>
+        )}
       </div>
 
       <div className="st-table-container">
