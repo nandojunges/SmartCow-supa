@@ -48,9 +48,6 @@ export default function AjustesAcessos() {
   const [acessos, setAcessos] = useState([]);
   const [fazendaNome, setFazendaNome] = useState("");
   const [tipoConta, setTipoConta] = useState(null);
-  const [editandoId, setEditandoId] = useState(null);
-  const [editTipo, setEditTipo] = useState(null);
-  const [editApelido, setEditApelido] = useState("");
 
   const emailNormalizado = useMemo(() => email.trim().toLowerCase(), [email]);
   const tipoContaNormalizada = useMemo(
@@ -312,51 +309,6 @@ export default function AjustesAcessos() {
     }
   }
 
-  function iniciarEdicao(acesso) {
-    const opcaoAtual = PROFISSIONAIS_OPTIONS.find(
-      (option) => option.value === acesso.tipo_profissional
-    );
-    setEditandoId(acesso.id);
-    setEditTipo(opcaoAtual ?? null);
-    setEditApelido(acesso.nome_profissional ?? "");
-  }
-
-  function cancelarEdicao() {
-    setEditandoId(null);
-    setEditTipo(null);
-    setEditApelido("");
-  }
-
-  async function salvarEdicao(acesso) {
-    if (!fazendaAtualId) return;
-
-    try {
-      setProcessandoId(`editar-${acesso.id}`);
-      const { error } = await supabase
-        .from("fazenda_acessos")
-        .update({
-          tipo_profissional: editTipo?.value ?? null,
-          nome_profissional: editApelido?.trim() || null,
-        })
-        .eq("id", acesso.id);
-
-      if (error) {
-        throw error;
-      }
-
-      toast.success("Acesso atualizado.");
-      cancelarEdicao();
-      await carregarListas(fazendaAtualId);
-    } catch (err) {
-      if (import.meta.env.DEV) {
-        console.error("Erro ao atualizar acesso:", err.message);
-      }
-      toast.error(err.message || "Não foi possível atualizar o acesso.");
-    } finally {
-      setProcessandoId(null);
-    }
-  }
-
   if (modoConsultor) {
     return (
       <div style={styles.page}>
@@ -509,98 +461,31 @@ export default function AjustesAcessos() {
           <div style={styles.list}>
             {acessos.map((acesso) => {
               const nomeCompleto =
-                acesso.profiles?.full_name || acesso.profiles?.email || "Sem nome";
-              const emailContato = acesso.profiles?.email || "Sem e-mail";
-              const emEdicao = editandoId === acesso.id;
+                acesso.profiles?.full_name ||
+                acesso.profiles?.email ||
+                acesso.user_id ||
+                "Sem nome";
 
               return (
                 <div key={acesso.id} style={styles.listItem}>
                   <div style={styles.listInfo}>
-                    <span style={styles.listTitle}>
-                      {nomeCompleto} • {emailContato}
+                    <span style={styles.listTitle}>{nomeCompleto}</span>
+                    <span style={styles.listMeta}>
+                      Acesso ativo desde {formatarData(acesso.created_at)}
                     </span>
-                    {!emEdicao ? (
-                      <>
-                        <span style={styles.listMeta}>
-                          {(acesso.tipo_profissional || "Tipo não informado") +
-                            (acesso.nome_profissional
-                              ? ` • ${acesso.nome_profissional}`
-                              : " • Apelido não informado")}
-                        </span>
-                        <span style={styles.listMeta}>
-                          Acesso ativo desde {formatarData(acesso.created_at)}
-                        </span>
-                      </>
-                    ) : (
-                      <div style={styles.editFields}>
-                        <div style={styles.editField}>
-                          <span style={styles.editLabel}>Tipo</span>
-                          <Select
-                            styles={selectStyles}
-                            placeholder="Selecione..."
-                            options={PROFISSIONAIS_OPTIONS}
-                            value={editTipo}
-                            onChange={setEditTipo}
-                            isClearable
-                          />
-                        </div>
-                        <div style={styles.editField}>
-                          <span style={styles.editLabel}>Apelido</span>
-                          <input
-                            type="text"
-                            placeholder="Apelido"
-                            value={editApelido}
-                            onChange={(event) => setEditApelido(event.target.value)}
-                            style={styles.input}
-                          />
-                        </div>
-                      </div>
-                    )}
                   </div>
                   <div style={styles.listActions}>
                     <span style={{ ...styles.status, ...styles.statussuccess }}>Ativo</span>
-                    {emEdicao ? (
-                      <>
-                        <button
-                          type="button"
-                          style={styles.secondaryButton}
-                          onClick={() => salvarEdicao(acesso)}
-                          disabled={processandoId === `editar-${acesso.id}`}
-                        >
-                          {processandoId === `editar-${acesso.id}`
-                            ? "Salvando..."
-                            : "Salvar"}
-                        </button>
-                        <button
-                          type="button"
-                          style={styles.ghostButton}
-                          onClick={cancelarEdicao}
-                          disabled={processandoId === `editar-${acesso.id}`}
-                        >
-                          Cancelar
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          style={styles.secondaryButton}
-                          onClick={() => iniciarEdicao(acesso)}
-                        >
-                          Editar
-                        </button>
-                        <button
-                          type="button"
-                          style={styles.ghostButton}
-                          onClick={() => handleRemover(acesso)}
-                          disabled={processandoId === `remover-${acesso.id}`}
-                        >
-                          {processandoId === `remover-${acesso.id}`
-                            ? "Revogando..."
-                            : "Revogar"}
-                        </button>
-                      </>
-                    )}
+                    <button
+                      type="button"
+                      style={styles.ghostButton}
+                      onClick={() => handleRemover(acesso)}
+                      disabled={processandoId === `remover-${acesso.id}`}
+                    >
+                      {processandoId === `remover-${acesso.id}`
+                        ? "Revogando..."
+                        : "Revogar"}
+                    </button>
                   </div>
                 </div>
               );
