@@ -55,6 +55,7 @@ export default function Ajustes() {
   const [emailConvite, setEmailConvite] = useState("");
   const [profissionalTipo, setProfissionalTipo] = useState(null);
   const [profissionalNome, setProfissionalNome] = useState("");
+  const [permissoes] = useState({});
   const [enviandoConvite, setEnviandoConvite] = useState(false);
 
   const tipoContaNormalizada = useMemo(
@@ -308,11 +309,14 @@ export default function Ajustes() {
     try {
       setEnviandoConvite(true);
 
+      const permissoesPayload =
+        permissoes && typeof permissoes === "object" ? permissoes : {};
+
       const payload = {
         fazenda_id: fazendaAtualId,
         email_convidado: emailConviteNormalizado.trim().toLowerCase(),
         status: "PENDENTE",
-        permissoes: null,
+        permissoes: permissoesPayload,
         tipo_profissional: profissionalTipo?.value ?? null,
         nome_profissional: profissionalNome?.trim() || null,
       };
