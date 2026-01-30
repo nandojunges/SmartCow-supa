@@ -12,6 +12,7 @@ import { supabase } from "../../lib/supabaseClient";
 import { withFazendaId } from "../../lib/fazendaScope";
 import { useFazenda } from "../../context/FazendaContext";
 import { kvGet, kvSet } from "../../offline/localDB";
+import SelecioneFazenda from "../../components/SelecioneFazenda";
 
 // Páginas internas
 import SubAbasAnimais from "./SubAbasAnimais";
@@ -421,6 +422,10 @@ export default function Animais() {
   };
 
   const cardMaxHeight = "calc(100vh - 2 * 24px)";
+
+  if (!fazendaAtualId) {
+    return <SelecioneFazenda />;
+  }
 
   return (
     <div

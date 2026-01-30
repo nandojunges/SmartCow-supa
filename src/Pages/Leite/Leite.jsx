@@ -4,6 +4,7 @@ import Select from "react-select";
 import { supabase } from "../../lib/supabaseClient";
 import { withFazendaId } from "../../lib/fazendaScope";
 import { useFazenda } from "../../context/FazendaContext";
+import SelecioneFazenda from "../../components/SelecioneFazenda";
 import ModalMedicaoLeite from "./ModalMedicaoLeite";
 import FichaLeiteira from "./FichaLeiteira";
 import ResumoLeiteDia from "./ResumoLeiteDia";
@@ -1193,6 +1194,10 @@ export default function Leite() {
       setSalvandoLotes(false);
     }
   };
+
+  if (!fazendaAtualId) {
+    return <SelecioneFazenda />;
+  }
 
   return (
     <div className="w-full px-6 py-4 font-sans">

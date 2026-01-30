@@ -1,8 +1,11 @@
 // src/layout/SistemaBase.jsx
-import NavegacaoPrincipal from "./NavegacaoPrincipal";
 import { Outlet } from "react-router-dom";
+import NavegacaoPrincipal from "./NavegacaoPrincipal";
+import { useAuth } from "../contexts/AuthContext";
 
-export default function SistemaBase({ tipoConta }) {
+export default function SistemaBase() {
+  const { ready } = useAuth();
+
   return (
     <div
       style={{
@@ -23,7 +26,7 @@ export default function SistemaBase({ tipoConta }) {
         }}
       >
         {/* Agora sem maxWidth, ocupa toda a tela */}
-        <NavegacaoPrincipal tipoConta={tipoConta} />
+        {ready ? <NavegacaoPrincipal /> : null}
       </header>
 
       {/* CONTEÚDO DAS PÁGINAS */}

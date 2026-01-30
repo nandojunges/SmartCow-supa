@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useFazenda } from "../../context/FazendaContext";
+import SelecioneFazenda from "../../components/SelecioneFazenda";
 
 // Subpáginas (mantidas para visualização do layout)
 import Estoque from "./Estoque";
@@ -95,6 +97,7 @@ function Chips({ selected, setSelected, contadores }) {
 
 /* ========================= Página principal (layout-only) ========================= */
 export default function ConsumoReposicao() {
+  const { fazendaAtualId } = useFazenda();
   const [tab, setTab] = useState(() => localStorage.getItem(LS_LAST_TAB) || "estoque");
 
   useEffect(() => {
@@ -109,6 +112,10 @@ export default function ConsumoReposicao() {
     limpeza: null,
     calendario: null,
   });
+
+  if (!fazendaAtualId) {
+    return <SelecioneFazenda />;
+  }
 
   return (
     <div style={ui.page}>
