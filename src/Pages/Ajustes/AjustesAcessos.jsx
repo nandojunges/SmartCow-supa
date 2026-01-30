@@ -219,33 +219,97 @@ export default function AjustesAcessos() {
     try {
       setEnviando(true);
 
-      const { data: conviteExistente, error: conviteError } = await supabase
-        .from("convites_acesso")
-        .select("id")
-        .eq("fazenda_id", fazendaAtualId)
-        .eq("email_convidado", emailNormalizado)
-        .eq("status", "pendente")
-        .limit(1)
+      const { data: perfilData, error: perfilError } = await supabase
+        .from("profiles")
+        .select("id, email")
+        .eq("email", emailNormalizado)
         .maybeSingle();
 
-      if (conviteError) {
-        throw conviteError;
+      if (perfilError) {
+        throw perfilError;
       }
 
-      if (conviteExistente?.id) {
-        toast.info("Convite pendente já enviado para este e-mail.");
-        return;
-      }
+      if (perfilData?.id) {
+        const { data: acessoExistente, error: acessoError } = await supabase
+          .from("fazenda_acessos")
+          .select("id")
+          .eq("fazenda_id", fazendaAtualId)
+          .eq("user_id", perfilData.id)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
 
-      await criarConvite(fazendaAtualId, emailNormalizado, {
-        tipoProfissional: profissionalTipo?.value ?? null,
-        nomeProfissional: profissionalNome?.trim() || null,
-      });
+        if (acessoError) {
+          throw acessoError;
+        }
+
+        const payload = {
+          status: "ATIVO",
+          tipo_profissional: profissionalTipo?.value ?? null,
+          nome_profissional: profissionalNome?.trim() || null,
+        };
+
+        if (acessoExistente?.id) {
+          const { error: updateError } = await supabase
+            .from("fazenda_acessos")
+            .update(payload)
+            .eq("id", acessoExistente.id);
+
+          if (updateError) {
+            throw updateError;
+          }
+        } else {
+          const { error: insertError } = await supabase.from("fazenda_acessos").insert({
+            fazenda_id: fazendaAtualId,
+            user_id: perfilData.id,
+            ...payload,
+          });
+
+          if (insertError) {
+            throw insertError;
+          }
+        }
+
+        toast.success("Acesso reativado com sucesso.");
+      } else {
+        const { data: conviteExistente, error: conviteError } = await supabase
+          .from("convites_acesso")
+          .select("id")
+          .eq("fazenda_id", fazendaAtualId)
+          .eq("email_convidado", emailNormalizado)
+          .limit(1)
+          .maybeSingle();
+
+        if (conviteError) {
+          throw conviteError;
+        }
+
+        if (conviteExistente?.id) {
+          const { error: updateError } = await supabase
+            .from("convites_acesso")
+            .update({
+              status: "pendente",
+              tipo_profissional: profissionalTipo?.value ?? null,
+              nome_profissional: profissionalNome?.trim() || null,
+            })
+            .eq("id", conviteExistente.id);
+
+          if (updateError) {
+            throw updateError;
+          }
+        } else {
+          await criarConvite(fazendaAtualId, emailNormalizado, {
+            tipoProfissional: profissionalTipo?.value ?? null,
+            nomeProfissional: profissionalNome?.trim() || null,
+          });
+        }
+
+        toast.success("Convite enviado! O profissional verá ao acessar.");
+      }
 
       setEmail("");
       setProfissionalTipo(null);
       setProfissionalNome("");
-      toast.success("Convite enviado! O profissional verá ao acessar.");
       await carregarListas(fazendaAtualId);
     } catch (err) {
       if (import.meta.env.DEV) {
@@ -290,7 +354,7 @@ export default function AjustesAcessos() {
       setProcessandoId(`remover-${acesso.id}`);
       const { error } = await supabase
         .from("fazenda_acessos")
-        .delete()
+        .update({ status: "REVOGADO" })
         .eq("id", acesso.id);
 
       if (error) {
@@ -301,9 +365,35 @@ export default function AjustesAcessos() {
       await carregarListas(fazendaAtualId);
     } catch (err) {
       if (import.meta.env.DEV) {
-        console.error("Erro ao remover acesso:", err.message);
+        console.error("Erro ao atualizar status:", err.message);
       }
-      toast.error(err.message || "Não foi possível remover o acesso.");
+      toast.error(err.message || "Não foi possível atualizar o status.");
+    } finally {
+      setProcessandoId(null);
+    }
+  }
+
+  async function handleAtualizarStatus(acesso, status) {
+    if (!fazendaAtualId) return;
+
+    try {
+      setProcessandoId(`status-${acesso.id}`);
+      const { error } = await supabase
+        .from("fazenda_acessos")
+        .update({ status })
+        .eq("id", acesso.id);
+
+      if (error) {
+        throw error;
+      }
+
+      toast.success("Status atualizado com sucesso.");
+      await carregarListas(fazendaAtualId);
+    } catch (err) {
+      if (import.meta.env.DEV) {
+        console.error("Erro ao atualizar status:", err.message);
+      }
+      toast.error(err.message || "Não foi possível atualizar o status.");
     } finally {
       setProcessandoId(null);
     }
@@ -465,27 +555,63 @@ export default function AjustesAcessos() {
                 acesso.profiles?.email ||
                 acesso.user_id ||
                 "Sem nome";
+              const statusLabel = formatarStatus(acesso.status);
+              const statusStyle = obterEstiloStatus(acesso.status);
 
               return (
                 <div key={acesso.id} style={styles.listItem}>
                   <div style={styles.listInfo}>
                     <span style={styles.listTitle}>{nomeCompleto}</span>
                     <span style={styles.listMeta}>
-                      Acesso ativo desde {formatarData(acesso.created_at)}
+                      {(acesso.tipo_profissional || "Tipo não informado") +
+                        (acesso.nome_profissional
+                          ? ` • ${acesso.nome_profissional}`
+                          : " • Apelido não informado")}
+                    </span>
+                    <span style={styles.listMeta}>
+                      {statusLabel} desde {formatarData(acesso.created_at)}
                     </span>
                   </div>
                   <div style={styles.listActions}>
-                    <span style={{ ...styles.status, ...styles.statussuccess }}>Ativo</span>
-                    <button
-                      type="button"
-                      style={styles.ghostButton}
-                      onClick={() => handleRemover(acesso)}
-                      disabled={processandoId === `remover-${acesso.id}`}
-                    >
-                      {processandoId === `remover-${acesso.id}`
-                        ? "Revogando..."
-                        : "Revogar"}
-                    </button>
+                    <span style={{ ...styles.status, ...statusStyle }}>
+                      {statusLabel}
+                    </span>
+                    {acesso.status !== "BLOQUEADO" && (
+                      <button
+                        type="button"
+                        style={styles.ghostButton}
+                        onClick={() => handleAtualizarStatus(acesso, "BLOQUEADO")}
+                        disabled={processandoId === `status-${acesso.id}`}
+                      >
+                        {processandoId === `status-${acesso.id}`
+                          ? "Bloqueando..."
+                          : "Bloquear"}
+                      </button>
+                    )}
+                    {acesso.status !== "REVOGADO" && (
+                      <button
+                        type="button"
+                        style={styles.ghostButton}
+                        onClick={() => handleRemover(acesso)}
+                        disabled={processandoId === `remover-${acesso.id}`}
+                      >
+                        {processandoId === `remover-${acesso.id}`
+                          ? "Revogando..."
+                          : "Revogar"}
+                      </button>
+                    )}
+                    {acesso.status !== "ATIVO" && (
+                      <button
+                        type="button"
+                        style={styles.secondaryButton}
+                        onClick={() => handleAtualizarStatus(acesso, "ATIVO")}
+                        disabled={processandoId === `status-${acesso.id}`}
+                      >
+                        {processandoId === `status-${acesso.id}`
+                          ? "Reativando..."
+                          : "Reativar"}
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -512,6 +638,24 @@ function formatarData(valor) {
     month: "2-digit",
     year: "numeric",
   });
+}
+
+function formatarStatus(status) {
+  const statusNormalizado = String(status || "").toUpperCase();
+  if (statusNormalizado === "BLOQUEADO") return "Bloqueado";
+  if (statusNormalizado === "REVOGADO") return "Revogado";
+  return "Ativo";
+}
+
+function obterEstiloStatus(status) {
+  const statusNormalizado = String(status || "").toUpperCase();
+  if (statusNormalizado === "BLOQUEADO") {
+    return styles.statuswarning;
+  }
+  if (statusNormalizado === "REVOGADO") {
+    return styles.statusdanger;
+  }
+  return styles.statussuccess;
 }
 
 const styles = {
@@ -689,6 +833,11 @@ const styles = {
     background: "#fffbeb",
     color: "#92400e",
     borderColor: "#fde68a",
+  },
+  statusdanger: {
+    background: "#fef2f2",
+    color: "#b91c1c",
+    borderColor: "#fecaca",
   },
   emptyState: {
     display: "flex",
