@@ -1,0 +1,31 @@
+@media print {
+  body {
+    background: #fff;
+  }
+
+  .relatorios-header,
+  .relatorios-tabs,
+  .relatorios-sidebar,
+  .dataset-builder__actions,
+  .dataset-builder__add,
+  .report-composer__actions {
+    display: none !important;
+  }
+
+  .relatorios-card,
+  .relatorios-grid,
+  .report-composer,
+  .sc-grid {
+    background: #fff !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  .sc-grid thead th {
+    background: #fff !important;
+  }
+
+  .sc-grid tbody tr:nth-child(even) {
+    background: #fff !important;
+  }
+}
