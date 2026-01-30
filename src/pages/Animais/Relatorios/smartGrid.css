@@ -1,0 +1,196 @@
+.relatorios-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+}
+
+.relatorios-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.relatorios-tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.relatorios-tabs button {
+  border: 1px solid #d7dbe0;
+  background: #fff;
+  border-radius: 8px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.relatorios-tabs button.is-active {
+  background: #20242b;
+  color: #fff;
+  border-color: #20242b;
+}
+
+.relatorios-card {
+  background: #f8f9fb;
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.relatorios-planilha {
+  display: grid;
+  grid-template-columns: minmax(240px, 280px) 1fr;
+  gap: 16px;
+}
+
+.relatorios-sidebar {
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid #e6e9ee;
+}
+
+.dataset-builder__header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.dataset-builder__note {
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.dataset-builder__columns ul {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dataset-builder__column-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.dataset-builder__actions {
+  display: flex;
+  gap: 6px;
+}
+
+.dataset-builder__actions button {
+  border: 1px solid #d7dbe0;
+  background: #fff;
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+}
+
+.dataset-builder__add {
+  margin-top: 16px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #d7dbe0;
+  background: #f4f5f7;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.relatorios-grid {
+  background: #fff;
+  border-radius: 12px;
+  padding: 8px;
+  border: 1px solid #e6e9ee;
+}
+
+.sc-grid {
+  background: #fff;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.sc-grid table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.sc-grid th,
+.sc-grid td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #eef1f4;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-grid thead th {
+  background: #f4f5f7;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.sc-grid tbody tr:nth-child(even) {
+  background: #fafbfc;
+}
+
+.sc-grid tbody tr:hover {
+  background: #f1f5f9;
+}
+
+.sc-grid input {
+  width: 100%;
+  border: 1px solid #d7dbe0;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 0.9rem;
+}
+
+.report-composer {
+  background: #fff;
+  border-radius: 12px;
+  padding: 20px;
+  border: 1px solid #e6e9ee;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.report-composer__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.report-composer__actions button {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid #d7dbe0;
+  background: #fff;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.report-composer__preview {
+  border: 1px dashed #cbd5f5;
+  border-radius: 10px;
+  padding: 16px;
+  background: #f9fafb;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
