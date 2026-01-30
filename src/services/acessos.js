@@ -134,11 +134,15 @@ export async function listarConvitesPendentesTecnico(email) {
   const { data, error } = await supabase
     .from("convites_acesso")
     .select(`id, fazenda_id, status, created_at, ${CONVITE_EMAIL_COL}, tipo_profissional, nome_profissional`)
-    .filter(`lower(${CONVITE_EMAIL_COL})`, "eq", emailNormalizado)
+    .eq(CONVITE_EMAIL_COL, emailNormalizado)
     .eq("status", "PENDENTE")
     .order("created_at", { ascending: false });
 
   if (error) {
+    console.log("Erro ao listar convites pendentes do técnico:", {
+      emailNorm: emailNormalizado,
+      supabase: { data, error },
+    });
     if (isMissingColumnError(error, CONVITE_EMAIL_COL)) {
       console.error("Coluna de e-mail inexistente nos convites:", {
         emailColumn: CONVITE_EMAIL_COL,

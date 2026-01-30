@@ -29,13 +29,14 @@ export default function TecnicoHome() {
 
     try {
       const perfil = await getEmailDoUsuario(user.id);
-      const email = (perfil?.email ?? "").trim().toLowerCase();
-      setEmailTecnico(email);
+      const userEmail = perfil?.email ?? "";
+      const emailNorm = (userEmail || "").trim().toLowerCase();
+      setEmailTecnico(emailNorm);
 
       let convitesPendentes = [];
 
-      if (email) {
-        convitesPendentes = await listarConvitesPendentesTecnico(email);
+      if (emailNorm) {
+        convitesPendentes = await listarConvitesPendentesTecnico(emailNorm);
       }
 
       const { data: acessosData, error: acessosError } = await supabase
