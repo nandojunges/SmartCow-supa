@@ -822,10 +822,6 @@ export default function Leite() {
         setCacheMetadata({ updatedAt: cache.updatedAt, dateRange });
 
         if (!possuiCache) {
-          setVacas([]);
-          setLotesLeite([]);
-          setUltimaMedicaoPorAnimal({});
-          setMedicoesPorDia((prev) => ({ ...prev, [dateISO]: {} }));
           return;
         }
 

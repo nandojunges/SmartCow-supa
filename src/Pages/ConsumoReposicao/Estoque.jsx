@@ -516,6 +516,8 @@ export default function Estoque({ onCountChange }) {
     return { total, valorTotal, abaixoMinimo };
   }, [produtosExibidos, minimos]);
 
+  const hasProdutos = produtosExibidos.length > 0;
+
   /* ===================== CRUD PRODUTO ===================== */
   async function salvarNovoProduto(produtoUi) {
     const db = uiToDbProduto(produtoUi);
@@ -791,6 +793,9 @@ export default function Estoque({ onCountChange }) {
           Dica: clique no título das colunas habilitadas para ordenar/filtrar. Clique novamente para
           fechar.
         </div>
+        {loading && hasProdutos && (
+          <div className="text-xs text-slate-500 mb-2">Atualizando estoque...</div>
+        )}
         <div className="st-table-container">
           <div className="st-table-wrap">
             <table
@@ -1018,7 +1023,7 @@ export default function Estoque({ onCountChange }) {
               </thead>
 
               <tbody>
-                {loading ? (
+                {loading && !hasProdutos ? (
                   <tr className="st-empty">
                     <td colSpan={colunas.length} style={{ textAlign: "center" }}>
                       Carregando…

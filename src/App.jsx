@@ -64,25 +64,6 @@ export default function App() {
   const hasFazendaSelecionada = hasFazendaAtual;
   const isProdutor = tipoContaNormalizada === "PRODUTOR";
 
-  if (!ready) {
-    return (
-      <div
-        style={{
-          minHeight: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 16,
-          fontWeight: 600,
-          color: "#1f2937",
-          background: "#f8fafc",
-        }}
-      >
-        Carregando...
-      </div>
-    );
-  }
-
   return (
     <>
       <Routes>
