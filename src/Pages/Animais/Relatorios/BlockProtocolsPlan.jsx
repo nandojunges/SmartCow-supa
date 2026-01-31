@@ -62,12 +62,16 @@ export default function BlockProtocolsPlan({ data, onChange }) {
               }
             />
           </label>
-          <button type="button" onClick={() => handleRemove(item.id)}>
+          <button
+            type="button"
+            className="sc-btn-chip"
+            onClick={() => handleRemove(item.id)}
+          >
             Remover
           </button>
         </div>
       ))}
-      <button type="button" onClick={handleAdd}>
+      <button type="button" className="sc-btn-chip" onClick={handleAdd}>
         + Adicionar protocolo
       </button>
     </div>
