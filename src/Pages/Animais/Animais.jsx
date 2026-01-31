@@ -142,7 +142,15 @@ function BarraLateral({ abaAtiva, setAbaAtiva }) {
 // =========================
 export default function Animais() {
   const { fazendaAtualId } = useFazenda();
-  const [abaAtiva, setAbaAtiva] = useState("todos");
+  const [abaAtiva, setAbaAtiva] = useState(() => {
+    try {
+      const stored = localStorage.getItem("animais:abaAtiva");
+      const valido = botoesBarra.some((btn) => btn.id === stored);
+      return valido ? stored : "todos";
+    } catch {
+      return "todos";
+    }
+  });
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   const [animaisAtivos, setAnimaisAtivos] = useState([]);
@@ -164,6 +172,12 @@ export default function Animais() {
       window.removeEventListener("offline", off);
     };
   }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("animais:abaAtiva", abaAtiva);
+    } catch {}
+  }, [abaAtiva]);
 
   // =========================
   //   CARREGAR ANIMAL COMPLETO
@@ -243,8 +257,6 @@ export default function Animais() {
       console.log(`[animais] cache length: ${lista.length}`);
 
       if (lista.length === 0) {
-        setAnimaisAtivos([]);
-        setAnimaisInativos([]);
         setOfflineAviso(
           "Sem dados offline ainda. Conecte na internet uma vez para baixar os animais."
         );
@@ -269,8 +281,6 @@ export default function Animais() {
     console.log("[animais] online -> buscando supabase");
     try {
       if (!fazendaAtualId) {
-        setAnimaisAtivos([]);
-        setAnimaisInativos([]);
         return;
       }
 
@@ -380,48 +390,8 @@ export default function Animais() {
     setFichaOpen(true);
   };
 
-  const renderizarPrincipal = () => {
-    switch (abaAtiva) {
-      case "todos":
-        return (
-          <SubAbasAnimais
-            animais={animaisAtivos}
-            onRefresh={handleAtualizar}
-            isOnline={isOnline}
-            // onVerFicha={handleVerFicha}
-          />
-        );
-
-      case "entrada":
-        return <CadastroAnimal animais={animaisAtivos} onAtualizar={handleAtualizar} />;
-
-      case "saida":
-        return <SaidaAnimal animais={animaisAtivos} onAtualizar={handleAtualizar} />;
-
-      case "inativas":
-        return (
-          <Inativas
-            animais={animaisInativos}
-            onAtualizar={handleAtualizar}
-            onVerFicha={handleVerFicha}
-          />
-        );
-
-      case "relatorio":
-        return <Relatorios />;
-
-      case "importar":
-        return <div className="p-4">Importar Dados — em construção.</div>;
-
-      case "exportar":
-        return <div className="p-4">Exportar Dados — em construção.</div>;
-
-      default:
-        return <div className="p-4">Em breve…</div>;
-    }
-  };
-
   const cardMaxHeight = "calc(100vh - 2 * 24px)";
+  const hasAnimais = animaisAtivos.length > 0 || animaisInativos.length > 0;
 
   return (
     <div
@@ -454,13 +424,56 @@ export default function Animais() {
           }}
         >
           <div style={{ flex: 1, overflowY: "auto" }}>
-            {carregando ? (
-              <div className="p-4 text-sm text-gray-500">Carregando animais...</div>
-            ) : offlineAviso ? (
-              <div className="p-4 text-sm text-gray-500">{offlineAviso}</div>
-            ) : (
-              renderizarPrincipal()
+            {carregando && hasAnimais && (
+              <div className="px-4 pb-2 text-xs font-medium text-gray-500">Atualizando animais...</div>
             )}
+            {offlineAviso && hasAnimais && (
+              <div className="px-4 pb-2 text-xs font-medium text-amber-600">{offlineAviso}</div>
+            )}
+            {!hasAnimais && carregando && (
+              <div className="p-4 text-sm text-gray-500">Carregando animais...</div>
+            )}
+            {!hasAnimais && offlineAviso && (
+              <div className="p-4 text-sm text-gray-500">{offlineAviso}</div>
+            )}
+
+            <div style={{ display: abaAtiva === "todos" ? "block" : "none" }} aria-hidden={abaAtiva !== "todos"}>
+              <SubAbasAnimais
+                animais={animaisAtivos}
+                onRefresh={handleAtualizar}
+                isOnline={isOnline}
+                // onVerFicha={handleVerFicha}
+              />
+            </div>
+
+            <div style={{ display: abaAtiva === "entrada" ? "block" : "none" }} aria-hidden={abaAtiva !== "entrada"}>
+              <CadastroAnimal animais={animaisAtivos} onAtualizar={handleAtualizar} />
+            </div>
+
+            <div style={{ display: abaAtiva === "saida" ? "block" : "none" }} aria-hidden={abaAtiva !== "saida"}>
+              <SaidaAnimal animais={animaisAtivos} onAtualizar={handleAtualizar} />
+            </div>
+
+            <div style={{ display: abaAtiva === "inativas" ? "block" : "none" }} aria-hidden={abaAtiva !== "inativas"}>
+              <Inativas
+                animais={animaisInativos}
+                onAtualizar={handleAtualizar}
+                onVerFicha={handleVerFicha}
+              />
+            </div>
+
+            <div style={{ display: abaAtiva === "relatorio" ? "block" : "none" }} aria-hidden={abaAtiva !== "relatorio"}>
+              <Relatorios />
+            </div>
+
+            <div style={{ display: abaAtiva === "importar" ? "block" : "none" }} aria-hidden={abaAtiva !== "importar"}>
+              <div className="p-4">Importar Dados — em construção.</div>
+            </div>
+
+            <div style={{ display: abaAtiva === "exportar" ? "block" : "none" }} aria-hidden={abaAtiva !== "exportar"}>
+              <div className="p-4">Exportar Dados — em construção.</div>
+            </div>
+
           </div>
         </div>
       </div>

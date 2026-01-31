@@ -95,10 +95,18 @@ function Chips({ selected, setSelected, contadores }) {
 
 /* ========================= Página principal (layout-only) ========================= */
 export default function ConsumoReposicao() {
-  const [tab, setTab] = useState(() => localStorage.getItem(LS_LAST_TAB) || "estoque");
+  const [tab, setTab] = useState(() => {
+    try {
+      return localStorage.getItem(LS_LAST_TAB) || "estoque";
+    } catch {
+      return "estoque";
+    }
+  });
 
   useEffect(() => {
-    localStorage.setItem(LS_LAST_TAB, tab);
+    try {
+      localStorage.setItem(LS_LAST_TAB, tab);
+    } catch {}
   }, [tab]);
 
   // Contadores “placeholder” (depois reconstruímos com Supabase)
@@ -114,12 +122,28 @@ export default function ConsumoReposicao() {
     <div style={ui.page}>
       <Chips selected={tab} setSelected={setTab} contadores={counts} />
 
-      <div id={`pane-${tab}`} role="tabpanel" aria-labelledby={tab} style={{ padding: 12 }}>
-        {tab === "estoque" && <Estoque />}
-        {tab === "lotes" && <Lotes />}
-        {tab === "dieta" && <Dieta />}
-        {tab === "limpeza" && <Limpeza />}
-        {tab === "calendario" && <CalendarioSanitario />}
+      <div style={{ padding: 12 }}>
+        <div id="pane-estoque" role="tabpanel" aria-labelledby="estoque" style={{ display: tab === "estoque" ? "block" : "none" }} aria-hidden={tab !== "estoque"}>
+          <Estoque />
+        </div>
+        <div id="pane-lotes" role="tabpanel" aria-labelledby="lotes" style={{ display: tab === "lotes" ? "block" : "none" }} aria-hidden={tab !== "lotes"}>
+          <Lotes />
+        </div>
+        <div id="pane-dieta" role="tabpanel" aria-labelledby="dieta" style={{ display: tab === "dieta" ? "block" : "none" }} aria-hidden={tab !== "dieta"}>
+          <Dieta />
+        </div>
+        <div id="pane-limpeza" role="tabpanel" aria-labelledby="limpeza" style={{ display: tab === "limpeza" ? "block" : "none" }} aria-hidden={tab !== "limpeza"}>
+          <Limpeza />
+        </div>
+        <div
+          id="pane-calendario"
+          role="tabpanel"
+          aria-labelledby="calendario"
+          style={{ display: tab === "calendario" ? "block" : "none" }}
+          aria-hidden={tab !== "calendario"}
+        >
+          <CalendarioSanitario />
+        </div>
       </div>
     </div>
   );

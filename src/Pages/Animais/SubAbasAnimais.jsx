@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 import Plantel from "./Plantel";
 import Secagem from "./Secagem";
@@ -20,6 +20,12 @@ export default function SubAbasAnimais({ animais = [], onRefresh, isOnline }) {
       return "plantel";
     }
   });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LS_LAST_TAB, tab);
+    } catch {}
+  }, [tab]);
 
   const contadores = useMemo(() => {
     const lista = Array.isArray(animais) ? animais : [];
@@ -50,9 +56,6 @@ export default function SubAbasAnimais({ animais = [], onRefresh, isOnline }) {
               key={t.id}
               onClick={() => {
                 setTab(t.id);
-                try {
-                  localStorage.setItem(LS_LAST_TAB, t.id);
-                } catch {}
               }}
               style={{
                 appearance: "none",
@@ -131,20 +134,25 @@ export default function SubAbasAnimais({ animais = [], onRefresh, isOnline }) {
 
       {/* ===== CONTEÚDO ===== */}
       <div style={{ paddingTop: 2 }}>
-        {tab === "plantel" && (
+        <div style={{ display: tab === "plantel" ? "block" : "none" }} aria-hidden={tab !== "plantel"}>
           <Plantel
             animais={animais}
             onAtualizado={onRefresh}
             onCountChange={() => {}}
             isOnline={isOnline}
           />
-        )}
+        </div>
 
-        {tab === "secagem" && <Secagem animais={animais} isOnline={isOnline} />}
+        <div style={{ display: tab === "secagem" ? "block" : "none" }} aria-hidden={tab !== "secagem"}>
+          <Secagem animais={animais} isOnline={isOnline} />
+        </div>
 
-        {tab === "preparto_parto" && (
+        <div
+          style={{ display: tab === "preparto_parto" ? "block" : "none" }}
+          aria-hidden={tab !== "preparto_parto"}
+        >
           <PrePartoParto animais={animais} isOnline={isOnline} />
-        )}
+        </div>
       </div>
     </div>
   );
