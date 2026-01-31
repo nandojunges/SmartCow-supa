@@ -351,8 +351,7 @@ export default function AbaOcorrenciasMastite({
       </div>
 
       {/* CASOS */}
-      {tab === "casos" && (
-        <div style={{ display: "grid", gap: 12 }}>
+      <div style={{ display: tab === "casos" ? "grid" : "none", gap: 12 }} aria-hidden={tab !== "casos"}>
           <Card
             title="Histórico de casos"
             subtitle="Clique em um caso para abrir e editar. (incidência, recorrência, sucesso por tratamento)."
@@ -530,10 +529,10 @@ export default function AbaOcorrenciasMastite({
             </div>
           </Card>
         </div>
-      )}
+      </div>
 
       {/* TRATAMENTOS (arquivo separado) */}
-      {tab === "trat" && (
+      <div style={{ display: tab === "trat" ? "block" : "none" }} aria-hidden={tab !== "trat"}>
         <MastiteTratamentos
           vaca={vaca}
           caso={casoSelecionado}
@@ -546,10 +545,10 @@ export default function AbaOcorrenciasMastite({
           responsaveis={responsaveis}
           onCriarResponsavel={onCriarResponsavel}
         />
-      )}
+      </div>
 
       {/* LINHA DO TEMPO */}
-      {tab === "linha" && (
+      <div style={{ display: tab === "linha" ? "block" : "none" }} aria-hidden={tab !== "linha"}>
         <Card
           title="Linha do tempo"
           subtitle="Ocorrências + tratamentos + laboratório + desfecho"
@@ -600,7 +599,7 @@ export default function AbaOcorrenciasMastite({
             </div>
           )}
         </Card>
-      )}
+      </div>
 
       {mostrarGuia ? <GuiaMastite onFechar={() => setMostrarGuia(false)} /> : null}
     </div>

@@ -42,19 +42,6 @@ export default function FichaLeiteira({ vaca, onFechar, abaInicial = "cmt" }) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [trocarAbaComSeta, onFechar]);
 
-  const renderizarAba = () => {
-    switch (abaAtiva) {
-      case "cmt":
-        return <AbaRegistroCMT vaca={vaca} />;
-      case "ocorrencias":
-        return <OcorrenciasLeite vaca={vaca} />;
-      case "ccs":
-        return <AbaCCS vaca={vaca} />;
-      default:
-        return null;
-    }
-  };
-
   return (
     <div style={overlay} onClick={onFechar}>
       <div style={modal} onClick={(e) => e.stopPropagation()} tabIndex={0}>
@@ -93,7 +80,18 @@ export default function FichaLeiteira({ vaca, onFechar, abaInicial = "cmt" }) {
         </div>
 
         <div style={{ flex: 1, overflowY: "auto", padding: "1.5rem", background: "#f9fafb" }}>
-          {renderizarAba()}
+          <div style={{ display: abaAtiva === "cmt" ? "block" : "none" }} aria-hidden={abaAtiva !== "cmt"}>
+            <AbaRegistroCMT vaca={vaca} />
+          </div>
+          <div
+            style={{ display: abaAtiva === "ocorrencias" ? "block" : "none" }}
+            aria-hidden={abaAtiva !== "ocorrencias"}
+          >
+            <OcorrenciasLeite vaca={vaca} />
+          </div>
+          <div style={{ display: abaAtiva === "ccs" ? "block" : "none" }} aria-hidden={abaAtiva !== "ccs"}>
+            <AbaCCS vaca={vaca} />
+          </div>
         </div>
       </div>
     </div>
