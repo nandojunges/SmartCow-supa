@@ -253,10 +253,10 @@ export default function ReportComposer({
             </option>
           ))}
         </select>
-        <button type="button" onClick={handleAddBlock}>
+        <button type="button" className="sc-btn-primary" onClick={handleAddBlock}>
           Adicionar bloco
         </button>
-        <button type="button" onClick={() => window.print()}>
+        <button type="button" className="sc-btn-primary" onClick={() => window.print()}>
           Imprimir
         </button>
       </div>
@@ -288,18 +288,21 @@ export default function ReportComposer({
               <div className="report-block__actions">
                 <button
                   type="button"
+                  className="sc-btn-icon"
                   onClick={() => handleMoveBlock(index, -1)}
                 >
                   ↑
                 </button>
                 <button
                   type="button"
+                  className="sc-btn-icon"
                   onClick={() => handleMoveBlock(index, 1)}
                 >
                   ↓
                 </button>
                 <button
                   type="button"
+                  className="sc-btn-icon"
                   onClick={() => handleRemoveBlock(block.id)}
                 >
                   🗑️

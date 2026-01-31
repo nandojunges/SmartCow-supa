@@ -169,21 +169,25 @@ export default function Relatorios() {
           <div className="relatorios-tabs">
             <button
               type="button"
-              className={activeTab === "planilha" ? "is-active" : ""}
+              className={`sc-btn-primary ${
+                activeTab === "planilha" ? "is-active" : ""
+              }`}
               onClick={() => setActiveTab("planilha")}
             >
               Planilha
             </button>
             <button
               type="button"
-              className={activeTab === "relatorio" ? "is-active" : ""}
+              className={`sc-btn-primary ${
+                activeTab === "relatorio" ? "is-active" : ""
+              }`}
               onClick={() => setActiveTab("relatorio")}
             >
               Relatório Final
             </button>
           </div>
           <div className="relatorios-model-actions">
-            <button type="button" onClick={openSaveModal}>
+            <button type="button" className="sc-btn-primary" onClick={openSaveModal}>
               Salvar Modelo
             </button>
             <button type="button" onClick={openLoadModal}>
@@ -265,15 +269,20 @@ export default function Relatorios() {
                   />
                 </label>
                 <div className="relatorios-modal__actions">
-                  <button type="button" onClick={() => setModalType(null)}>
+                  <button
+                    type="button"
+                    className="sc-btn-secondary"
+                    onClick={() => setModalType(null)}
+                  >
                     Cancelar
                   </button>
                   <button
                     type="button"
+                    className="sc-btn-primary"
                     onClick={handleSaveModel}
                     disabled={!modelName.trim()}
                   >
-                    Confirmar
+                    Salvar
                   </button>
                 </div>
               </>
