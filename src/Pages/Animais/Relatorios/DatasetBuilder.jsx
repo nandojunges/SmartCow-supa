@@ -138,7 +138,7 @@ export default function DatasetBuilder({ datasetKey, columns, setColumns }) {
                 </div>
                 <button
                   type="button"
-                  className="dataset-builder__icon-button"
+                  className="dataset-builder__icon-button sc-btn-chip"
                   onClick={() => handleAddColumn(column)}
                 >
                   +
@@ -174,6 +174,7 @@ export default function DatasetBuilder({ datasetKey, columns, setColumns }) {
                       <button
                         key={size}
                         type="button"
+                        className="sc-btn-chip"
                         onClick={() => handleResizePreset(column.key, size)}
                       >
                         {size}
@@ -182,6 +183,7 @@ export default function DatasetBuilder({ datasetKey, columns, setColumns }) {
                   </div>
                   <button
                     type="button"
+                    className="sc-btn-chip"
                     onClick={() => handleMoveColumn(index, -1)}
                     aria-label="Mover para cima"
                   >
@@ -189,6 +191,7 @@ export default function DatasetBuilder({ datasetKey, columns, setColumns }) {
                   </button>
                   <button
                     type="button"
+                    className="sc-btn-chip"
                     onClick={() => handleMoveColumn(index, 1)}
                     aria-label="Mover para baixo"
                   >
@@ -196,6 +199,7 @@ export default function DatasetBuilder({ datasetKey, columns, setColumns }) {
                   </button>
                   <button
                     type="button"
+                    className="sc-btn-chip"
                     onClick={() => handleRemoveColumn(column.key)}
                     aria-label="Remover coluna"
                   >

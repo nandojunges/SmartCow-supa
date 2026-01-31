@@ -5,6 +5,24 @@
   padding: 24px;
 }
 
+.relatorios-page .sc-btn-chip {
+  background: #111827 !important;
+  border: 1px solid #111827 !important;
+  color: #fff !important;
+}
+
+.relatorios-page .sc-btn-primary {
+  background: #111827 !important;
+  border-color: #111827 !important;
+  color: #fff !important;
+}
+
+.relatorios-page .sc-btn-secondary {
+  background: #f3f4f6 !important;
+  border-color: #cbd5f5 !important;
+  color: #111827 !important;
+}
+
 .sc-btn-primary,
 .sc-btn-secondary,
 .sc-btn-chip {
