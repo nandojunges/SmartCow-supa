@@ -130,6 +130,8 @@ export default function Dieta({ onCountChange }) {
     return { total, totalCusto, custoMedioVaca };
   }, [dietasExibidas]);
 
+  const hasDietas = dietasExibidas.length > 0;
+
   /** ===================== LOAD DIETAS (BANCO) ===================== */
   const loadDietas = useCallback(async () => {
     setLoading(true);
@@ -143,7 +145,6 @@ export default function Dieta({ onCountChange }) {
     }
 
     if (!fazendaAtualId) {
-      setDietas([]);
       setLoading(false);
       setErro("Selecione uma fazenda para carregar as dietas.");
       return;
@@ -171,7 +172,6 @@ export default function Dieta({ onCountChange }) {
     if (error) {
       console.error("Erro loadDietas:", error);
       setErro(error?.message || "Erro ao carregar dietas.");
-      setDietas([]);
       setLoading(false);
       return;
     }
@@ -367,6 +367,9 @@ export default function Dieta({ onCountChange }) {
           Dica: clique no título das colunas habilitadas para ordenar/filtrar. Clique novamente para
           fechar.
         </div>
+        {loading && hasDietas && (
+          <div className="text-xs text-slate-500 mb-2">Atualizando dietas...</div>
+        )}
         <div className="st-table-container">
           <div className="st-table-wrap">
             <table
@@ -560,7 +563,7 @@ export default function Dieta({ onCountChange }) {
               </thead>
 
               <tbody>
-                {loading ? (
+                {loading && !hasDietas ? (
                   <tr className="st-empty">
                     <td colSpan={colunas.length} style={{ textAlign: "center" }}>
                       Carregando...

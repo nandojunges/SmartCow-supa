@@ -156,7 +156,6 @@ export default function Lotes() {
     if (error) {
       console.error("Erro ao carregar lotes:", error);
       setErro("Não foi possível carregar os lotes. Verifique suas permissões (RLS) e tente novamente.");
-      setLotes([]);
       setLoading(false);
       return;
     }
@@ -352,6 +351,8 @@ export default function Lotes() {
     return lista;
   }, [lotes, filtros, sortConfig]);
 
+  const hasLotes = lotesExibidos.length > 0;
+
   const resumo = useMemo(() => {
     const total = lotesExibidos.length;
     const totalVacas = lotesExibidos.reduce((acc, l) => acc + Number(l.numVacas || 0), 0);
@@ -378,6 +379,9 @@ export default function Lotes() {
           Dica: clique no título das colunas habilitadas para ordenar/filtrar. Clique novamente para
           fechar.
         </div>
+        {loading && hasLotes && (
+          <div className="text-xs text-slate-500 mb-2">Atualizando lotes...</div>
+        )}
         <div className="st-table-container">
           <div className="st-table-wrap">
             <table
@@ -619,7 +623,7 @@ export default function Lotes() {
               </thead>
 
               <tbody>
-                {loading ? (
+                {loading && !hasLotes ? (
                   <tr className="st-empty">
                     <td colSpan={colunas.length} style={{ textAlign: "center" }}>
                       Carregando…
