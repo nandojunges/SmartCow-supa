@@ -351,7 +351,10 @@ export default function AbaOcorrenciasMastite({
       </div>
 
       {/* CASOS */}
-      <div style={{ display: tab === "casos" ? "grid" : "none", gap: 12 }} aria-hidden={tab !== "casos"}>
+<div
+  style={{ display: tab === "casos" ? "grid" : "none", gap: 12 }}
+  aria-hidden={tab !== "casos"}
+>
           <Card
             title="Histórico de casos"
             subtitle="Clique em um caso para abrir e editar. (incidência, recorrência, sucesso por tratamento)."
@@ -528,8 +531,7 @@ export default function AbaOcorrenciasMastite({
               <MastiteDesfechoBox draftCaso={draftCaso} setDraftCaso={setDraftCaso} />
             </div>
           </Card>
-        </div>
-      </div>
+          </div>
 
       {/* TRATAMENTOS (arquivo separado) */}
       <div style={{ display: tab === "trat" ? "block" : "none" }} aria-hidden={tab !== "trat"}>
