@@ -67,16 +67,28 @@ const createBlock = (type) => {
   }
 };
 
-export default function ReportComposer({ datasetKey, rows, columns }) {
+export const createDefaultBlocks = () => [
+  createBlock("headerVisit"),
+  createBlock("summaryCards"),
+  createBlock("dataTable"),
+  createBlock("actionsChecklist"),
+  createBlock("protocolsPlan"),
+  createBlock("richText"),
+];
+
+export default function ReportComposer({
+  datasetKey,
+  rows,
+  columns,
+  blocks,
+  setBlocks,
+}) {
   const [selectedType, setSelectedType] = useState(BLOCK_TYPES[0].type);
-  const [blocks, setBlocks] = useState(() => [
-    createBlock("headerVisit"),
-    createBlock("summaryCards"),
-    createBlock("dataTable"),
-    createBlock("actionsChecklist"),
-    createBlock("protocolsPlan"),
-    createBlock("richText"),
-  ]);
+  const [internalBlocks, setInternalBlocks] = useState(() =>
+    createDefaultBlocks()
+  );
+  const resolvedBlocks = blocks ?? internalBlocks;
+  const updateBlocks = setBlocks ?? setInternalBlocks;
 
   const blockLabels = useMemo(
     () =>
@@ -88,16 +100,16 @@ export default function ReportComposer({ datasetKey, rows, columns }) {
   );
 
   const handleAddBlock = () => {
-    setBlocks((prevBlocks) => [...prevBlocks, createBlock(selectedType)]);
+    updateBlocks((prevBlocks) => [...prevBlocks, createBlock(selectedType)]);
   };
 
   const handleMoveBlock = (index, direction) => {
     const targetIndex = index + direction;
-    if (targetIndex < 0 || targetIndex >= blocks.length) {
+    if (targetIndex < 0 || targetIndex >= resolvedBlocks.length) {
       return;
     }
 
-    setBlocks((prevBlocks) => {
+    updateBlocks((prevBlocks) => {
       const nextBlocks = [...prevBlocks];
       const [moved] = nextBlocks.splice(index, 1);
       nextBlocks.splice(targetIndex, 0, moved);
@@ -106,11 +118,11 @@ export default function ReportComposer({ datasetKey, rows, columns }) {
   };
 
   const handleRemoveBlock = (id) => {
-    setBlocks((prevBlocks) => prevBlocks.filter((block) => block.id !== id));
+    updateBlocks((prevBlocks) => prevBlocks.filter((block) => block.id !== id));
   };
 
   const handleUpdateBlock = (id, data) => {
-    setBlocks((prevBlocks) =>
+    updateBlocks((prevBlocks) =>
       prevBlocks.map((block) =>
         block.id === id ? { ...block, data } : block
       )
@@ -180,7 +192,7 @@ export default function ReportComposer({ datasetKey, rows, columns }) {
         </button>
       </div>
       <div className="report-composer__preview">
-        {blocks.map((block, index) => (
+        {resolvedBlocks.map((block, index) => (
           <div key={block.id} className="report-block">
             <div className="report-block__header">
               <h4>{blockLabels[block.type]}</h4>
