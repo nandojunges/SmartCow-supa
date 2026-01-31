@@ -216,7 +216,25 @@ export default function Relatorios() {
     <section className="relatorios-page">
       <header className="relatorios-header">
         <div>
-          <h1>Relatórios</h1>
+          <h1>
+            Relatórios
+            <span
+              style={{
+                marginLeft: "10px",
+                background: "#111827",
+                color: "#fff",
+                padding: "4px 10px",
+                borderRadius: "999px",
+                fontSize: "0.7rem",
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                display: "inline-flex",
+                alignItems: "center",
+              }}
+            >
+              RELATORIOS V2 LOADED
+            </span>
+          </h1>
         </div>
         <div className="relatorios-header__actions">
           <div className="relatorios-tabs">
