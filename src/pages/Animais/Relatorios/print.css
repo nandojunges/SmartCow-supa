@@ -36,6 +36,12 @@
     padding: 0 !important;
   }
 
+  .report-composer__page-header {
+    border: none !important;
+    padding: 0 0 16px 0 !important;
+    page-break-after: avoid;
+  }
+
   .sc-grid thead th,
   .report-block__table th {
     background: #fff !important;
@@ -47,7 +53,24 @@
   }
 
   .report-block__table th,
-  .report-block__table td {
+  .report-block__table td,
+  .sc-grid th,
+  .sc-grid td {
     border: 1px solid #d1d5db !important;
+  }
+
+  .report-block {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .report-block--dataTable {
+    break-inside: auto;
+    page-break-inside: auto;
+  }
+
+  .report-block--dataTable .report-block__table {
+    break-inside: auto;
+    page-break-inside: auto;
   }
 }

@@ -143,6 +143,22 @@ export default function Relatorios() {
     );
   };
 
+  const handleReorderColumns = (fromKey, toKey) => {
+    setColumns((prevColumns) => {
+      const fromIndex = prevColumns.findIndex((column) => column.key === fromKey);
+      const toIndex = prevColumns.findIndex((column) => column.key === toKey);
+
+      if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) {
+        return prevColumns;
+      }
+
+      const nextColumns = [...prevColumns];
+      const [moved] = nextColumns.splice(fromIndex, 1);
+      nextColumns.splice(toIndex, 0, moved);
+      return nextColumns;
+    });
+  };
+
   return (
     <section className="relatorios-page">
       <header className="relatorios-header">
@@ -209,6 +225,7 @@ export default function Relatorios() {
                 columns={columns}
                 onChangeCell={handleChangeCell}
                 onResizeColumn={handleResizeColumn}
+                onReorderColumns={handleReorderColumns}
               />
             </div>
           </div>
