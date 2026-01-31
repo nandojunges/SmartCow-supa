@@ -21,6 +21,11 @@ import CadastroAnimal from "./CadastroAnimal";
 import FichaAnimal from "./FichaAnimal/FichaAnimal";
 import Relatorios from "../../pages/Animais/Relatorios/Relatorios";
 
+let MEMO_ANIMAIS = {
+  data: null,
+  lastAt: 0,
+};
+
 // =========================
 //   CONSTANTES DE LAYOUT
 // =========================
@@ -142,6 +147,7 @@ function BarraLateral({ abaAtiva, setAbaAtiva }) {
 // =========================
 export default function Animais() {
   const { fazendaAtualId } = useFazenda();
+  const memoData = MEMO_ANIMAIS.data || {};
   const [abaAtiva, setAbaAtiva] = useState(() => {
     try {
       const stored = localStorage.getItem("animais:abaAtiva");
@@ -151,15 +157,28 @@ export default function Animais() {
       return "todos";
     }
   });
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isOnline, setIsOnline] = useState(() =>
+    typeof memoData.isOnline === "boolean" ? memoData.isOnline : navigator.onLine
+  );
 
-  const [animaisAtivos, setAnimaisAtivos] = useState([]);
-  const [animaisInativos, setAnimaisInativos] = useState([]);
-  const [carregando, setCarregando] = useState(false);
-  const [offlineAviso, setOfflineAviso] = useState("");
+  const [animaisAtivos, setAnimaisAtivos] = useState(() => memoData.animaisAtivos ?? []);
+  const [animaisInativos, setAnimaisInativos] = useState(() => memoData.animaisInativos ?? []);
+  const [carregando, setCarregando] = useState(() => memoData.carregando ?? false);
+  const [offlineAviso, setOfflineAviso] = useState(() => memoData.offlineAviso ?? "");
 
   const [fichaOpen, setFichaOpen] = useState(false);
   const [animalFicha, setAnimalFicha] = useState(null);
+
+  useEffect(() => {
+    MEMO_ANIMAIS.data = {
+      animaisAtivos,
+      animaisInativos,
+      carregando,
+      offlineAviso,
+      isOnline,
+      abaAtiva,
+    };
+  }, [animaisAtivos, animaisInativos, carregando, offlineAviso, isOnline, abaAtiva]);
 
   useEffect(() => {
     const on = () => setIsOnline(true);
@@ -241,9 +260,21 @@ export default function Animais() {
   // =========================
   //   CARREGAR ATIVOS + INATIVOS
   // =========================
-  const carregarAnimais = useCallback(async () => {
+  const carregarAnimais = useCallback(async (force = false) => {
     const CACHE_LIST_KEY = "cache:animais:list";
     const CACHE_PLANTEL_KEY = "cache:animais:plantel:v1";
+    const memo = MEMO_ANIMAIS.data;
+    const memoFresh = memo && Date.now() - MEMO_ANIMAIS.lastAt < 30000;
+
+    if (
+      !force &&
+      memoFresh &&
+      Array.isArray(memo?.animaisAtivos) &&
+      Array.isArray(memo?.animaisInativos) &&
+      (memo.animaisAtivos.length > 0 || memo.animaisInativos.length > 0)
+    ) {
+      return;
+    }
 
     setCarregando(true);
     setOfflineAviso("");
@@ -257,9 +288,9 @@ export default function Animais() {
       console.log(`[animais] cache length: ${lista.length}`);
 
       if (lista.length === 0) {
-        setOfflineAviso(
-          "Sem dados offline ainda. Conecte na internet uma vez para baixar os animais."
-        );
+        const aviso =
+          "Sem dados offline ainda. Conecte na internet uma vez para baixar os animais.";
+        setOfflineAviso(aviso);
         setCarregando(false);
         return;
       }
@@ -272,8 +303,18 @@ export default function Animais() {
           status: animal?.status ?? "inativo",
         }));
 
+      const aviso = "";
       setAnimaisAtivos(ativos);
       setAnimaisInativos(inativos);
+      setOfflineAviso(aviso);
+      MEMO_ANIMAIS.lastAt = Date.now();
+      MEMO_ANIMAIS.data = {
+        ...(MEMO_ANIMAIS.data || {}),
+        animaisAtivos: ativos,
+        animaisInativos: inativos,
+        offlineAviso: aviso,
+        isOnline,
+      };
       setCarregando(false);
       return;
     }
@@ -358,6 +399,14 @@ export default function Animais() {
       });
 
       setAnimaisInativos(formatado);
+      MEMO_ANIMAIS.lastAt = Date.now();
+      MEMO_ANIMAIS.data = {
+        ...(MEMO_ANIMAIS.data || {}),
+        animaisAtivos: !erroAtivos && ativos ? ativos : [],
+        animaisInativos: formatado,
+        offlineAviso: "",
+        isOnline,
+      };
     } finally {
       setCarregando(false);
     }
@@ -379,7 +428,7 @@ export default function Animais() {
   }, []);
 
   const handleAtualizar = () => {
-    carregarAnimais();
+    carregarAnimais(true);
   };
 
   const handleVerFicha = async (animalBasico) => {

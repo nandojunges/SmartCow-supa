@@ -147,7 +147,7 @@ export default function FichaAnimal({ animal, onClose }) {
 
         {/* Conteúdo */}
         <div style={{ flex: 1, overflowY: "auto", padding: "1.5rem", background: "#f9fafb" }}>
-          {abaAtiva === "leite" && (
+          <div style={{ display: abaAtiva === "leite" ? "block" : "none" }} aria-hidden={abaAtiva !== "leite"}>
             <FichaAnimalLeite
               animal={animal}
               lactacoes={lactacoes}
@@ -155,15 +155,26 @@ export default function FichaAnimal({ animal, onClose }) {
               setLactacaoSelecionada={setLactacaoSelecionada}
               producaoLeite={producaoLeite}
             />
-          )}
+          </div>
 
-          {abaAtiva === "pesagens" && (
+          <div
+            style={{ display: abaAtiva === "pesagens" ? "block" : "none" }}
+            aria-hidden={abaAtiva !== "pesagens"}
+          >
             <FichaAnimalPesagens animal={animal} pesagens={pesagens} />
-          )}
+          </div>
 
-          {abaAtiva === "eventos" && <FichaAnimalEventos eventos={eventos} />}
+          <div
+            style={{ display: abaAtiva === "eventos" ? "block" : "none" }}
+            aria-hidden={abaAtiva !== "eventos"}
+          >
+            <FichaAnimalEventos eventos={eventos} />
+          </div>
 
-          {abaAtiva === "reproducao" && (
+          <div
+            style={{ display: abaAtiva === "reproducao" ? "block" : "none" }}
+            aria-hidden={abaAtiva !== "reproducao"}
+          >
             <FichaAnimalReproducao
               /** IMPORTANTE: o filho NÃO vai mais buscar nada na rede */
               animal={animal}
@@ -174,7 +185,7 @@ export default function FichaAnimal({ animal, onClose }) {
               tratamentos={tratamentos}
               ocorrencias={ocorrencias}
             />
-          )}
+          </div>
         </div>
       </div>
     </div>

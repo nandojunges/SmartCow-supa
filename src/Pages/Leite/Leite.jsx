@@ -9,6 +9,11 @@ import FichaLeiteira from "./FichaLeiteira";
 import ResumoLeiteDia from "./ResumoLeiteDia";
 import "../../styles/tabelaModerna.css";
 
+let MEMO_LEITE = {
+  data: null,
+  lastAt: 0,
+};
+
 /* ===== helpers de data / DEL ===== */
 function parseBR(str) {
   if (!str || str.length !== 10) return null;
@@ -681,14 +686,23 @@ function updateLeiteCache({ dateISO, vacas, lotes, medicoesDia, ultimaMedicaoPor
 
 export default function Leite() {
   const { fazendaAtualId } = useFazenda();
-  const [vacas, setVacas] = useState([]);
-  const [ultimaMedicaoPorAnimal, setUltimaMedicaoPorAnimal] = useState({});
-  const [isOffline, setIsOffline] = useState(
-    typeof navigator !== "undefined" ? !navigator.onLine : false
+  const memoData = MEMO_LEITE.data || {};
+  const [vacas, setVacas] = useState(() => memoData.vacas ?? []);
+  const [ultimaMedicaoPorAnimal, setUltimaMedicaoPorAnimal] = useState(
+    () => memoData.ultimaMedicaoPorAnimal ?? {}
   );
-  const [hasCache, setHasCache] = useState(false);
-  const [cacheMetadata, setCacheMetadata] = useState({ updatedAt: null, dateRange: null });
-  const [sincronizado, setSincronizado] = useState(false);
+  const [isOffline, setIsOffline] = useState(() =>
+    typeof memoData.isOffline === "boolean"
+      ? memoData.isOffline
+      : typeof navigator !== "undefined"
+        ? !navigator.onLine
+        : false
+  );
+  const [hasCache, setHasCache] = useState(() => memoData.hasCache ?? false);
+  const [cacheMetadata, setCacheMetadata] = useState(
+    () => memoData.cacheMetadata ?? { updatedAt: null, dateRange: null }
+  );
+  const [sincronizado, setSincronizado] = useState(() => memoData.sincronizado ?? false);
   const [reloadKey, setReloadKey] = useState(0);
 
   const vacasLactacao = useMemo(() => {
@@ -697,11 +711,11 @@ export default function Leite() {
     return filtradas;
   }, [vacas]);
 
-  const [dataAtual, setDataAtual] = useState(ymdHoje()); // calendário
-  const [dataTabela, setDataTabela] = useState(null); // tabela
-  const jaSetouUltimaTabelaRef = useRef(false);
+  const [dataAtual, setDataAtual] = useState(() => memoData.dataAtual ?? ymdHoje()); // calendário
+  const [dataTabela, setDataTabela] = useState(() => memoData.dataTabela ?? null); // tabela
+  const jaSetouUltimaTabelaRef = useRef(Boolean(memoData.dataTabela));
 
-  const [medicoesPorDia, setMedicoesPorDia] = useState({});
+  const [medicoesPorDia, setMedicoesPorDia] = useState(() => memoData.medicoesPorDia ?? {});
   const medicoesDoDiaTabela = medicoesPorDia[dataTabela] || {};
 
   const [modalAberto, setModalAberto] = useState(false);
@@ -711,7 +725,7 @@ export default function Leite() {
   const [vacaFicha, setVacaFicha] = useState(null);
 
   // ✅ lotes de Lactação do banco (para selects)
-  const [lotesLeite, setLotesLeite] = useState([]);
+  const [lotesLeite, setLotesLeite] = useState(() => memoData.lotesLeite ?? []);
   const [loadingLotes, setLoadingLotes] = useState(false);
 
   const lotesOptions = useMemo(() => {
@@ -748,8 +762,36 @@ export default function Leite() {
     });
     return mapNumeroToLoteId;
   }, [vacasLactacao]);
-  const [loteEditPorNumero, setLoteEditPorNumero] = useState({});
+  const [loteEditPorNumero, setLoteEditPorNumero] = useState(() => memoData.loteEditPorNumero ?? {});
   const [salvandoLotes, setSalvandoLotes] = useState(false);
+
+  useEffect(() => {
+    MEMO_LEITE.data = {
+      vacas,
+      ultimaMedicaoPorAnimal,
+      isOffline,
+      hasCache,
+      cacheMetadata,
+      sincronizado,
+      dataAtual,
+      dataTabela,
+      medicoesPorDia,
+      lotesLeite,
+      loteEditPorNumero,
+    };
+  }, [
+    vacas,
+    ultimaMedicaoPorAnimal,
+    isOffline,
+    hasCache,
+    cacheMetadata,
+    sincronizado,
+    dataAtual,
+    dataTabela,
+    medicoesPorDia,
+    lotesLeite,
+    loteEditPorNumero,
+  ]);
 
   const statusSyncTexto = useMemo(() => {
     if (isOffline) {
@@ -812,6 +854,16 @@ export default function Leite() {
   const loadData = useCallback(
     async (dateISO) => {
       if (!dateISO) return;
+      const memo = MEMO_LEITE.data;
+      const memoFresh = memo && Date.now() - MEMO_LEITE.lastAt < 30000;
+      if (
+        memoFresh &&
+        !isOffline &&
+        memo?.medicoesPorDia?.[dateISO] &&
+        Array.isArray(memo?.vacas)
+      ) {
+        return;
+      }
 
       if (isOffline) {
         setLoadingLotes(false);
@@ -835,6 +887,19 @@ export default function Leite() {
           ...prev,
           [dateISO]: mapaPorNumero,
         }));
+        MEMO_LEITE.lastAt = Date.now();
+        MEMO_LEITE.data = {
+          ...(MEMO_LEITE.data || {}),
+          vacas: vacasCache,
+          lotesLeite: cache.lastLotes || [],
+          ultimaMedicaoPorAnimal: payload?.ultimaMedicaoPorAnimal || {},
+          medicoesPorDia: {
+            ...(MEMO_LEITE.data?.medicoesPorDia || {}),
+            [dateISO]: mapaPorNumero,
+          },
+          hasCache: possuiCache,
+          cacheMetadata: { updatedAt: cache.updatedAt, dateRange },
+        };
         return;
       }
 
@@ -914,6 +979,17 @@ export default function Leite() {
           medicoesDia,
           ultimaMedicaoPorAnimal: ultimaMedicaoMap,
         });
+        MEMO_LEITE.lastAt = Date.now();
+        MEMO_LEITE.data = {
+          ...(MEMO_LEITE.data || {}),
+          vacas: vacasData,
+          lotesLeite: lotesData,
+          ultimaMedicaoPorAnimal: ultimaMedicaoMap,
+          medicoesPorDia: {
+            ...(MEMO_LEITE.data?.medicoesPorDia || {}),
+            [dateISO]: mapaPorNumero,
+          },
+        };
         setCacheMetadata({ updatedAt: cacheAtualizado.updatedAt, dateRange: getCacheDateRange(cacheAtualizado) });
         setHasCache(true);
         setSincronizado(true);
@@ -980,6 +1056,13 @@ export default function Leite() {
 
     (async () => {
       if (jaSetouUltimaTabelaRef.current) return;
+      const memo = MEMO_LEITE.data;
+      if (memo?.dataTabela && Date.now() - MEMO_LEITE.lastAt < 30000) {
+        setDataTabela(memo.dataTabela);
+        setDataAtual(memo.dataAtual || memo.dataTabela);
+        jaSetouUltimaTabelaRef.current = true;
+        return;
+      }
 
       if (isOffline) {
         const cache = readLeiteCache();

@@ -12,6 +12,11 @@ import "../../styles/botoes.css";
 import ModalAjustesEstoque from "./ModalAjustesEstoque";
 import ModalNovoProduto from "./ModalNovoProduto";
 
+let MEMO_ESTOQUE = {
+  data: null,
+  lastAt: 0,
+};
+
 /* ===================== MODAL BASE (somente para excluir) ===================== */
 const overlay = {
   position: "fixed",
@@ -87,6 +92,7 @@ function sortProdutosByNome(list) {
 
 export default function Estoque({ onCountChange }) {
   const { fazendaAtualId } = useFazenda();
+  const memoData = MEMO_ESTOQUE.data || {};
   const categoriasFixas = useMemo(
     () => [
       { value: "Todos", label: "Todos" },
@@ -99,26 +105,28 @@ export default function Estoque({ onCountChange }) {
     []
   );
 
-  const [minimos, setMinimos] = useState({
+  const [minimos, setMinimos] = useState(() => ({
     Cozinha: 5,
     "Higiene e Limpeza": 2,
     Farmácia: 2,
     Reprodução: 1,
     "Materiais Gerais": 1,
-  });
+  }));
 
   const [tourosBase] = useState(() => []); // mock
 
-  const [produtos, setProdutos] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [erro, setErro] = useState("");
+  const [produtos, setProdutos] = useState(() => memoData.produtos ?? []);
+  const [loading, setLoading] = useState(() => memoData.loading ?? true);
+  const [erro, setErro] = useState(() => memoData.erro ?? "");
 
-  const [categoriaSelecionada, setCategoriaSelecionada] = useState(categoriasFixas[0]);
+  const [categoriaSelecionada, setCategoriaSelecionada] = useState(
+    () => memoData.categoriaSelecionada ?? categoriasFixas[0]
+  );
   const [hoveredRowId, setHoveredRowId] = useState(null);
   const [hoveredColKey, setHoveredColKey] = useState(null);
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
+  const [sortConfig, setSortConfig] = useState(() => memoData.sortConfig ?? { key: null, direction: null });
   const [openPopoverKey, setOpenPopoverKey] = useState(null);
-  const [filtros, setFiltros] = useState({ unidade: "__ALL__" });
+  const [filtros, setFiltros] = useState(() => memoData.filtros ?? { unidade: "__ALL__" });
 
   // modais
   const [mostrarCadastro, setMostrarCadastro] = useState(false);
@@ -126,8 +134,24 @@ export default function Estoque({ onCountChange }) {
   const [produtoParaExcluir, setProdutoParaExcluir] = useState(null);
   const [editar, setEditar] = useState({ abrir: false, item: null });
 
+  useEffect(() => {
+    MEMO_ESTOQUE.data = {
+      produtos,
+      loading,
+      erro,
+      categoriaSelecionada,
+      sortConfig,
+      filtros,
+    };
+  }, [produtos, loading, erro, categoriaSelecionada, sortConfig, filtros]);
+
   const updateCache = useCallback(async (nextList) => {
     setProdutos(nextList);
+    MEMO_ESTOQUE.lastAt = Date.now();
+    MEMO_ESTOQUE.data = {
+      ...(MEMO_ESTOQUE.data || {}),
+      produtos: nextList,
+    };
     await kvSet(CACHE_ESTOQUE_KEY, nextList);
   }, []);
 
@@ -243,6 +267,19 @@ export default function Estoque({ onCountChange }) {
   /* ===================== LOAD (Supabase) ===================== */
   const carregar = useCallback(
     async (categoriaOpt = categoriaSelecionada) => {
+      const memo = MEMO_ESTOQUE.data;
+      const memoFresh = memo && Date.now() - MEMO_ESTOQUE.lastAt < 30000;
+      const memoCategoria = memo?.categoriaSelecionada?.value;
+      const categoriaAtual = categoriaOpt?.value;
+
+      if (
+        memoFresh &&
+        Array.isArray(memo?.produtos) &&
+        memo.produtos.length > 0 &&
+        memoCategoria === categoriaAtual
+      ) {
+        return;
+      }
       try {
         setLoading(true);
         setErro("");
@@ -250,6 +287,11 @@ export default function Estoque({ onCountChange }) {
         if (typeof navigator !== "undefined" && !navigator.onLine) {
           const cache = normalizeEstoqueCache(await kvGet(CACHE_ESTOQUE_KEY));
           setProdutos(cache);
+          MEMO_ESTOQUE.lastAt = Date.now();
+          MEMO_ESTOQUE.data = {
+            ...(MEMO_ESTOQUE.data || {}),
+            produtos: cache,
+          };
           setLoading(false);
           return;
         }
