@@ -42,12 +42,16 @@ export default function BlockActionsChecklist({ data, onChange }) {
             value={item.text}
             onChange={(event) => handleTextChange(item.id, event.target.value)}
           />
-          <button type="button" onClick={() => handleRemove(item.id)}>
+          <button
+            type="button"
+            className="sc-btn-chip"
+            onClick={() => handleRemove(item.id)}
+          >
             🗑️
           </button>
         </div>
       ))}
-      <button type="button" onClick={handleAdd}>
+      <button type="button" className="sc-btn-chip" onClick={handleAdd}>
         + Adicionar item
       </button>
     </div>

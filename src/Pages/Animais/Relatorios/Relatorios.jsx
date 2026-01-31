@@ -9,12 +9,32 @@ import reportStorage from "./reportStorage";
 import "./smartGrid.css";
 import "./print.css";
 
+const STORAGE_KEYS = {
+  activeTab: "smartcow:relatorios:activeTab",
+  datasetKey: "smartcow:relatorios:datasetKey",
+  scrollTop: "smartcow:relatorios:scrollTop",
+};
+
+const getStoredValue = (key, fallback) => {
+  if (typeof window === "undefined") {
+    return fallback;
+  }
+
+  const stored = sessionStorage.getItem(key);
+  return stored ?? fallback;
+};
+
 export default function Relatorios() {
-  const [activeTab, setActiveTab] = useState("planilha");
-  const [datasetKey, setDatasetKey] = useState("plantel");
-  const [rows, setRows] = useState(MOCK_DATASETS.plantel.rows);
-  const [columns, setColumns] = useState(
-    getColumnsForDataset("plantel").slice(0, 4)
+  const initialDatasetKey = getStoredValue(STORAGE_KEYS.datasetKey, "plantel");
+  const [activeTab, setActiveTab] = useState(() =>
+    getStoredValue(STORAGE_KEYS.activeTab, "planilha")
+  );
+  const [datasetKey, setDatasetKey] = useState(initialDatasetKey);
+  const [rows, setRows] = useState(
+    () => MOCK_DATASETS[initialDatasetKey]?.rows ?? []
+  );
+  const [columns, setColumns] = useState(() =>
+    getColumnsForDataset(initialDatasetKey).slice(0, 4)
   );
   const [reportBlocks, setReportBlocks] = useState(() =>
     createDefaultBlocks()
@@ -23,6 +43,7 @@ export default function Relatorios() {
   const [modelName, setModelName] = useState("");
   const [models, setModels] = useState([]);
   const skipDefaultColumnsRef = useRef(false);
+  const contentRef = useRef(null);
 
   const datasetOptions = useMemo(
     () => [{ key: "plantel", label: "Plantel" }],
@@ -40,6 +61,14 @@ export default function Relatorios() {
   }, [datasetKey]);
 
   useEffect(() => {
+    sessionStorage.setItem(STORAGE_KEYS.activeTab, activeTab);
+  }, [activeTab]);
+
+  useEffect(() => {
+    sessionStorage.setItem(STORAGE_KEYS.datasetKey, datasetKey);
+  }, [datasetKey]);
+
+  useEffect(() => {
     if (!modalType) {
       return;
     }
@@ -53,6 +82,30 @@ export default function Relatorios() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [modalType]);
+
+  useEffect(() => {
+    const container = contentRef.current;
+    if (!container) {
+      return undefined;
+    }
+
+    const storedScrollTop = sessionStorage.getItem(STORAGE_KEYS.scrollTop);
+    if (storedScrollTop) {
+      const nextScrollTop = Number(storedScrollTop);
+      if (!Number.isNaN(nextScrollTop)) {
+        setTimeout(() => {
+          container.scrollTop = nextScrollTop;
+        }, 0);
+      }
+    }
+
+    return () => {
+      sessionStorage.setItem(
+        STORAGE_KEYS.scrollTop,
+        String(container.scrollTop)
+      );
+    };
+  }, []);
 
   const refreshModels = () => {
     setModels(reportStorage.listModels());
@@ -196,7 +249,7 @@ export default function Relatorios() {
         </div>
       </header>
 
-      <div className="relatorios-card">
+      <div className="relatorios-card" ref={contentRef}>
         {activeTab === "planilha" ? (
           <div className="relatorios-planilha">
             <aside className="relatorios-sidebar">

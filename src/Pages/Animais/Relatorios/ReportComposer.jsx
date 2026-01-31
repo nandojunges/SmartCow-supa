@@ -288,18 +288,21 @@ export default function ReportComposer({
               <div className="report-block__actions">
                 <button
                   type="button"
+                  className="sc-btn-chip"
                   onClick={() => handleMoveBlock(index, -1)}
                 >
                   ↑
                 </button>
                 <button
                   type="button"
+                  className="sc-btn-chip"
                   onClick={() => handleMoveBlock(index, 1)}
                 >
                   ↓
                 </button>
                 <button
                   type="button"
+                  className="sc-btn-chip"
                   onClick={() => handleRemoveBlock(block.id)}
                 >
                   🗑️
