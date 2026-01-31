@@ -1,0 +1,76 @@
+@media print {
+  body {
+    background: #fff;
+  }
+
+  .relatorios-header,
+  .relatorios-tabs,
+  .relatorios-sidebar,
+  .dataset-builder__actions,
+  .dataset-builder__add,
+  .report-composer__actions,
+  .report-block__actions {
+    display: none !important;
+  }
+
+  .relatorios-card,
+  .relatorios-grid,
+  .report-composer,
+  .sc-grid,
+  .report-composer__preview,
+  .report-block {
+    background: #fff !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  .relatorios-card {
+    padding: 0 !important;
+  }
+
+  .report-composer {
+    padding: 0 !important;
+  }
+
+  .report-composer__preview {
+    padding: 0 !important;
+  }
+
+  .report-composer__page-header {
+    border: none !important;
+    padding: 0 0 16px 0 !important;
+    page-break-after: avoid;
+  }
+
+  .sc-grid thead th,
+  .report-block__table th {
+    background: #fff !important;
+  }
+
+  .sc-grid tbody tr:nth-child(even),
+  .report-block__table tbody tr:nth-child(even) {
+    background: #f7f7f7 !important;
+  }
+
+  .report-block__table th,
+  .report-block__table td,
+  .sc-grid th,
+  .sc-grid td {
+    border: 1px solid #d1d5db !important;
+  }
+
+  .report-block {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .report-block--dataTable {
+    break-inside: auto;
+    page-break-inside: auto;
+  }
+
+  .report-block--dataTable .report-block__table {
+    break-inside: auto;
+    page-break-inside: auto;
+  }
+}
