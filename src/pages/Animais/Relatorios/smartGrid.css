@@ -564,3 +564,67 @@
 .report-block__table th {
   background: #f3f4f6;
 }
+
+.relatorios-page .sc-btn-primary {
+  background: #0f172a;
+  color: #ffffff;
+  border: 1px solid #0f172a;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-weight: 500;
+}
+
+.relatorios-page .sc-btn-primary:hover:not(:disabled) {
+  background: #1e293b;
+  border-color: #1e293b;
+}
+
+.relatorios-page .sc-btn-secondary {
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-weight: 500;
+}
+
+.relatorios-page .sc-btn-icon {
+  background: #f8fafc;
+  color: #0f172a;
+  border: 1px solid #e2e8f0;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  padding: 0;
+}
+
+.relatorios-page .sc-btn-icon svg {
+  fill: currentColor;
+}
+
+.relatorios-page .sc-btn-primary:disabled {
+  background: #334155;
+  border-color: #334155;
+  color: #ffffff;
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.relatorios-page .sc-btn-secondary:disabled {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #475569;
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.relatorios-page .sc-btn-icon:disabled {
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+  color: #475569;
+  cursor: not-allowed;
+  opacity: 1;
+}

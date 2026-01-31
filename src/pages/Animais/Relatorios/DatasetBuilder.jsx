@@ -182,6 +182,7 @@ export default function DatasetBuilder({ datasetKey, columns, setColumns }) {
                   </div>
                   <button
                     type="button"
+                    className="sc-btn-icon"
                     onClick={() => handleMoveColumn(index, -1)}
                     aria-label="Mover para cima"
                   >
@@ -189,6 +190,7 @@ export default function DatasetBuilder({ datasetKey, columns, setColumns }) {
                   </button>
                   <button
                     type="button"
+                    className="sc-btn-icon"
                     onClick={() => handleMoveColumn(index, 1)}
                     aria-label="Mover para baixo"
                   >
@@ -196,6 +198,7 @@ export default function DatasetBuilder({ datasetKey, columns, setColumns }) {
                   </button>
                   <button
                     type="button"
+                    className="sc-btn-icon"
                     onClick={() => handleRemoveColumn(column.key)}
                     aria-label="Remover coluna"
                   >
@@ -213,7 +216,7 @@ export default function DatasetBuilder({ datasetKey, columns, setColumns }) {
 
       <button
         type="button"
-        className="dataset-builder__add"
+        className="dataset-builder__add sc-btn-secondary"
         onClick={handleAddNotes}
       >
         + Anotações
