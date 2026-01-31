@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import BlockActionsChecklist from "./BlockActionsChecklist";
 import BlockDataTable from "./BlockDataTable";
@@ -87,6 +87,8 @@ export default function ReportComposer({
   const [internalBlocks, setInternalBlocks] = useState(() =>
     createDefaultBlocks()
   );
+  const dragBlockId = useRef(null);
+  const [dragOverId, setDragOverId] = useState(null);
   const resolvedBlocks = blocks ?? internalBlocks;
   const updateBlocks = setBlocks ?? setInternalBlocks;
 
@@ -121,12 +123,66 @@ export default function ReportComposer({
     updateBlocks((prevBlocks) => prevBlocks.filter((block) => block.id !== id));
   };
 
+  const handleReorderBlocks = (fromId, toId) => {
+    updateBlocks((prevBlocks) => {
+      const fromIndex = prevBlocks.findIndex((block) => block.id === fromId);
+      const toIndex = prevBlocks.findIndex((block) => block.id === toId);
+      if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
+        return prevBlocks;
+      }
+
+      const nextBlocks = [...prevBlocks];
+      const [moved] = nextBlocks.splice(fromIndex, 1);
+      nextBlocks.splice(toIndex, 0, moved);
+      return nextBlocks;
+    });
+  };
+
   const handleUpdateBlock = (id, data) => {
     updateBlocks((prevBlocks) =>
       prevBlocks.map((block) =>
         block.id === id ? { ...block, data } : block
       )
     );
+  };
+
+  const handleDragStart = (event, blockId) => {
+    dragBlockId.current = blockId;
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", blockId);
+  };
+
+  const handleDragOver = (event, blockId) => {
+    if (!dragBlockId.current) {
+      return;
+    }
+
+    event.preventDefault();
+    setDragOverId(blockId);
+  };
+
+  const handleDragLeave = (blockId) => {
+    if (dragOverId === blockId) {
+      setDragOverId(null);
+    }
+  };
+
+  const handleDrop = (event, blockId) => {
+    event.preventDefault();
+    const fromId = dragBlockId.current;
+    dragBlockId.current = null;
+    setDragOverId(null);
+
+    if (!fromId || fromId === blockId) {
+      return;
+    }
+
+    handleReorderBlocks(fromId, blockId);
+  };
+
+  const handleDragEnd = () => {
+    dragBlockId.current = null;
+    setDragOverId(null);
   };
 
   const renderBlock = (block) => {
@@ -168,6 +224,19 @@ export default function ReportComposer({
     }
   };
 
+  const headerBlock = resolvedBlocks.find(
+    (block) => block.type === "headerVisit"
+  );
+  const headerData = headerBlock?.data ?? {};
+  const title = headerData.titulo?.trim() || "Relatório de Visita Técnica";
+  const dateValue = headerData.data
+    ? new Date(headerData.data)
+    : new Date();
+  const dateLabel = Number.isNaN(dateValue.getTime())
+    ? new Date().toLocaleDateString("pt-BR")
+    : dateValue.toLocaleDateString("pt-BR");
+  const technicianLabel = headerData.tecnico?.trim() || "—";
+
   return (
     <div className="report-composer">
       <div>
@@ -192,8 +261,28 @@ export default function ReportComposer({
         </button>
       </div>
       <div className="report-composer__preview">
+        <div className="report-composer__page-header">
+          <div>
+            <strong className="report-composer__page-title">{title}</strong>
+            <div className="report-composer__page-meta">
+              <span>Data: {dateLabel}</span>
+              <span>Técnico: {technicianLabel}</span>
+            </div>
+          </div>
+        </div>
         {resolvedBlocks.map((block, index) => (
-          <div key={block.id} className="report-block">
+          <div
+            key={block.id}
+            className={`report-block report-block--${block.type} ${
+              dragOverId === block.id ? "is-drag-over" : ""
+            }`}
+            draggable
+            onDragStart={(event) => handleDragStart(event, block.id)}
+            onDragOver={(event) => handleDragOver(event, block.id)}
+            onDragLeave={() => handleDragLeave(block.id)}
+            onDrop={(event) => handleDrop(event, block.id)}
+            onDragEnd={handleDragEnd}
+          >
             <div className="report-block__header">
               <h4>{blockLabels[block.type]}</h4>
               <div className="report-block__actions">
