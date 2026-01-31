@@ -345,7 +345,6 @@ export default function Financeiro() {
       await kvSet(CACHE_FINANCEIRO_KEY, merged);
     } catch (e) {
       console.error("Financeiro: erro ao carregar:", e);
-      setLancamentos([]);
     } finally {
       setLoading(false);
     }
@@ -498,6 +497,8 @@ export default function Financeiro() {
       return true;
     });
   }, [lancamentos, busca, filtroCategoria, filtroOrigem, filtroTipo, mostrarNaoCaixa]);
+
+  const hasLancamentos = filtrados.length > 0;
 
   // ✅ Cards devem refletir SOMENTE o que mexe no caixa
   const resumo = useMemo(() => {
@@ -753,7 +754,13 @@ export default function Financeiro() {
             {mostrarMaisFiltros ? "Menos filtros" : "Mais filtros"}
           </button>
 
-          <div style={contador}>{loading ? "Carregando..." : `${filtrados.length} lançamentos`}</div>
+          <div style={contador}>
+            {loading
+              ? hasLancamentos
+                ? "Atualizando..."
+                : "Carregando..."
+              : `${filtrados.length} lançamentos`}
+          </div>
         </div>
 
         {mostrarMaisFiltros ? (

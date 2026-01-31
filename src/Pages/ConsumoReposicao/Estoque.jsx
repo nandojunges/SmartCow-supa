@@ -406,7 +406,6 @@ export default function Estoque({ onCountChange }) {
       } catch (e) {
         console.error(e);
         setErro("Erro ao carregar estoque (Supabase).");
-        setProdutos([]);
       } finally {
         setLoading(false);
       }

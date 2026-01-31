@@ -189,7 +189,6 @@ export default function PrePartoParto({ isOnline = navigator.onLine }) {
 
     if (error) {
       console.error("Erro ao carregar lotes:", error);
-      setLotes([]);
       return [];
     }
 
@@ -327,6 +326,8 @@ export default function PrePartoParto({ isOnline = navigator.onLine }) {
     return { total, mediaDias };
   }, [linhasOrdenadas]);
 
+  const hasAnimais = linhasOrdenadas.length > 0;
+
   const iniciarPreParto = async (payload) => {
     if (!modalPreParto) return;
     setAcaoMensagem("");
@@ -432,6 +433,10 @@ export default function PrePartoParto({ isOnline = navigator.onLine }) {
           </label>
         )}
       </div>
+
+      {carregando && hasAnimais && (
+        <div className="text-xs text-slate-500 mb-2">Atualizando pré-parto...</div>
+      )}
 
       <div className="st-table-container">
         <div className="st-table-wrap">
@@ -680,7 +685,7 @@ export default function PrePartoParto({ isOnline = navigator.onLine }) {
         </div>
       </div>
 
-      {carregando && <div className="st-loading">Carregando...</div>}
+      {carregando && !hasAnimais && <div className="st-loading">Carregando...</div>}
 
       {modalPreParto && (
         <ModalIniciarPreParto

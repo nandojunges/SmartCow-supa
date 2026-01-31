@@ -297,7 +297,6 @@ export default function Animais() {
       ).order("numero", { ascending: true });
 
       if (erroInativos || !inativosRaw) {
-        setAnimaisInativos([]);
         return;
       }
 
@@ -323,7 +322,6 @@ export default function Animais() {
         : { data: [], error: null };
 
       if (erroSaidas) {
-        setAnimaisInativos([]);
         return;
       }
 

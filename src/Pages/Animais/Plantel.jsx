@@ -188,7 +188,6 @@ export default function Plantel({ isOnline = navigator.onLine }) {
 
     if (error) {
       console.error("Erro ao carregar lotes:", error);
-      setLotes([]);
       return [];
     }
 
@@ -942,6 +941,8 @@ export default function Plantel({ isOnline = navigator.onLine }) {
     return { total, media, mediaDel };
   }, [linhasOrdenadas, ultProducao]);
 
+  const hasAnimais = linhasOrdenadas.length > 0;
+
   return (
     <section className="w-full">
       {erro && <div className="st-alert st-alert--danger">{erro}</div>}
@@ -991,6 +992,9 @@ export default function Plantel({ isOnline = navigator.onLine }) {
       <div className="st-filter-hint">
         Dica: clique no título da coluna para filtrar. Clique novamente para fechar.
       </div>
+      {carregando && hasAnimais && (
+        <div className="text-xs text-slate-500 mb-2">Atualizando animais...</div>
+      )}
       <div className="st-table-container">
         <div className="st-table-wrap">
           <table
@@ -1637,9 +1641,7 @@ export default function Plantel({ isOnline = navigator.onLine }) {
         </div>
       </div>
 
-      {carregando && (
-        <div className="st-loading">Carregando...</div>
-      )}
+      {carregando && !hasAnimais && <div className="st-loading">Carregando...</div>}
 
       {animalSelecionado && (
         <FichaAnimal animal={animalSelecionado} onClose={fecharFichaAnimal} />

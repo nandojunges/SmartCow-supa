@@ -186,7 +186,6 @@ export default function Secagem({ isOnline = navigator.onLine }) {
 
     if (error) {
       console.error("Erro ao carregar lotes:", error);
-      setLotes([]);
       return [];
     }
 
@@ -350,6 +349,8 @@ export default function Secagem({ isOnline = navigator.onLine }) {
     return { total, mediaParto, mediaSecagem };
   }, [linhasOrdenadas]);
 
+  const hasAnimais = linhasOrdenadas.length > 0;
+
   const abrirModal = (animal) => {
     setAnimalSelecionado(animal);
     setModalAberto(true);
@@ -463,6 +464,10 @@ export default function Secagem({ isOnline = navigator.onLine }) {
           </>
         )}
       </div>
+
+      {carregando && hasAnimais && (
+        <div className="text-xs text-slate-500 mb-2">Atualizando secagem...</div>
+      )}
 
       <div className="st-table-container">
         <div className="st-table-wrap">
@@ -705,7 +710,7 @@ export default function Secagem({ isOnline = navigator.onLine }) {
         </div>
       </div>
 
-      {carregando && <div className="st-loading">Carregando...</div>}
+      {carregando && !hasAnimais && <div className="st-loading">Carregando...</div>}
 
       {modalAberto && animalSelecionado && (
         <ModalRegistrarSecagem
