@@ -159,6 +159,13 @@ function getUltimoPartoBR(animal) {
   return Number.isNaN(dt.getTime()) ? "" : toBR(dt);
 }
 
+function getDelValor(animal) {
+  if (Number.isFinite(Number(animal?.del))) {
+    return Number(animal.del);
+  }
+  return calcularDEL(getUltimoPartoBR(animal));
+}
+
 // ✅ soma/subtrai dias em string ISO yyyy-mm-dd
 function addDaysISO(iso, delta) {
   if (!iso) return iso;
@@ -375,8 +382,8 @@ function TabelaMedicaoLeite({
         return aStr.localeCompare(bStr) * factor;
       }
       if (sortConfig.key === "del") {
-        const aDel = calcularDEL(getUltimoPartoBR(a));
-        const bDel = calcularDEL(getUltimoPartoBR(b));
+        const aDel = getDelValor(a);
+        const bDel = getDelValor(b);
         return compareNumber(aDel, bDel) * factor;
       }
       if (sortConfig.key === "total") {
@@ -545,7 +552,7 @@ function TabelaMedicaoLeite({
                   linhasOrdenadas.map((vaca, rowIndex) => {
                     const numeroStr = String(vaca.numero ?? "");
                     const dados = medicoes[numeroStr] || {};
-                    const del = calcularDEL(getUltimoPartoBR(vaca));
+                    const del = getDelValor(vaca);
                     const rowId = vaca.id ?? vaca.numero ?? rowIndex;
                     const rowHover = hoveredRowId === rowId;
 

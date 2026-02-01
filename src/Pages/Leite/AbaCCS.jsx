@@ -212,14 +212,14 @@ export default function AbaCCS({ vaca }) {
     setResp(r2.data || []);
   };
 
-  /* ---------- lactações via eventos_reprodutivos ---------- */
+  /* ---------- lactações via repro_eventos ---------- */
   const carregarLactacoes = async () => {
     const { data, error } = await withFazendaId(
-      supabase.from("eventos_reprodutivos").select("id, tipo_evento, data_evento"),
+      supabase.from("repro_eventos").select("id, tipo, data_evento"),
       fazendaAtualId
     )
       .eq("animal_id", vaca.id)
-      .in("tipo_evento", ["parto", "secagem"])
+      .in("tipo", ["PARTO", "SECAGEM"])
       .order("data_evento", { ascending: false });
 
     if (!mountedRef.current) return;
@@ -233,14 +233,14 @@ export default function AbaCCS({ vaca }) {
 
     const eventos = (data || [])
       .filter((e) => e?.data_evento)
-      .map((e) => ({ tipo: e.tipo_evento, dt: new Date(e.data_evento) }))
+      .map((e) => ({ tipo: e.tipo, dt: new Date(e.data_evento) }))
       .filter((e) => !Number.isNaN(e.dt.getTime()));
 
     const partosDesc = eventos
-      .filter((e) => e.tipo === "parto")
+      .filter((e) => e.tipo === "PARTO")
       .sort((a, b) => b.dt - a.dt);
     const secagensDesc = eventos
-      .filter((e) => e.tipo === "secagem")
+      .filter((e) => e.tipo === "SECAGEM")
       .sort((a, b) => b.dt - a.dt);
 
     const options = partosDesc.map((p, idx) => {

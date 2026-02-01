@@ -139,6 +139,34 @@ function previsaoParto(animal) {
   return ia ? addDays(ia, 283) : null;
 }
 
+function resolveSituacaoProdutiva(animal) {
+  if (!animal) return "—";
+  if (animal?.sexo === "macho") return "não lactante";
+  const delValor = Number(animal?.del);
+  if (Number.isFinite(delValor)) return "lactante";
+  return "seca";
+}
+
+function mapearReproPorAnimal(lista = []) {
+  const map = {};
+  lista.forEach((item) => {
+    const id = item?.animal_id ?? item?.id;
+    if (!id) return;
+    map[id] = item;
+  });
+  return map;
+}
+
+function mesclarReproEmAnimais(animais = [], repro = []) {
+  const mapRepro = mapearReproPorAnimal(repro);
+  return animais.map((animal) => {
+    const reproRow = mapRepro[animal?.id];
+    if (!reproRow) return animal;
+    const { id, animal_id, ...rest } = reproRow || {};
+    return { ...animal, ...rest };
+  });
+}
+
 export default function PrePartoParto({ isOnline = navigator.onLine }) {
   const { fazendaAtualId } = useFazenda();
   const CACHE_KEY = "cache:animais:list";
@@ -186,17 +214,24 @@ export default function PrePartoParto({ isOnline = navigator.onLine }) {
   }, [lotes]);
 
   const carregarAnimais = useCallback(async () => {
-    const { data, error } = await withFazendaId(
-      supabase.from("animais").select("*"),
-      fazendaAtualId
-    )
-      .eq("ativo", true)
-      .order("numero", { ascending: true });
+    const [animaisRes, reproRes] = await Promise.all([
+      withFazendaId(supabase.from("animais").select("*"), fazendaAtualId)
+        .eq("ativo", true)
+        .order("numero", { ascending: true }),
+      supabase
+        .from("v_repro_tabela")
+        .select("*")
+        .eq("fazenda_id", fazendaAtualId)
+        .order("numero", { ascending: true }),
+    ]);
 
-    if (error) throw error;
-    const lista = Array.isArray(data) ? data : [];
-    setAnimais(lista);
-    return lista;
+    if (animaisRes.error) throw animaisRes.error;
+    if (reproRes.error) throw reproRes.error;
+    const lista = Array.isArray(animaisRes.data) ? animaisRes.data : [];
+    const reproLista = Array.isArray(reproRes.data) ? reproRes.data : [];
+    const combinados = mesclarReproEmAnimais(lista, reproLista);
+    setAnimais(combinados);
+    return combinados;
   }, [fazendaAtualId]);
 
   const carregarLotes = useCallback(async () => {
@@ -376,19 +411,21 @@ export default function PrePartoParto({ isOnline = navigator.onLine }) {
 
       const evento = {
         animal_id: modalPreParto.id,
-        tipo_evento: "preparto",
+        tipo: "PREPARTO",
         data_evento: payload.dataInicio,
+        observacoes: payload.observacoes || null,
         fazenda_id: fazendaAtualId,
+        user_id: userId,
       };
 
       if (!navigator.onLine) {
-        await enqueue("eventos_reprodutivos.insert", evento);
+        await enqueue("repro_eventos.insert", evento);
         setAcaoMensagem("✅ Pré-parto registrado offline. Será sincronizado ao reconectar.");
         setModalPreParto(null);
         return;
       }
 
-      const { error } = await supabase.from("eventos_reprodutivos").insert(evento);
+      const { error } = await supabase.from("repro_eventos").insert(evento);
       if (error) throw error;
 
       setAcaoMensagem("✅ Pré-parto registrado com sucesso.");
@@ -410,19 +447,21 @@ export default function PrePartoParto({ isOnline = navigator.onLine }) {
 
       const evento = {
         animal_id: modalParto.id,
-        tipo_evento: "parto",
+        tipo: "PARTO",
         data_evento: payload.dataParto,
+        observacoes: payload.observacoes || null,
         fazenda_id: fazendaAtualId,
+        user_id: userId,
       };
 
       if (!navigator.onLine) {
-        await enqueue("eventos_reprodutivos.insert", evento);
+        await enqueue("repro_eventos.insert", evento);
         setAcaoMensagem("✅ Parto registrado offline. Será sincronizado ao reconectar.");
         setModalParto(null);
         return;
       }
 
-      const { error } = await supabase.from("eventos_reprodutivos").insert(evento);
+      const { error } = await supabase.from("repro_eventos").insert(evento);
       if (error) throw error;
 
       setAcaoMensagem("✅ Parto registrado com sucesso.");
@@ -536,8 +575,8 @@ export default function PrePartoParto({ isOnline = navigator.onLine }) {
                 const rowId = animal.id ?? animal.numero ?? animal.brinco ?? idx;
                 const rowHover = hoveredRowId === rowId;
 
-                const sitProd = animal?.situacao_produtiva || "—";
-                const sitReprod = animal?.situacao_reprodutiva || "—";
+                const sitProd = resolveSituacaoProdutiva(animal);
+                const sitReprod = animal?.status_reprodutivo || "—";
 
                 const prodClass =
                   String(sitProd).toLowerCase().includes("lact")

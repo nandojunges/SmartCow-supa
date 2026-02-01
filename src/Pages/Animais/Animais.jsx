@@ -220,12 +220,7 @@ export default function Animais() {
         raca_id,
         pai_nome,
         mae_nome,
-        categoria,
-        categoria_atual,
-        situacao_produtiva,
-        situacao_reprodutiva,
-        ultimo_parto,
-        ultima_ia
+        categoria
       `
         )
         .eq("id", id),
@@ -249,8 +244,26 @@ export default function Animais() {
       }
     }
 
+    let repro = null;
+    try {
+      const { data: reproData, error: reproError } = await supabase
+        .from("v_repro_tabela")
+        .select("*")
+        .eq("animal_id", id)
+        .maybeSingle();
+      if (reproError) {
+        console.warn("Erro ao carregar dados reprodutivos:", reproError);
+      } else {
+        repro = reproData || null;
+      }
+    } catch (err) {
+      console.warn("Erro ao carregar dados reprodutivos:", err);
+    }
+
+    const { id: reproId, animal_id, ...reproRest } = repro || {};
     const animalCompleto = {
       ...data,
+      ...reproRest,
       raca_nome: racaNome,
     };
 

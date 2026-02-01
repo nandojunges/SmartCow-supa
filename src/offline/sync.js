@@ -6,6 +6,15 @@ function dispatchSyncStatus(detail) {
   window.dispatchEvent(new CustomEvent("sync:status", { detail }));
 }
 
+function normalizeReproTipo(tipo) {
+  const raw = String(tipo || "").trim().toUpperCase();
+  if (raw === "IA" || raw === "INSEMINACAO" || raw === "INSEMINAÇÃO") return "IA";
+  if (raw === "PARTO") return "PARTO";
+  if (raw === "SECAGEM") return "SECAGEM";
+  if (raw === "PREPARTO" || raw === "PRÉ-PARTO" || raw === "PRE-PARTO") return "PREPARTO";
+  return raw || null;
+}
+
 export async function syncPending() {
   const pending = await listPending();
   const total = pending.length;
@@ -59,11 +68,26 @@ export async function syncPending() {
         continue;
       }
 
+      if (item.action === "repro_eventos.insert") {
+        const payload = item.payload || {};
+        const { error } = await supabase.from("repro_eventos").insert(payload);
+        if (error) throw error;
+        await markDone(item.id);
+        continue;
+      }
+
       if (item.action === "eventos_reprodutivos.insert") {
         const payload = item.payload || {};
-        const { error } = await supabase
-          .from("eventos_reprodutivos")
-          .insert(payload);
+        const normalized = {
+          animal_id: payload.animal_id ?? null,
+          fazenda_id: payload.fazenda_id ?? null,
+          user_id: payload.user_id ?? null,
+          tipo: normalizeReproTipo(payload.tipo ?? payload.tipo_evento),
+          data_evento: payload.data_evento ?? null,
+          observacoes: payload.observacoes ?? null,
+          metadata: payload.metadata ?? null,
+        };
+        const { error } = await supabase.from("repro_eventos").insert(normalized);
         if (error) throw error;
         await markDone(item.id);
         continue;
