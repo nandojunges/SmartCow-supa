@@ -154,13 +154,14 @@ export default function Reproducao() {
               <col style={{ width: "110px" }} />
               <col style={{ width: "140px" }} />
               <col style={{ width: "120px" }} />
-              <col style={{ width: "90px" }} />
+              <col style={{ width: "140px" }} />
               <col style={{ width: "140px" }} />
               <col style={{ width: "120px" }} />
+              <col style={{ width: "160px" }} />
               <col style={{ width: "140px" }} />
-              <col style={{ width: "170px" }} />
+              <col style={{ width: "160px" }} />
               <col style={{ width: "180px" }} />
-              <col style={{ width: "140px" }} />
+              <col style={{ width: "160px" }} />
               <col style={{ width: "140px" }} />
             </colgroup>
             <thead>
@@ -175,19 +176,22 @@ export default function Reproducao() {
                   <span className="st-th-label">Categoria</span>
                 </th>
                 <th>
-                  <span className="st-th-label">Idade (meses)</span>
+                  <span className="st-th-label">Idade em meses</span>
                 </th>
                 <th>
-                  <span className="st-th-label">DEL (dias em lactação)</span>
+                  <span className="st-th-label">Número de lactações</span>
+                </th>
+                <th>
+                  <span className="st-th-label">Dias em lactação</span>
                 </th>
                 <th>
                   <span className="st-th-label">Última IA</span>
                 </th>
                 <th>
-                  <span className="st-th-label">Número de IAs (lactação)</span>
+                  <span className="st-th-label">Número de IAs na lactação</span>
                 </th>
                 <th>
-                  <span className="st-th-label">Número de IAs (total)</span>
+                  <span className="st-th-label">Número de IAs total</span>
                 </th>
                 <th>
                   <span className="st-th-label">Último parto</span>
@@ -207,7 +211,7 @@ export default function Reproducao() {
               {!fazendaAtualId ? (
                 <tr>
                   <td
-                    colSpan={12}
+                    colSpan={13}
                     style={{ padding: 18, color: "#64748b", fontWeight: 700 }}
                   >
                     Selecione uma fazenda
@@ -216,7 +220,7 @@ export default function Reproducao() {
               ) : carregando ? (
                 <tr>
                   <td
-                    colSpan={12}
+                    colSpan={13}
                     style={{ padding: 18, color: "#64748b", fontWeight: 700 }}
                   >
                     Carregando...
@@ -225,7 +229,7 @@ export default function Reproducao() {
               ) : erro ? (
                 <tr>
                   <td
-                    colSpan={12}
+                    colSpan={13}
                     style={{ padding: 18, color: "#b91c1c", fontWeight: 700 }}
                   >
                     {erro}
@@ -234,7 +238,7 @@ export default function Reproducao() {
               ) : registros.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={12}
+                    colSpan={13}
                     style={{ padding: 18, color: "#64748b", fontWeight: 700 }}
                   >
                     Nenhum registro encontrado...
@@ -251,6 +255,9 @@ export default function Reproducao() {
                       <td>{obterValor(registro, ["brinco"])}</td>
                       <td>{obterValor(registro, ["categoria"])}</td>
                       <td>{obterValor(registro, ["idade_meses"])}</td>
+                      <td>
+                        {obterValor(registro, ["numero_lactacoes", "lactacoes"])}
+                      </td>
                       <td>
                         {obterValor(registro, ["del"])}
                       </td>
@@ -273,15 +280,13 @@ export default function Reproducao() {
                         {obterValor(registro, ["status_reprodutivo"])}
                       </td>
                       <td className="st-td-center col-acoes">
-                        <div className="flex flex-wrap items-center justify-center gap-2">
-                          <button
-                            type="button"
-                            className="st-btn"
-                            onClick={() => setAnimalSelecionado({ registro, animalId })}
-                          >
-                            Manejo reprodutivo
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          className="st-btn"
+                          onClick={() => setAnimalSelecionado({ registro, animalId })}
+                        >
+                          Manejo
+                        </button>
                       </td>
                     </tr>
                   );

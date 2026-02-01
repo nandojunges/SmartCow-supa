@@ -466,6 +466,8 @@ export default function CadastroAnimal() {
         : null;
 
     const ultimoPartoISO = dataBRParaISO(ultimoPartoResumo);
+    const { data: authData } = await supabase.auth.getUser();
+    const userId = authData?.user?.id || null;
 
     const payloadAnimal = {
       numero: Number(numero),
@@ -503,16 +505,17 @@ export default function CadastroAnimal() {
           if (!iso) return;
           eventos.push({
             animal_id: animalId,
-            tipo_evento: tipo,
+            tipo,
             data_evento: iso,
             fazenda_id: fazendaAtualId,
+            user_id: userId,
           });
         });
       };
 
-      adicionarEventos(inseminacoesAnteriores, "inseminacao");
-      adicionarEventos(partosAnteriores, "parto");
-      adicionarEventos(secagensAnteriores, "secagem");
+      adicionarEventos(inseminacoesAnteriores, "IA");
+      adicionarEventos(partosAnteriores, "PARTO");
+      adicionarEventos(secagensAnteriores, "SECAGEM");
 
       return eventos;
     };
@@ -524,7 +527,7 @@ export default function CadastroAnimal() {
 
       await enqueue("animais.upsert", payloadOffline);
       for (const evento of eventos) {
-        await enqueue("eventos_reprodutivos.insert", evento);
+        await enqueue("repro_eventos.insert", evento);
       }
       await atualizarCachePlantel(payloadOffline);
 
@@ -555,7 +558,7 @@ export default function CadastroAnimal() {
 
     if (eventos.length > 0) {
       const { error: eventosError } = await supabase
-        .from("eventos_reprodutivos")
+        .from("repro_eventos")
         .insert(eventos);
 
       if (eventosError) {

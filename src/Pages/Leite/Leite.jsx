@@ -69,6 +69,33 @@ function getUltimoPartoBR(animal) {
   return Number.isNaN(dt.getTime()) ? "" : toBR(dt);
 }
 
+function mapearReproPorAnimal(lista = []) {
+  const map = {};
+  (lista || []).forEach((item) => {
+    const id = item?.animal_id ?? item?.id;
+    if (!id) return;
+    map[id] = item;
+  });
+  return map;
+}
+
+function mesclarReproEmAnimais(animais = [], repro = []) {
+  const mapRepro = mapearReproPorAnimal(repro);
+  return animais.map((animal) => {
+    const reproRow = mapRepro[animal?.id];
+    if (!reproRow) return animal;
+    const { id, animal_id, ...rest } = reproRow || {};
+    return { ...animal, ...rest };
+  });
+}
+
+function getDelValor(animal) {
+  if (Number.isFinite(Number(animal?.del))) {
+    return Number(animal.del);
+  }
+  return calcularDEL(getUltimoPartoBR(animal));
+}
+
 /** Normaliza texto (minúsculo, sem acento) */
 function normalizar(str) {
   return String(str || "")
@@ -80,24 +107,14 @@ function normalizar(str) {
 
 /** Regra: está em lactação? */
 function isLactatingAnimal(a) {
-  const categoriaNorm = normalizar(a?.categoria);
-  const statusProdNorm = normalizar(a?.situacao_pro || a?.situaco_pro);
-
+  if (!a) return false;
+  if (a?.sexo === "macho") return false;
+  const delValor = Number(a?.del);
+  if (Number.isFinite(delValor)) return true;
   const temUltimoParto = !!a?.ultimo_parto;
-
-  // Negativos claros
-  if (statusProdNorm.includes("seca") || categoriaNorm.includes("seca")) {
-    return false;
-  }
-
-  // Positivos claros via texto
-  if (statusProdNorm.startsWith("lact")) return true;
-  if (categoriaNorm.includes("lact")) return true;
-
-  // fallback: tem último parto e não está marcada como seca
-  if (!statusProdNorm && temUltimoParto) return true;
-
-  return false;
+  if (temUltimoParto) return true;
+  const categoriaNorm = normalizar(a?.categoria);
+  return categoriaNorm.includes("lact");
 }
 
 /* ===================== react-select (Lote) ===================== */
@@ -273,8 +290,8 @@ function TabelaResumoDia({
         return aStr.localeCompare(bStr) * factor;
       }
       if (sortConfig.key === "del") {
-        const aDel = calcularDEL(getUltimoPartoBR(a));
-        const bDel = calcularDEL(getUltimoPartoBR(b));
+        const aDel = getDelValor(a);
+        const bDel = getDelValor(b);
         return compareNumber(aDel, bDel) * factor;
       }
       if (sortConfig.key === "total") {
@@ -297,7 +314,7 @@ function TabelaResumoDia({
 
   const resumoTabela = useMemo(() => {
     const total = linhasOrdenadas.length;
-    const delSoma = linhasOrdenadas.reduce((acc, vaca) => acc + calcularDEL(getUltimoPartoBR(vaca)), 0);
+    const delSoma = linhasOrdenadas.reduce((acc, vaca) => acc + getDelValor(vaca), 0);
     const mediaDel = total > 0 ? delSoma / total : null;
     return { total, mediaDel };
   }, [linhasOrdenadas]);
@@ -503,7 +520,7 @@ function TabelaResumoDia({
 
                 const totalCalc = (toNum(dados.manha) + toNum(dados.tarde) + toNum(dados.terceira)).toFixed(1);
 
-                const del = calcularDEL(getUltimoPartoBR(vaca));
+                const del = getDelValor(vaca);
 
                 const ultimaRegistro = ultimaMedicaoPorAnimal?.[vaca.id];
                 const ultimaMed = ultimaRegistro?.data_medicao
@@ -911,8 +928,13 @@ export default function Leite() {
           return;
         }
 
-        const [animaisRes, lotesRes, medicoesRes, ultimaRes] = await Promise.all([
+        const [animaisRes, reproRes, lotesRes, medicoesRes, ultimaRes] = await Promise.all([
           withFazendaId(supabase.from("animais").select("*"), fazendaAtualId),
+          supabase
+            .from("v_repro_tabela")
+            .select("*")
+            .eq("fazenda_id", fazendaAtualId)
+            .order("numero", { ascending: true }),
           withFazendaId(
             supabase
               .from("lotes")
@@ -943,14 +965,21 @@ export default function Leite() {
             .limit(2000),
         ]);
 
-        const error = animaisRes.error || lotesRes.error || medicoesRes.error || ultimaRes.error;
+        const error =
+          animaisRes.error ||
+          reproRes.error ||
+          lotesRes.error ||
+          medicoesRes.error ||
+          ultimaRes.error;
         if (error) {
           console.error("Erro ao carregar dados de leite:", error);
           setLoadingLotes(false);
           return;
         }
 
-        const vacasData = Array.isArray(animaisRes.data) ? animaisRes.data : [];
+        const vacasBase = Array.isArray(animaisRes.data) ? animaisRes.data : [];
+        const reproLista = Array.isArray(reproRes.data) ? reproRes.data : [];
+        const vacasData = mesclarReproEmAnimais(vacasBase, reproLista);
         const lotesData = Array.isArray(lotesRes.data) ? lotesRes.data : [];
         const medicoesDia = Array.isArray(medicoesRes.data) ? medicoesRes.data : [];
 

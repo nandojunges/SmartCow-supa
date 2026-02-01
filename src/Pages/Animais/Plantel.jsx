@@ -99,6 +99,45 @@ function delNumeroFromParto(partoStr, secagemOpcional) {
   return Number.isFinite(dias) ? Math.max(0, dias) : null;
 }
 
+function mapearReproPorAnimal(lista = []) {
+  const map = {};
+  (lista || []).forEach((item) => {
+    const id = item?.animal_id ?? item?.id;
+    if (!id) return;
+    map[id] = item;
+  });
+  return map;
+}
+
+function mesclarReproEmAnimais(animais = [], repro = []) {
+  const mapRepro = mapearReproPorAnimal(repro);
+  return animais.map((animal) => {
+    const reproRow = mapRepro[animal?.id];
+    if (!reproRow) return animal;
+    const { id, animal_id, ...rest } = reproRow || {};
+    return { ...animal, ...rest };
+  });
+}
+
+function resolveSituacaoProdutiva(animal) {
+  if (!animal) return "—";
+  if (animal?.sexo === "macho") return "não lactante";
+  const delValor = Number(animal?.del);
+  if (Number.isFinite(delValor)) return "lactante";
+  return "seca";
+}
+
+function resolveStatusReprodutivo(animal) {
+  return animal?.status_reprodutivo || "—";
+}
+
+function resolveDelValor(animal) {
+  if (Number.isFinite(Number(animal?.del))) {
+    return Number(animal.del);
+  }
+  return delNumeroFromParto(animal?.ultimo_parto);
+}
+
 function formatProducao(valor) {
   if (!Number.isFinite(valor)) return "—";
   return valor.toFixed(1).replace(".", ",");
@@ -188,17 +227,24 @@ export default function Plantel({ isOnline = navigator.onLine }) {
   }, [lotes]);
 
   const carregarAnimais = useCallback(async () => {
-    const { data, error } = await withFazendaId(
-      supabase.from("animais").select("*"),
-      fazendaAtualId
-    )
-      .eq("ativo", true)
-      .order("numero", { ascending: true });
+    const [animaisRes, reproRes] = await Promise.all([
+      withFazendaId(supabase.from("animais").select("*"), fazendaAtualId)
+        .eq("ativo", true)
+        .order("numero", { ascending: true }),
+      supabase
+        .from("v_repro_tabela")
+        .select("*")
+        .eq("fazenda_id", fazendaAtualId)
+        .order("numero", { ascending: true }),
+    ]);
 
-    if (error) throw error;
-    const lista = Array.isArray(data) ? data : [];
-    setAnimais(lista);
-    return lista;
+    if (animaisRes.error) throw animaisRes.error;
+    if (reproRes.error) throw reproRes.error;
+    const lista = Array.isArray(animaisRes.data) ? animaisRes.data : [];
+    const reproLista = Array.isArray(reproRes.data) ? reproRes.data : [];
+    const combinados = mesclarReproEmAnimais(lista, reproLista);
+    setAnimais(combinados);
+    return combinados;
   }, [fazendaAtualId]);
 
   const carregarLotes = useCallback(async () => {
@@ -345,7 +391,7 @@ export default function Plantel({ isOnline = navigator.onLine }) {
       }
 
       const ids = animais
-        .filter((animal) => /lact|lac/i.test(String(animal?.situacao_produtiva || "")))
+        .filter((animal) => /lact|lac/i.test(String(resolveSituacaoProdutiva(animal) || "")))
         .map((animal) => animal.id)
         .filter(Boolean);
       if (ids.length === 0) {
@@ -422,7 +468,7 @@ export default function Plantel({ isOnline = navigator.onLine }) {
   const situacoesProdutivas = useMemo(() => {
     const valores = new Set();
     linhas.forEach((animal) => {
-      const valor = String(animal?.situacao_produtiva || "").trim();
+      const valor = String(resolveSituacaoProdutiva(animal) || "").trim();
       if (valor) valores.add(valor);
     });
     return Array.from(valores).sort((a, b) => a.localeCompare(b));
@@ -431,7 +477,7 @@ export default function Plantel({ isOnline = navigator.onLine }) {
   const situacoesReprodutivas = useMemo(() => {
     const valores = new Set();
     linhas.forEach((animal) => {
-      const valor = String(animal?.situacao_reprodutiva || "").trim();
+      const valor = String(resolveStatusReprodutivo(animal) || "").trim();
       if (valor) valores.add(valor);
     });
     return Array.from(valores).sort((a, b) => a.localeCompare(b));
@@ -861,7 +907,7 @@ export default function Plantel({ isOnline = navigator.onLine }) {
       }
 
       if (filtros.situacaoProdutiva !== allValue) {
-        const sitProd = String(animal?.situacao_produtiva || "");
+        const sitProd = String(resolveSituacaoProdutiva(animal) || "");
         const isLact = /lact|lac/i.test(sitProd);
         if (filtros.situacaoProdutiva === "lac" && !isLact) return false;
         if (filtros.situacaoProdutiva === "nao_lactante" && isLact) return false;
@@ -875,7 +921,7 @@ export default function Plantel({ isOnline = navigator.onLine }) {
       }
 
       if (filtros.situacaoReprodutiva !== allValue) {
-        const sitReprod = String(animal?.situacao_reprodutiva || "");
+        const sitReprod = String(resolveStatusReprodutivo(animal) || "");
         if (sitReprod !== filtros.situacaoReprodutiva) return false;
       }
 
@@ -920,8 +966,8 @@ export default function Plantel({ isOnline = navigator.onLine }) {
 
     sorted.sort((a, b) => {
       if (sortConfig.key === "producao") {
-        const aSit = String(a?.situacao_produtiva || "");
-        const bSit = String(b?.situacao_produtiva || "");
+        const aSit = String(resolveSituacaoProdutiva(a) || "");
+        const bSit = String(resolveSituacaoProdutiva(b) || "");
         const aIsLact = /lact|lac/i.test(aSit);
         const bIsLact = /lact|lac/i.test(bSit);
         const aVal = aIsLact ? Number(ultProducao[a.id]) : null;
@@ -929,8 +975,8 @@ export default function Plantel({ isOnline = navigator.onLine }) {
         return compareNumber(aVal, bVal) * factor;
       }
       if (sortConfig.key === "del") {
-        const aVal = delNumeroFromParto(a?.ultimo_parto);
-        const bVal = delNumeroFromParto(b?.ultimo_parto);
+        const aVal = resolveDelValor(a);
+        const bVal = resolveDelValor(b);
         return compareNumber(aVal, bVal) * factor;
       }
       if (sortConfig.key === "animal") {
@@ -952,7 +998,7 @@ export default function Plantel({ isOnline = navigator.onLine }) {
     const total = linhasOrdenadas.length;
     const somas = linhasOrdenadas.reduce(
       (acc, animal) => {
-        const sitProd = String(animal?.situacao_produtiva || "");
+        const sitProd = String(resolveSituacaoProdutiva(animal) || "");
         const isLact = /lact|lac/i.test(sitProd);
         if (!isLact) return acc;
         const valor = Number(ultProducao[animal?.id]);
@@ -967,10 +1013,10 @@ export default function Plantel({ isOnline = navigator.onLine }) {
     const media = somas.qtd > 0 ? somas.soma / somas.qtd : null;
     const delSomas = linhasOrdenadas.reduce(
       (acc, animal) => {
-        const sitProd = String(animal?.situacao_produtiva || "");
+        const sitProd = String(resolveSituacaoProdutiva(animal) || "");
         const isLact = /lact|lac/i.test(sitProd);
         if (!isLact) return acc;
-        const delValor = delNumeroFromParto(animal?.ultimo_parto);
+        const delValor = resolveDelValor(animal);
         if (!Number.isFinite(delValor)) return acc;
         return {
           soma: acc.soma + delValor,
@@ -1449,9 +1495,10 @@ export default function Plantel({ isOnline = navigator.onLine }) {
                 const sexoLabel =
                   a.sexo === "macho" ? "Macho" : a.sexo === "femea" ? "Fêmea" : a.sexo || "—";
 
-                const sitProd = a.situacao_produtiva || "—";
-                const sitReprod = a.situacao_reprodutiva || "—";
-                const del = delFromParto(a.ultimo_parto);
+                const sitProd = resolveSituacaoProdutiva(a);
+                const sitReprod = resolveStatusReprodutivo(a);
+                const del =
+                  Number.isFinite(Number(a?.del)) ? String(a.del) : delFromParto(a.ultimo_parto);
                 const isLact = /lact|lac/i.test(String(sitProd || ""));
                 const litros = isLact ? ultProducao[a.id] : null;
                 const producaoTexto =
@@ -1466,9 +1513,11 @@ export default function Plantel({ isOnline = navigator.onLine }) {
                   "st-pill st-pill--info";
 
                 const reprClass =
-                  String(sitReprod).toLowerCase().includes("pev") ? "st-pill st-pill--info" :
-                  String(sitReprod).toLowerCase().includes("vaz") ? "st-pill st-pill--mute" :
-                  "st-pill st-pill--info";
+                  String(sitReprod).toLowerCase().includes("pev")
+                    ? "st-pill st-pill--info"
+                    : String(sitReprod).toLowerCase().includes("vaz")
+                    ? "st-pill st-pill--mute"
+                    : "st-pill st-pill--info";
 
                 const rowId = a.id ?? a.numero ?? a.brinco ?? idx;
                 const rowHover = hoveredRowId === rowId;
