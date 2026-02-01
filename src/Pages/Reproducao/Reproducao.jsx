@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
-import { withFazendaId } from "../../lib/fazendaScope";
 import { useFazenda } from "../../context/FazendaContext";
 import "../../styles/tabelaModerna.css";
 
@@ -14,7 +13,7 @@ export default function Reproducao() {
   const [animalSelecionado, setAnimalSelecionado] = useState(null);
 
   const formatarData = (valor) => {
-    if (!valor) return "—";
+    if (valor === null || valor === undefined) return "—";
     const data = valor instanceof Date ? valor : new Date(valor);
     if (Number.isNaN(data.getTime())) return "—";
     return new Intl.DateTimeFormat("pt-BR").format(data);
@@ -26,14 +25,6 @@ export default function Reproducao() {
       if (valor !== null && valor !== undefined && valor !== "") return valor;
     }
     return fallback;
-  };
-
-  const obterData = (registro, campos) => {
-    for (const campo of campos) {
-      const valor = registro?.[campo];
-      if (valor) return valor;
-    }
-    return null;
   };
 
   useEffect(() => {
@@ -54,10 +45,11 @@ export default function Reproducao() {
       setErro("");
 
       try {
-        const { data, error } = await withFazendaId(
-          supabase.from("v_repro_tabela").select("*"),
-          fazendaAtualId
-        ).order("numero", { ascending: true });
+        const { data, error } = await supabase
+          .from("v_repro_tabela")
+          .select("*")
+          .eq("fazenda_id", fazendaAtualId)
+          .order("numero", { ascending: true });
 
         if (error) {
           throw error;
@@ -87,6 +79,20 @@ export default function Reproducao() {
     };
   }, [fazendaAtualId]);
 
+  const fetchTimeline = async (animalId) => {
+    const { data, error } = await supabase
+      .from("repro_eventos")
+      .select("*")
+      .eq("animal_id", animalId)
+      .order("data_evento", { ascending: false });
+
+    if (error) {
+      throw error;
+    }
+
+    return Array.isArray(data) ? data : [];
+  };
+
   useEffect(() => {
     if (!animalSelecionado?.animalId) {
       setEventosRepro([]);
@@ -99,20 +105,10 @@ export default function Reproducao() {
 
     const carregarEventos = async () => {
       try {
-        const { data, error } = await withFazendaId(
-          supabase
-            .from("repro_eventos")
-            .select("id, data_evento, tipo_evento")
-            .eq("animal_id", animalSelecionado.animalId),
-          fazendaAtualId
-        );
-
-        if (error) {
-          throw error;
-        }
+        const data = await fetchTimeline(animalSelecionado.animalId);
 
         if (ativo) {
-          setEventosRepro(Array.isArray(data) ? data : []);
+          setEventosRepro(data);
         }
       } catch (err) {
         if (ativo) {
@@ -130,7 +126,7 @@ export default function Reproducao() {
     return () => {
       ativo = false;
     };
-  }, [animalSelecionado, fazendaAtualId]);
+  }, [animalSelecionado]);
 
   useEffect(() => {
     if (!animalSelecionado) return undefined;
@@ -158,13 +154,13 @@ export default function Reproducao() {
               <col style={{ width: "110px" }} />
               <col style={{ width: "140px" }} />
               <col style={{ width: "120px" }} />
-              <col style={{ width: "160px" }} />
               <col style={{ width: "90px" }} />
               <col style={{ width: "140px" }} />
               <col style={{ width: "120px" }} />
               <col style={{ width: "140px" }} />
               <col style={{ width: "170px" }} />
               <col style={{ width: "180px" }} />
+              <col style={{ width: "140px" }} />
               <col style={{ width: "140px" }} />
             </colgroup>
             <thead>
@@ -182,9 +178,6 @@ export default function Reproducao() {
                   <span className="st-th-label">Idade (meses)</span>
                 </th>
                 <th>
-                  <span className="st-th-label">Número de lactações</span>
-                </th>
-                <th>
                   <span className="st-th-label">DEL (dias em lactação)</span>
                 </th>
                 <th>
@@ -192,6 +185,9 @@ export default function Reproducao() {
                 </th>
                 <th>
                   <span className="st-th-label">Número de IAs (lactação)</span>
+                </th>
+                <th>
+                  <span className="st-th-label">Número de IAs (total)</span>
                 </th>
                 <th>
                   <span className="st-th-label">Último parto</span>
@@ -253,66 +249,28 @@ export default function Reproducao() {
                     <tr key={animalId ?? index}>
                       <td>{obterValor(registro, ["numero"])}</td>
                       <td>{obterValor(registro, ["brinco"])}</td>
-                      <td>
-                        {obterValor(registro, [
-                          "categoria",
-                          "categoria_atual",
-                          "categoria_atual_nome",
-                        ])}
-                      </td>
+                      <td>{obterValor(registro, ["categoria"])}</td>
                       <td>{obterValor(registro, ["idade_meses"])}</td>
                       <td>
-                        {obterValor(registro, [
-                          "numero_lactacoes",
-                          "total_lactacoes",
-                          "lactacoes",
-                        ])}
+                        {obterValor(registro, ["del"])}
                       </td>
                       <td>
-                        {obterValor(registro, [
-                          "del",
-                          "dias_em_lactacao",
-                          "dias_em_lactacao_atual",
-                        ])}
+                        {formatarData(registro.ultima_ia)}
                       </td>
                       <td>
-                        {formatarData(
-                          obterData(registro, [
-                            "ultima_ia",
-                            "data_ultima_ia",
-                            "ultima_inseminacao",
-                          ])
-                        )}
+                        {obterValor(registro, ["numero_ias_lactacao"])}
                       </td>
                       <td>
-                        {obterValor(registro, [
-                          "numero_ias_lactacao",
-                          "total_ias_lactacao",
-                          "ias_lactacao",
-                        ])}
+                        {obterValor(registro, ["numero_ias_total"])}
                       </td>
                       <td>
-                        {formatarData(
-                          obterData(registro, [
-                            "ultimo_parto",
-                            "data_ultimo_parto",
-                          ])
-                        )}
+                        {formatarData(registro.ultimo_parto)}
                       </td>
                       <td>
-                        {formatarData(
-                          obterData(registro, [
-                            "previsao_parto",
-                            "data_previsao_parto",
-                            "dpp",
-                          ])
-                        )}
+                        {formatarData(registro.previsao_parto)}
                       </td>
                       <td>
-                        {obterValor(registro, [
-                          "status_reprodutivo",
-                          "situacao_reprodutiva",
-                        ])}
+                        {obterValor(registro, ["status_reprodutivo"])}
                       </td>
                       <td className="st-td-center col-acoes">
                         <div className="flex flex-wrap items-center justify-center gap-2">
@@ -349,29 +307,16 @@ export default function Reproducao() {
                 <div className="mt-3 space-y-1 text-sm text-slate-600">
                   <p>
                     <strong>Última IA:</strong>{" "}
-                    {formatarData(
-                      obterData(animalSelecionado.registro, [
-                        "ultima_ia",
-                        "data_ultima_ia",
-                        "ultima_inseminacao",
-                      ])
-                    )}
+                    {formatarData(animalSelecionado.registro.ultima_ia)}
                   </p>
                   <p>
                     <strong>DPP:</strong>{" "}
-                    {formatarData(
-                      obterData(animalSelecionado.registro, [
-                        "previsao_parto",
-                        "data_previsao_parto",
-                        "dpp",
-                      ])
-                    )}
+                    {formatarData(animalSelecionado.registro.previsao_parto)}
                   </p>
                   <p>
                     <strong>Status reprodutivo:</strong>{" "}
                     {obterValor(animalSelecionado.registro, [
                       "status_reprodutivo",
-                      "situacao_reprodutiva",
                     ])}
                   </p>
                   <p>
