@@ -178,10 +178,10 @@ export default function SaidaAnimal({ onAtualizar }) {
           fazenda_id: fazendaAtualId,
           animal_id: animalSelecionado.value,
           tipo_saida: tipo,
-          motivo_saida: motivo,
+          motivo,
+          observacoes: observacao || null,
+          valor: valorNumerico,
           data_saida: dataISO,
-          valor_venda: valorNumerico,
-          observacao: observacao,
         };
 
         const cacheSaidas = await kvGet(CACHE_SAIDAS_KEY);
@@ -202,6 +202,7 @@ export default function SaidaAnimal({ onAtualizar }) {
         await enqueue("saidas_animais.insert", payload);
         await enqueue("animais.setAtivoFalse", {
           animal_id: animalSelecionado.value,
+          fazenda_id: fazendaAtualId,
         });
 
         onAtualizar?.();
@@ -224,10 +225,10 @@ export default function SaidaAnimal({ onAtualizar }) {
           fazenda_id: fazendaAtualId,
           animal_id: animalSelecionado.value,
           tipo_saida: tipo,
-          motivo_saida: motivo,
+          motivo,
+          observacoes: observacao || null,
+          valor: valorNumerico,
           data_saida: dataISO,
-          valor_venda: valorNumerico,
-          observacao: observacao,
         });
 
       if (insertError) throw insertError;

@@ -36,7 +36,7 @@ async function loadConfigManejo(userId, fazendaId) {
 
     if (error) {
       if (status === 406 || error.code === "PGRST116") {
-        const defaults = { ...DEFAULT_CFG, user_id: userId, fazenda_id: fazendaId };
+        const defaults = { ...DEFAULT_CFG, fazenda_id: fazendaId };
         await supabase
           .from("config_manejo_repro")
           .upsert(defaults, { onConflict: "user_id,fazenda_id" });
@@ -52,9 +52,9 @@ async function loadConfigManejo(userId, fazendaId) {
     }
   } catch (error) {
     const cached = await kvGet(cfgKey(userId, fazendaId));
-    return { ...DEFAULT_CFG, ...(cached || {}), user_id: userId, fazenda_id: fazendaId };
+    return { ...DEFAULT_CFG, ...(cached || {}), fazenda_id: fazendaId };
   }
-  return { ...DEFAULT_CFG, user_id: userId, fazenda_id: fazendaId };
+  return { ...DEFAULT_CFG, fazenda_id: fazendaId };
 }
 
 async function saveCfg(userId, fazendaId, patch) {
@@ -63,7 +63,6 @@ async function saveCfg(userId, fazendaId, patch) {
   const merged = {
     ...cached,
     ...patch,
-    user_id: userId,
     fazenda_id: fazendaId,
   };
   await kvSet(cfgKey(userId, fazendaId), merged);
@@ -448,11 +447,27 @@ export default function Secagem({ isOnline = navigator.onLine }) {
         data_evento: payload.dataSecagem,
         observacoes: payload.observacoes || null,
         fazenda_id: fazendaAtualId,
-        user_id: userId,
       };
+
+      const loteDestinoId = cfg?.lote_destino_secagem_id ?? null;
 
       if (!navigator.onLine) {
         await enqueue("repro_eventos.insert", evento);
+        if (loteDestinoId) {
+          const dataMudanca = new Date().toISOString().split("T")[0];
+          await enqueue("animais_lote_historico.insert", {
+            animal_id: animalSelecionado.id,
+            lote_id: loteDestinoId,
+            data_mudanca: dataMudanca,
+            origem: "secagem",
+            fazenda_id: fazendaAtualId,
+          });
+          await enqueue("animais.upsert", {
+            id: animalSelecionado.id,
+            lote_id: loteDestinoId,
+            fazenda_id: fazendaAtualId,
+          });
+        }
         setAcaoMensagem("✅ Secagem registrada offline. Será sincronizada ao reconectar.");
         fecharModal();
         return;
@@ -463,6 +478,26 @@ export default function Secagem({ isOnline = navigator.onLine }) {
         .insert(evento);
 
       if (error) throw error;
+
+      if (loteDestinoId) {
+        const dataMudanca = new Date().toISOString().split("T")[0];
+        const { error: historicoError } = await supabase
+          .from("animais_lote_historico")
+          .insert({
+            animal_id: animalSelecionado.id,
+            lote_id: loteDestinoId,
+            data_mudanca: dataMudanca,
+            origem: "secagem",
+            fazenda_id: fazendaAtualId,
+          });
+        if (historicoError) throw historicoError;
+
+        const { error: updateError } = await withFazendaId(
+          supabase.from("animais").update({ lote_id: loteDestinoId }),
+          fazendaAtualId
+        ).eq("id", animalSelecionado.id);
+        if (updateError) throw updateError;
+      }
 
       setAcaoMensagem("✅ Secagem registrada com sucesso.");
       fecharModal();

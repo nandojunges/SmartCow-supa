@@ -741,6 +741,16 @@ export default function Plantel({ isOnline = navigator.onLine }) {
       const valorNovo = loteId;
       const valorAnterior = animal[LOTE_FIELD] ?? null;
 
+      if (!fazendaAtualId) {
+        setLoteAviso("Selecione uma fazenda antes de alterar o lote.");
+        return;
+      }
+
+      if (!navigator.onLine) {
+        setLoteAviso("Sem conexão. Conecte para alterar o lote.");
+        return;
+      }
+
       setAnimais((prev) =>
         prev.map((item) =>
           item.id === animal.id
@@ -750,12 +760,35 @@ export default function Plantel({ isOnline = navigator.onLine }) {
       );
       setLoteAviso("");
 
-      const { error: updateErr } = await supabase
-        .from("animais")
-        .update({ [LOTE_FIELD]: valorNovo })
-        .eq("id", animal.id);
+      try {
+        const dataMudanca = new Date().toISOString().split("T")[0];
+        const { error: historicoError } = await supabase
+          .from("animais_lote_historico")
+          .insert({
+            animal_id: animal.id,
+            lote_id: valorNovo,
+            data_mudanca: dataMudanca,
+            origem: "manual",
+            fazenda_id: fazendaAtualId,
+          });
 
-      if (updateErr) {
+        if (historicoError) throw historicoError;
+
+        const { error: updateErr } = await withFazendaId(
+          supabase.from("animais").update({ [LOTE_FIELD]: valorNovo }),
+          fazendaAtualId
+        ).eq("id", animal.id);
+
+        if (updateErr) throw updateErr;
+
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (user?.id) {
+          await carregarAnimais(user.id);
+        }
+        closeLoteEdit();
+      } catch (error) {
         setAnimais((prev) =>
           prev.map((item) =>
             item.id === animal.id
@@ -766,16 +799,8 @@ export default function Plantel({ isOnline = navigator.onLine }) {
         setLoteAviso("Não foi possível atualizar o lote. Tente novamente.");
         return;
       }
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user?.id) {
-        await carregarAnimais(user.id);
-      }
-      closeLoteEdit();
     },
-    [LOTE_FIELD, carregarAnimais, closeLoteEdit]
+    [LOTE_FIELD, carregarAnimais, closeLoteEdit, fazendaAtualId]
   );
 
   useEffect(() => {
