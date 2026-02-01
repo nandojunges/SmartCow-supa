@@ -1,19 +1,19 @@
 // src/pages/Reproducao/Reproducao.jsx
 // -----------------------------------------------------------------------------
-// Abas de Reprodução (sem modal aqui — o modal mora nos componentes internos).
-// Abas: Visão Geral | Protocolos | Cadastro | Relatórios | Inseminações
-// - Sem inline-style (mantém padrão visual do SmartCow)
-// - Não inventa "banco fake" / localStorage
-// - Aceita dados reais via props (se não passar, não quebra)
+// Tela única de Reprodução.
+// - Visão Geral como painel/summary no topo
+// - Tabela principal abaixo (tabelaModerna)
+// - Botões abrem overlay simples com componentes existentes
 // -----------------------------------------------------------------------------
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Cadastro from "./Cadastro.jsx";
 import Inseminacoes from "./Inseminacoes.jsx";
 import Protocolos from "./Protocolos.jsx";
 import Relatorios from "./Relatorios.jsx";
 import VisaoGeral from "./VisaoGeral/VisaoGeral.jsx";
-import SubAbasReproducao from "./SubAbasReproducao.jsx";
+import TabelaReproducao from "./TabelaReproducao.jsx";
+import "../../styles/tabelaModerna.css";
 
 /* ============================== Componente raiz ============================== */
 /**
@@ -29,23 +29,23 @@ export default function Reproducao({
   eventos = [],
   onRegistrar,
 }) {
-  const [abaAtiva, setAbaAtiva] = useState("visaoGeral");
+  const [filtroStatus, setFiltroStatus] = useState("todos");
+  const [busca, setBusca] = useState("");
+  const [modalAberto, setModalAberto] = useState(null);
 
-  const contadores = useMemo(() => {
-    const a = Array.isArray(animais) ? animais : [];
-    const p = Array.isArray(protocolos) ? protocolos : [];
-    const t = Array.isArray(touros) ? touros : [];
-    const i = Array.isArray(inseminadores) ? inseminadores : [];
-    const e = Array.isArray(eventos) ? eventos : [];
+  const animaisLista = Array.isArray(animais) ? animais : [];
+  const tourosLista = Array.isArray(touros) ? touros : [];
+  const inseminadoresLista = Array.isArray(inseminadores) ? inseminadores : [];
+  const protocolosLista = Array.isArray(protocolos) ? protocolos : [];
+  const eventosLista = Array.isArray(eventos) ? eventos : [];
 
-    return {
-      visaoGeral: a.length,
-      protocolos: p.length,
-      cadastro: t.length + i.length,
-      relatorios: e.length,
-      inseminacoes: e.length,
-    };
-  }, [animais, protocolos, touros, inseminadores, eventos]);
+  const filtrosStatus = [
+    { key: "todos", label: "Todos" },
+    { key: "vazia", label: "Vazia" },
+    { key: "prenhe", label: "Prenhe" },
+    { key: "ciclando", label: "Ciclando" },
+    { key: "seca", label: "Seca" },
+  ];
 
   const columns = useMemo(
     () => [
@@ -59,8 +59,7 @@ export default function Reproducao({
   );
 
   const rows = useMemo(() => {
-    const safeAnimais = Array.isArray(animais) ? animais : [];
-    return safeAnimais.map((animal) => ({
+    return animaisLista.map((animal) => ({
       ...animal,
       animal: [animal.numero, animal.brinco, animal.nome]
         .filter(Boolean)
@@ -69,12 +68,33 @@ export default function Reproducao({
       ultimaIa: animal.ultima_ia ?? animal.ultimaIa ?? "—",
       previsao: animal.previsao ?? animal.observacao ?? animal.obs ?? "—",
     }));
-  }, [animais]);
+  }, [animaisLista]);
 
-  const handleRegistrar = (tipo, payload) => {
-    if (typeof onRegistrar === "function") return onRegistrar(tipo, payload);
-    console.log("[Reproducao] onRegistrar ausente:", tipo, payload);
-  };
+  const rowsFiltradas = useMemo(() => {
+    const termo = busca.trim().toLowerCase();
+    return rows.filter((row) => {
+      const statusValor = String(row.status ?? "").toLowerCase();
+      const passaStatus =
+        filtroStatus === "todos" || statusValor.includes(filtroStatus);
+      if (!passaStatus) return false;
+      if (!termo) return true;
+      return String(row.animal ?? "").toLowerCase().includes(termo);
+    });
+  }, [busca, filtroStatus, rows]);
+
+  const handleRegistrar =
+    typeof onRegistrar === "function" ? onRegistrar : () => {};
+
+  useEffect(() => {
+    if (!modalAberto) return;
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setModalAberto(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [modalAberto]);
 
   const renderRowActions = (row) => (
     <div className="flex flex-wrap items-center justify-center gap-2">
@@ -102,55 +122,150 @@ export default function Reproducao({
       <button
         type="button"
         className="st-btn"
-        onClick={() => console.log("Ficha:", row)}
+        onClick={() => {}}
       >
         Ficha
       </button>
     </div>
   );
 
-  const renderizarConteudo = () => {
-    switch (abaAtiva) {
-      case "visaoGeral":
-        return (
-          <VisaoGeral
-            animais={animais}
-            touros={touros}
-            inseminadores={inseminadores}
-            protocolos={protocolos}
-            columns={columns}
-            rows={rows}
-            renderActions={renderRowActions}
-          />
-        );
+  const renderizarModal = () => {
+    if (!modalAberto) return null;
 
-      case "protocolos":
-        return <Protocolos protocolos={protocolos} />;
+    let titulo = "";
+    let conteudo = null;
 
-      case "cadastro":
-        return <Cadastro touros={touros} inseminadores={inseminadores} />;
-
-      case "relatorios":
-        return <Relatorios eventos={eventos} />;
-
-      case "inseminacoes":
-        return <Inseminacoes eventos={eventos} />;
-
-      default:
-        return null;
+    if (modalAberto === "protocolos") {
+      titulo = "Protocolos";
+      conteudo = <Protocolos protocolos={protocolosLista} />;
     }
+
+    if (modalAberto === "cadastro") {
+      titulo = "Cadastro";
+      conteudo = (
+        <Cadastro
+          touros={tourosLista}
+          inseminadores={inseminadoresLista}
+        />
+      );
+    }
+
+    if (modalAberto === "relatorios") {
+      titulo = "Relatórios";
+      conteudo = <Relatorios eventos={eventosLista} />;
+    }
+
+    if (modalAberto === "inseminacoes") {
+      titulo = "Inseminações";
+      conteudo = <Inseminacoes eventos={eventosLista} />;
+    }
+
+    return (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) {
+            setModalAberto(null);
+          }
+        }}
+        role="dialog"
+        aria-modal="true"
+      >
+        <div className="w-full max-w-4xl rounded-2xl bg-white p-4 shadow-xl">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2 className="text-base font-semibold text-slate-800">{titulo}</h2>
+            <button
+              type="button"
+              className="st-btn"
+              onClick={() => setModalAberto(null)}
+              aria-label="Fechar modal"
+            >
+              Fechar
+            </button>
+          </div>
+          <div className="max-h-[70vh] overflow-auto">{conteudo}</div>
+        </div>
+      </div>
+    );
   };
 
   return (
-    <div className="w-full">
-      <SubAbasReproducao
-        abaAtiva={abaAtiva}
-        onChange={setAbaAtiva}
-        contadores={contadores}
+    <section className="w-full space-y-6">
+      <VisaoGeral
+        animais={animaisLista}
+        touros={tourosLista}
+        inseminadores={inseminadoresLista}
+        protocolos={protocolosLista}
       />
-      <div id={`pane-${abaAtiva}`} role="tabpanel" aria-labelledby={abaAtiva}>
-        {renderizarConteudo()}
+
+      <div className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="st-filter__label min-w-[220px]">
+            Busca
+            <input
+              type="text"
+              className="st-filter-input"
+              placeholder="Buscar animal..."
+              value={busca}
+              onChange={(event) => setBusca(event.target.value)}
+            />
+          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            {filtrosStatus.map((chip) => (
+              <button
+                key={chip.key}
+                type="button"
+                onClick={() => setFiltroStatus(chip.key)}
+                className={`st-chip ${
+                  filtroStatus === chip.key ? "st-chip--info" : "st-chip--muted"
+                }`}
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className="st-btn"
+            onClick={() => setModalAberto("protocolos")}
+          >
+            Protocolos
+          </button>
+          <button
+            type="button"
+            className="st-btn"
+            onClick={() => setModalAberto("cadastro")}
+          >
+            Cadastro
+          </button>
+          <button
+            type="button"
+            className="st-btn"
+            onClick={() => setModalAberto("relatorios")}
+          >
+            Relatórios
+          </button>
+          <button
+            type="button"
+            className="st-btn"
+            onClick={() => setModalAberto("inseminacoes")}
+          >
+            Inseminações
+          </button>
+        </div>
       </div>
-    </div>
+
+      <TabelaReproducao
+        columns={columns}
+        rows={rowsFiltradas}
+        renderActions={renderRowActions}
+        emptyMessage="Nenhum animal encontrado…"
+      />
+
+      {renderizarModal()}
+    </section>
   );
 }
