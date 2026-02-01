@@ -13,6 +13,11 @@ import ResumoFinanceiroCards from "./ResumoFinanceiroCards";
 import ModalLancamentoFinanceiro from "./ModalLancamentoFinanceiro";
 import ModalPeriodoFinanceiro from "./ModalPeriodoFinanceiro";
 
+let MEMO_FINANCEIRO = {
+  data: null,
+  lastAt: 0,
+};
+
 /* ===================== CONFIG ===================== */
 const STICKY_OFFSET = 48;
 
@@ -248,28 +253,37 @@ export default function Financeiro() {
   const { fazendaAtualId } = useFazenda();
   const hojeISO = useMemo(() => toISODateInput(new Date()), []);
   const periodoPadrao = useMemo(() => firstLastOfMonth(hojeISO), [hojeISO]);
+  const memoData = MEMO_FINANCEIRO.data || {};
 
   // período real (início/fim)
-  const [periodo, setPeriodo] = useState(() => ({
-    ini: periodoPadrao.ini,
-    fim: periodoPadrao.fim,
-  }));
+  const [periodo, setPeriodo] = useState(
+    () =>
+      memoData.periodo ?? {
+        ini: periodoPadrao.ini,
+        fim: periodoPadrao.fim,
+      }
+  );
 
   // filtros principais
-  const [filtroTipo, setFiltroTipo] = useState(null);
-  const [busca, setBusca] = useState("");
+  const [filtroTipo, setFiltroTipo] = useState(() => memoData.filtroTipo ?? null);
+  const [busca, setBusca] = useState(() => memoData.busca ?? "");
 
   // filtros extras
-  const [mostrarMaisFiltros, setMostrarMaisFiltros] = useState(false);
-  const [filtroCategoria, setFiltroCategoria] = useState(null);
-  const [filtroOrigem, setFiltroOrigem] = useState(null);
+  const [mostrarMaisFiltros, setMostrarMaisFiltros] = useState(
+    () => memoData.mostrarMaisFiltros ?? false
+  );
+  const [filtroCategoria, setFiltroCategoria] = useState(() => memoData.filtroCategoria ?? null);
+  const [filtroOrigem, setFiltroOrigem] = useState(() => memoData.filtroOrigem ?? null);
 
   // ✅ filtro opcional: mostrar custos que não mexem no caixa
-  const [mostrarNaoCaixa, setMostrarNaoCaixa] = useState(true);
+  const [mostrarNaoCaixa, setMostrarNaoCaixa] = useState(
+    () => memoData.mostrarNaoCaixa ?? true
+  );
 
   // dados
-  const [lancamentos, setLancamentos] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [lancamentos, setLancamentos] = useState(() => memoData.lancamentos ?? []);
+  const [loading, setLoading] = useState(() => !memoData.lancamentos);
+  const [atualizando, setAtualizando] = useState(false);
 
   // modal lançamento
   const [modalAberto, setModalAberto] = useState(false);
@@ -285,17 +299,65 @@ export default function Financeiro() {
   const categoriasSelect = useMemo(() => CATEGORIAS_PADRAO, []);
   const origensSelect = useMemo(() => ORIGENS_PADRAO, []);
 
+  useEffect(() => {
+    MEMO_FINANCEIRO.data = {
+      ...(MEMO_FINANCEIRO.data || {}),
+      periodo,
+      filtroTipo,
+      filtroCategoria,
+      filtroOrigem,
+      busca,
+      mostrarMaisFiltros,
+      mostrarNaoCaixa,
+    };
+  }, [
+    periodo,
+    filtroTipo,
+    filtroCategoria,
+    filtroOrigem,
+    busca,
+    mostrarMaisFiltros,
+    mostrarNaoCaixa,
+  ]);
+
+  useEffect(() => {
+    const memo = MEMO_FINANCEIRO.data;
+    if (memo?.lancamentos === lancamentos) return;
+    MEMO_FINANCEIRO.data = {
+      ...(memo || {}),
+      lancamentos,
+    };
+    MEMO_FINANCEIRO.lastAt = Date.now();
+  }, [lancamentos]);
+
   const carregarLancamentos = useCallback(async () => {
-    setLoading(true);
+    const memo = MEMO_FINANCEIRO.data;
+    const memoFresh = memo && Date.now() - MEMO_FINANCEIRO.lastAt < 30000;
+    const memoPeriodoOk =
+      memo?.periodo?.ini === periodo.ini && memo?.periodo?.fim === periodo.fim;
+    const hasData = Array.isArray(lancamentos) && lancamentos.length > 0;
+    if (memoFresh && memoPeriodoOk && hasData) {
+      setLoading(false);
+      setAtualizando(false);
+      return;
+    }
+    if (hasData) {
+      setAtualizando(true);
+    } else {
+      setLoading(true);
+    }
     try {
       if (typeof navigator !== "undefined" && !navigator.onLine) {
         const cache = normalizeCacheList(await kvGet(CACHE_FINANCEIRO_KEY));
         setLancamentos(filtrarPorPeriodo(cache, periodo).map((r) => ({ ...r })));
+        setLoading(false);
+        setAtualizando(false);
         return;
       }
 
       if (!fazendaAtualId) {
-        setLancamentos([]);
+        setLoading(false);
+        setAtualizando(false);
         return;
       }
 
@@ -347,8 +409,9 @@ export default function Financeiro() {
       console.error("Financeiro: erro ao carregar:", e);
     } finally {
       setLoading(false);
+      setAtualizando(false);
     }
-  }, [fazendaAtualId, periodo.ini, periodo.fim]);
+  }, [fazendaAtualId, lancamentos, periodo.ini, periodo.fim]);
 
   // auto-carrega quando muda o período
   useEffect(() => {
@@ -755,10 +818,10 @@ export default function Financeiro() {
           </button>
 
           <div style={contador}>
-            {loading
-              ? hasLancamentos
-                ? "Atualizando..."
-                : "Carregando..."
+            {loading && !hasLancamentos
+              ? "Carregando..."
+              : atualizando
+              ? "Atualizando..."
               : `${filtrados.length} lançamentos`}
           </div>
         </div>

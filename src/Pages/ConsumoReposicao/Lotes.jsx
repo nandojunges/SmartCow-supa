@@ -10,6 +10,11 @@ import "../../styles/botoes.css";
 
 import { ModalLoteCadastro, ModalLoteInfo, ModalConfirmarExclusao } from "./ModalLote";
 
+let MEMO_LOTES = {
+  data: null,
+  lastAt: 0,
+};
+
 const CACHE_LOTES_KEY = "cache:lotes:list";
 
 function normalizeLotesCache(cache) {
@@ -62,19 +67,26 @@ function uiToDbPayload(form) {
 
 export default function Lotes() {
   const { fazendaAtualId } = useFazenda();
-  const [lotes, setLotes] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [erro, setErro] = useState("");
+  const memoData = MEMO_LOTES.data || {};
+  const [lotes, setLotes] = useState(() => memoData.lotes ?? []);
+  const [loading, setLoading] = useState(() => !memoData.lotes);
+  const [atualizando, setAtualizando] = useState(false);
+  const [erro, setErro] = useState(() => memoData.erro ?? "");
 
   const [hoveredRowId, setHoveredRowId] = useState(null);
   const [hoveredColKey, setHoveredColKey] = useState(null);
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
+  const [sortConfig, setSortConfig] = useState(
+    () => memoData.sortConfig ?? { key: null, direction: null }
+  );
   const [openPopoverKey, setOpenPopoverKey] = useState(null);
-  const [filtros, setFiltros] = useState({
-    funcao: "__ALL__",
-    nivel: "__ALL__",
-    status: "__ALL__",
-  });
+  const [filtros, setFiltros] = useState(
+    () =>
+      memoData.filtros ?? {
+        funcao: "__ALL__",
+        nivel: "__ALL__",
+        status: "__ALL__",
+      }
+  );
   const [cad, setCad] = useState({ open: false, index: null, lote: null });
   const [info, setInfo] = useState(null);
   const [excluirId, setExcluirId] = useState(null);
@@ -83,6 +95,21 @@ export default function Lotes() {
     setLotes(nextList);
     await kvSet(CACHE_LOTES_KEY, nextList);
   }, []);
+
+  useEffect(() => {
+    const memo = MEMO_LOTES.data;
+    if (memo?.lotes === lotes && memo?.sortConfig === sortConfig && memo?.filtros === filtros) {
+      return;
+    }
+    MEMO_LOTES.data = {
+      ...(memo || {}),
+      lotes,
+      sortConfig,
+      filtros,
+      erro,
+    };
+    MEMO_LOTES.lastAt = Date.now();
+  }, [lotes, sortConfig, filtros, erro]);
 
   const colunas = useMemo(
     () => ["Nome", "Nº de Vacas", "Função", "Nível Produtivo", "Status", "Ação"],
@@ -127,21 +154,33 @@ export default function Lotes() {
   }, [openPopoverKey]);
 
   const carregar = useCallback(async () => {
-    setLoading(true);
+    const memoFresh = MEMO_LOTES.data && Date.now() - MEMO_LOTES.lastAt < 30000;
+    const hasData = Array.isArray(lotes) && lotes.length > 0;
+    if (memoFresh && hasData) {
+      setLoading(false);
+      setAtualizando(false);
+      return;
+    }
+    if (hasData) {
+      setAtualizando(true);
+    } else {
+      setLoading(true);
+    }
     setErro("");
 
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       const cache = normalizeLotesCache(await kvGet(CACHE_LOTES_KEY));
       setLotes(cache);
       setLoading(false);
+      setAtualizando(false);
       return;
     }
 
     // View que você criou: v_lotes_com_contagem
     if (!fazendaAtualId) {
       setErro("Selecione uma fazenda para carregar os lotes.");
-      setLotes([]);
       setLoading(false);
+      setAtualizando(false);
       return;
     }
 
@@ -157,12 +196,14 @@ export default function Lotes() {
       console.error("Erro ao carregar lotes:", error);
       setErro("Não foi possível carregar os lotes. Verifique suas permissões (RLS) e tente novamente.");
       setLoading(false);
+      setAtualizando(false);
       return;
     }
 
     await updateCache((data || []).map(dbToUiLote));
     setLoading(false);
-  }, [fazendaAtualId, updateCache]);
+    setAtualizando(false);
+  }, [fazendaAtualId, lotes, updateCache]);
 
   useEffect(() => {
     carregar();
@@ -379,7 +420,7 @@ export default function Lotes() {
           Dica: clique no título das colunas habilitadas para ordenar/filtrar. Clique novamente para
           fechar.
         </div>
-        {loading && hasLotes && (
+        {atualizando && hasLotes && (
           <div className="text-xs text-slate-500 mb-2">Atualizando lotes...</div>
         )}
         <div className="st-table-container">

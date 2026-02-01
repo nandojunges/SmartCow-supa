@@ -10,6 +10,11 @@ import ModalRegistrarSecagem from "./ModalRegistrarSecagem";
 export const iconeSecagem = "/icones/secagem.png";
 export const rotuloSecagem = "Secagem";
 
+let MEMO_SECAGEM = {
+  data: null,
+  lastAt: 0,
+};
+
 const KEY = "cfg_manejo_repro";
 const DEFAULT_CFG = {
   dias_antes_parto_para_secagem: 60,
@@ -137,9 +142,11 @@ export default function Secagem({ isOnline = navigator.onLine }) {
   const CACHE_KEY = "cache:animais:list";
   const CACHE_FALLBACK_KEY = "cache:animais:plantel:v1";
 
-  const [animais, setAnimais] = useState([]);
-  const [lotes, setLotes] = useState([]);
-  const [carregando, setCarregando] = useState(true);
+  const memoData = MEMO_SECAGEM.data || {};
+  const [animais, setAnimais] = useState(() => memoData.animais ?? []);
+  const [lotes, setLotes] = useState(() => memoData.lotes ?? []);
+  const [carregando, setCarregando] = useState(() => !memoData.animais);
+  const [atualizando, setAtualizando] = useState(false);
   const [erro, setErro] = useState("");
   const [offlineAviso, setOfflineAviso] = useState("");
   const [cfg, setCfg] = useState(null);
@@ -153,6 +160,17 @@ export default function Secagem({ isOnline = navigator.onLine }) {
   const [acaoMensagem, setAcaoMensagem] = useState("");
 
   const LOTE_TABLE = "lotes";
+
+  useEffect(() => {
+    const memo = MEMO_SECAGEM.data;
+    if (memo?.animais === animais && memo?.lotes === lotes) return;
+    MEMO_SECAGEM.data = {
+      ...(memo || {}),
+      animais,
+      lotes,
+    };
+    MEMO_SECAGEM.lastAt = Date.now();
+  }, [animais, lotes]);
 
   const lotesById = useMemo(() => {
     const map = {};
@@ -217,7 +235,23 @@ export default function Secagem({ isOnline = navigator.onLine }) {
     let ativo = true;
 
     async function carregarDados() {
-      setCarregando(true);
+      const memoFresh =
+        MEMO_SECAGEM.data && Date.now() - MEMO_SECAGEM.lastAt < 30000;
+      const hasData =
+        (Array.isArray(animais) && animais.length > 0) ||
+        (Array.isArray(lotes) && lotes.length > 0);
+
+      if (memoFresh && hasData) {
+        setCarregando(false);
+        setAtualizando(false);
+        return;
+      }
+
+      if (hasData) {
+        setAtualizando(true);
+      } else {
+        setCarregando(true);
+      }
       setErro("");
       setOfflineAviso("");
 
@@ -255,7 +289,10 @@ export default function Secagem({ isOnline = navigator.onLine }) {
           );
         }
       } finally {
-        if (ativo) setCarregando(false);
+        if (ativo) {
+          setCarregando(false);
+          setAtualizando(false);
+        }
       }
     }
 
@@ -465,7 +502,7 @@ export default function Secagem({ isOnline = navigator.onLine }) {
         )}
       </div>
 
-      {carregando && hasAnimais && (
+      {atualizando && hasAnimais && (
         <div className="text-xs text-slate-500 mb-2">Atualizando secagem...</div>
       )}
 

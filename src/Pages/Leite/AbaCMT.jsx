@@ -17,6 +17,11 @@ import {
   Legend,
 } from "recharts";
 
+let MEMO_ABA_CMT = {
+  data: null,
+  lastAt: 0,
+};
+
 /* ============================================================
    IMPORTANTE
    - Banco deve ter: leite_cmt_testes.dia (DATE)
@@ -188,6 +193,7 @@ const selectBaseStyles = {
 /* ===================== COMPONENT ===================== */
 export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }) {
   const { fazendaAtualId } = useFazenda();
+  const memoData = MEMO_ABA_CMT.data || {};
   if (!vaca?.id) {
     return (
       <div style={{ padding: "1rem", color: "crimson" }}>
@@ -222,14 +228,15 @@ export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }
     PD: { resultado: "", observacao: "" },
   });
 
-  const [carregando, setCarregando] = useState(false);
+  const [carregando, setCarregando] = useState(() => !memoData.historico);
+  const [atualizando, setAtualizando] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
 
   const [historico, setHistorico] = useState(() =>
-    Array.isArray(historicoInicial) ? historicoInicial : []
+    memoData.historico ?? (Array.isArray(historicoInicial) ? historicoInicial : [])
   );
-  const [testesDoDia, setTestesDoDia] = useState([]);
+  const [testesDoDia, setTestesDoDia] = useState(() => memoData.testesDoDia ?? []);
   const [hoveredRowId, setHoveredRowId] = useState(null);
   const [hoveredColKey, setHoveredColKey] = useState(null);
 
@@ -237,7 +244,7 @@ export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }
   const [testeEditandoId, setTesteEditandoId] = useState(null);
 
   // Lactações (partos)
-  const [lactacoes, setLactacoes] = useState([]);
+  const [lactacoes, setLactacoes] = useState(() => memoData.lactacoes ?? []);
   const [lactacaoSelecionada, setLactacaoSelecionada] = useState(null);
 
   const colunasTabela = useMemo(
@@ -272,6 +279,24 @@ export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }
       mountedRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    const memo = MEMO_ABA_CMT.data;
+    if (
+      memo?.historico === historico &&
+      memo?.testesDoDia === testesDoDia &&
+      memo?.lactacoes === lactacoes
+    ) {
+      return;
+    }
+    MEMO_ABA_CMT.data = {
+      ...(memo || {}),
+      historico,
+      testesDoDia,
+      lactacoes,
+    };
+    MEMO_ABA_CMT.lastAt = Date.now();
+  }, [historico, testesDoDia, lactacoes]);
 
   /* ao trocar o dia, ajusta o “momento” (visual) */
   useEffect(() => {
@@ -443,7 +468,18 @@ export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }
   /* ---------- fetch CMT ---------- */
   const carregarHistoricoCompleto = async () => {
     setErro("");
-    setCarregando(true);
+    const memoFresh = MEMO_ABA_CMT.data && Date.now() - MEMO_ABA_CMT.lastAt < 30000;
+    const hasData = Array.isArray(historico) && historico.length > 0;
+    if (memoFresh && hasData) {
+      setCarregando(false);
+      setAtualizando(false);
+      return;
+    }
+    if (hasData) {
+      setAtualizando(true);
+    } else {
+      setCarregando(true);
+    }
 
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       const cache = normalizeCacheList(await kvGet(CACHE_CMT_KEY));
@@ -452,6 +488,7 @@ export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }
       const doDia = filtrado.filter((t) => getDiaDoTeste(t) === diaSelecionado);
       setTestesDoDia(doDia);
       setCarregando(false);
+      setAtualizando(false);
       return;
     }
 
@@ -486,6 +523,7 @@ export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }
     if (error) {
       setErro(error.message || "Erro ao carregar histórico de CMT.");
       setCarregando(false);
+      setAtualizando(false);
       return;
     }
 
@@ -516,6 +554,7 @@ export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }
     await kvSet(CACHE_CMT_KEY, atualizado);
 
     setCarregando(false);
+    setAtualizando(false);
   };
 
   useEffect(() => {
@@ -836,6 +875,8 @@ export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }
       return ms >= ini && ms <= fim;
     });
   }, [historico, intervaloLactacao]);
+
+  const hasHistorico = historico.length > 0;
 
   const historicoAsc = useMemo(() => {
     return [...historicoFiltradoLactacao].sort(
@@ -1168,7 +1209,11 @@ export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }
       <div style={secHeader}>
         <h4 style={secTitle}>📈 Curva por quarto (TE/TD/PE/PD)</h4>
         <div style={{ fontSize: 13, color: "#6b7280" }}>
-          {carregando ? "Carregando..." : `${historicoFiltradoLactacao.length} teste(s) no filtro atual`}
+          {carregando && !hasHistorico
+            ? "Carregando..."
+            : atualizando
+            ? "Atualizando..."
+            : `${historicoFiltradoLactacao.length} teste(s) no filtro atual`}
         </div>
       </div>
 
@@ -1236,7 +1281,11 @@ export default function AbaCMT({ vaca, historicoInicial = [], onSalvarRegistro }
         <div style={secHeader}>
           <h4 style={secTitle}>📅 Registros do dia</h4>
           <div style={{ fontSize: 13, color: "#6b7280" }}>
-            {carregando ? "Carregando..." : `${testesDoDia.length} teste(s) em ${diaSelecionado}`}
+            {carregando && !hasHistorico
+              ? "Carregando..."
+              : atualizando
+              ? "Atualizando..."
+              : `${testesDoDia.length} teste(s) em ${diaSelecionado}`}
           </div>
         </div>
 

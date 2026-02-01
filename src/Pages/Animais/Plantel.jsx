@@ -8,6 +8,11 @@ import { kvGet, kvSet } from "../../offline/localDB";
 import "../../styles/tabelaModerna.css";
 import FichaAnimal from "./FichaAnimal/FichaAnimal";
 
+let MEMO_PLANTEL = {
+  data: null,
+  lastAt: 0,
+};
+
 /* ========= helpers de data ========= */
 // aceita "2023-01-01" ou "dd/mm/aaaa"
 function parseDateFlexible(s) {
@@ -103,12 +108,14 @@ export default function Plantel({ isOnline = navigator.onLine }) {
   const CACHE_KEY = "cache:animais:list";
   const CACHE_FALLBACK_KEY = "cache:animais:plantel:v1";
   const { fazendaAtualId } = useFazenda();
-  const [animais, setAnimais] = useState([]);
-  const [racaMap, setRacaMap] = useState({});
-  const [carregando, setCarregando] = useState(true);
+  const memoData = MEMO_PLANTEL.data || {};
+  const [animais, setAnimais] = useState(() => memoData.animais ?? []);
+  const [racaMap, setRacaMap] = useState(() => memoData.racaMap ?? {});
+  const [carregando, setCarregando] = useState(() => !memoData.animais);
+  const [atualizando, setAtualizando] = useState(false);
   const [erro, setErro] = useState("");
   const [offlineAviso, setOfflineAviso] = useState("");
-  const [lotes, setLotes] = useState([]);
+  const [lotes, setLotes] = useState(() => memoData.lotes ?? []);
   const [loteAviso, setLoteAviso] = useState("");
   const [hoveredRowId, setHoveredRowId] = useState(null);
   const [hoveredColKey, setHoveredColKey] = useState(null);
@@ -139,6 +146,20 @@ export default function Plantel({ isOnline = navigator.onLine }) {
   const [animalSelecionado, setAnimalSelecionado] = useState(null);
   const abrirFichaAnimal = (animal) => setAnimalSelecionado(animal);
   const fecharFichaAnimal = () => setAnimalSelecionado(null);
+
+  useEffect(() => {
+    const memo = MEMO_PLANTEL.data;
+    if (memo?.animais === animais && memo?.lotes === lotes && memo?.racaMap === racaMap) {
+      return;
+    }
+    MEMO_PLANTEL.data = {
+      ...(memo || {}),
+      animais,
+      lotes,
+      racaMap,
+    };
+    MEMO_PLANTEL.lastAt = Date.now();
+  }, [animais, lotes, racaMap]);
 
   const loteOptions = useMemo(() => {
     const baseOptions = (lotes || []).map((lote) => {
@@ -231,13 +252,31 @@ export default function Plantel({ isOnline = navigator.onLine }) {
   useEffect(() => {
     if (!fazendaAtualId) {
       setCarregando(false);
+      setAtualizando(false);
       return undefined;
     }
 
     let ativo = true;
 
     async function carregarDados() {
-      setCarregando(true);
+      const memoFresh =
+        MEMO_PLANTEL.data && Date.now() - MEMO_PLANTEL.lastAt < 30000;
+      const hasData =
+        (Array.isArray(animais) && animais.length > 0) ||
+        (Array.isArray(lotes) && lotes.length > 0) ||
+        Object.keys(racaMap || {}).length > 0;
+
+      if (memoFresh && hasData) {
+        setCarregando(false);
+        setAtualizando(false);
+        return;
+      }
+
+      if (hasData) {
+        setAtualizando(true);
+      } else {
+        setCarregando(true);
+      }
       setErro("");
       setLoteAviso("");
       setOfflineAviso("");
@@ -272,7 +311,10 @@ export default function Plantel({ isOnline = navigator.onLine }) {
           );
         }
       } finally {
-        if (ativo) setCarregando(false);
+        if (ativo) {
+          setCarregando(false);
+          setAtualizando(false);
+        }
       }
     }
 
@@ -992,7 +1034,7 @@ export default function Plantel({ isOnline = navigator.onLine }) {
       <div className="st-filter-hint">
         Dica: clique no título da coluna para filtrar. Clique novamente para fechar.
       </div>
-      {carregando && hasAnimais && (
+      {atualizando && hasAnimais && (
         <div className="text-xs text-slate-500 mb-2">Atualizando animais...</div>
       )}
       <div className="st-table-container">

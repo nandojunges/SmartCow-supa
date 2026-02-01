@@ -20,6 +20,11 @@ import {
 
 import "../../styles/botoes.css"; // ajuste o caminho se necessário
 
+let MEMO_ABA_CCS = {
+  data: null,
+  lastAt: 0,
+};
+
 /* ===================== helpers ===================== */
 function pad2(n) {
   return String(n).padStart(2, "0");
@@ -113,6 +118,7 @@ function faixaCCS(v) {
 /* ===================== COMPONENT ===================== */
 export default function AbaCCS({ vaca }) {
   const { fazendaAtualId } = useFazenda();
+  const memoData = MEMO_ABA_CCS.data || {};
   if (!vaca?.id) {
     return (
       <div style={{ padding: "1rem", color: "crimson" }}>
@@ -148,16 +154,28 @@ export default function AbaCCS({ vaca }) {
   const [novoResp, setNovoResp] = useState("");
 
   // histórico
-  const [carregando, setCarregando] = useState(false);
+  const [carregando, setCarregando] = useState(() => !memoData.historico);
+  const [atualizando, setAtualizando] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
 
-  const [historico, setHistorico] = useState([]); // histórico completo
+  const [historico, setHistorico] = useState(() => memoData.historico ?? []); // histórico completo
   const [registroEditandoId, setRegistroEditandoId] = useState(null);
 
   // lactações
-  const [lactacoes, setLactacoes] = useState([]);
+  const [lactacoes, setLactacoes] = useState(() => memoData.lactacoes ?? []);
   const [lactacaoSelecionada, setLactacaoSelecionada] = useState(null);
+
+  useEffect(() => {
+    const memo = MEMO_ABA_CCS.data;
+    if (memo?.historico === historico && memo?.lactacoes === lactacoes) return;
+    MEMO_ABA_CCS.data = {
+      ...(memo || {}),
+      historico,
+      lactacoes,
+    };
+    MEMO_ABA_CCS.lastAt = Date.now();
+  }, [historico, lactacoes]);
 
   const labsOptions = useMemo(
     () => (labs || []).map((l) => ({ value: l.id, label: l.nome })),
@@ -247,13 +265,25 @@ export default function AbaCCS({ vaca }) {
   /* ---------- carregar histórico CCS ---------- */
   const carregarHistorico = async () => {
     setErro("");
-    setCarregando(true);
+    const memoFresh = MEMO_ABA_CCS.data && Date.now() - MEMO_ABA_CCS.lastAt < 30000;
+    const hasData = Array.isArray(historico) && historico.length > 0;
+    if (memoFresh && hasData) {
+      setCarregando(false);
+      setAtualizando(false);
+      return;
+    }
+    if (hasData) {
+      setAtualizando(true);
+    } else {
+      setCarregando(true);
+    }
 
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       const cache = normalizeCacheList(await kvGet(CACHE_CCS_KEY));
       const filtrado = cache.filter((h) => String(h?.animal_id || "") === String(vaca.id));
       setHistorico(filtrado);
       setCarregando(false);
+      setAtualizando(false);
       return;
     }
 
@@ -284,6 +314,7 @@ export default function AbaCCS({ vaca }) {
     if (error) {
       setErro(error.message || "Erro ao carregar histórico de CCS.");
       setCarregando(false);
+      setAtualizando(false);
       return;
     }
 
@@ -292,6 +323,7 @@ export default function AbaCCS({ vaca }) {
     const atualizado = (data || []).reduce((acc, item) => upsertCcsCache(acc, item), cacheAtual);
     await kvSet(CACHE_CCS_KEY, atualizado);
     setCarregando(false);
+    setAtualizando(false);
   };
 
   useEffect(() => {
@@ -367,6 +399,8 @@ export default function AbaCCS({ vaca }) {
       return ms >= ini && ms <= fim;
     });
   }, [historico, intervaloLactacao]);
+
+  const hasHistorico = historico.length > 0;
 
   const datasDisponiveis = useMemo(() => {
     const uniq = new Set(
@@ -932,7 +966,11 @@ export default function AbaCCS({ vaca }) {
         <div style={secHeader}>
           <h4 style={secTitle}>📈 Evolução da CCS</h4>
           <div style={{ fontSize: 13, color: "#6b7280" }}>
-            {carregando ? "Carregando..." : `${historicoFiltradoLactacao.length} registro(s) no filtro`}
+            {carregando && !hasHistorico
+              ? "Carregando..."
+              : atualizando
+              ? "Atualizando..."
+              : `${historicoFiltradoLactacao.length} registro(s) no filtro`}
           </div>
         </div>
 
