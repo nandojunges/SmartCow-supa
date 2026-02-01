@@ -116,7 +116,8 @@ export default function Estoque({ onCountChange }) {
   const [tourosBase] = useState(() => []); // mock
 
   const [produtos, setProdutos] = useState(() => memoData.produtos ?? []);
-  const [loading, setLoading] = useState(() => memoData.loading ?? true);
+  const [loading, setLoading] = useState(() => !memoData.produtos);
+  const [atualizando, setAtualizando] = useState(false);
   const [erro, setErro] = useState(() => memoData.erro ?? "");
 
   const [categoriaSelecionada, setCategoriaSelecionada] = useState(
@@ -137,13 +138,12 @@ export default function Estoque({ onCountChange }) {
   useEffect(() => {
     MEMO_ESTOQUE.data = {
       produtos,
-      loading,
       erro,
       categoriaSelecionada,
       sortConfig,
       filtros,
     };
-  }, [produtos, loading, erro, categoriaSelecionada, sortConfig, filtros]);
+  }, [produtos, erro, categoriaSelecionada, sortConfig, filtros]);
 
   const updateCache = useCallback(async (nextList) => {
     setProdutos(nextList);
@@ -281,7 +281,12 @@ export default function Estoque({ onCountChange }) {
         return;
       }
       try {
-        setLoading(true);
+        const hasProdutos = Array.isArray(produtos) && produtos.length > 0;
+        if (hasProdutos) {
+          setAtualizando(true);
+        } else {
+          setLoading(true);
+        }
         setErro("");
 
         if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -293,6 +298,7 @@ export default function Estoque({ onCountChange }) {
             produtos: cache,
           };
           setLoading(false);
+          setAtualizando(false);
           return;
         }
 
@@ -450,9 +456,10 @@ export default function Estoque({ onCountChange }) {
         setErro("Erro ao carregar estoque (Supabase).");
       } finally {
         setLoading(false);
+        setAtualizando(false);
       }
     },
-    [categoriaSelecionada, fazendaAtualId, tourosBase, updateCache]
+    [categoriaSelecionada, fazendaAtualId, produtos, tourosBase, updateCache]
   );
 
   useEffect(() => {
@@ -834,7 +841,7 @@ export default function Estoque({ onCountChange }) {
           Dica: clique no título das colunas habilitadas para ordenar/filtrar. Clique novamente para
           fechar.
         </div>
-        {loading && hasProdutos && (
+        {atualizando && hasProdutos && (
           <div className="text-xs text-slate-500 mb-2">Atualizando estoque...</div>
         )}
         <div className="st-table-container">

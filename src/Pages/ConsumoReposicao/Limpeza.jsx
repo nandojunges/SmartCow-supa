@@ -10,6 +10,11 @@ import "../../styles/tabelaModerna.css";
 
 const DIAS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 const TIPOS = ["Ordenhadeira", "Resfriador", "Tambo", "Outros"];
+
+let MEMO_LIMPEZA = {
+  data: null,
+  lastAt: 0,
+};
 /* ===== helpers ===== */
 const formatBRL = (n) =>
   (Number(n) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -51,32 +56,54 @@ function isNum(n) {
 
 /* ==================== Componente principal ==================== */
 export default function Limpeza() {
+  const memoData = MEMO_LIMPEZA.data || {};
   // ✅ mocks (apenas para manter o layout “vivo”)
-  const [precoPorML, setPrecoPorML] = useState(() => ({
-    "Detergente Alcalino": 0.012, // R$/mL (exemplo)
-    "Ácido Nítrico": 0.020,
-    "Sanitizante": 0.030,
-  }));
+  const [precoPorML, setPrecoPorML] = useState(
+    () =>
+      memoData.precoPorML ?? {
+        "Detergente Alcalino": 0.012, // R$/mL (exemplo)
+        "Ácido Nítrico": 0.020,
+        "Sanitizante": 0.030,
+      }
+  );
 
-  const [estoqueML, setEstoqueML] = useState(() => ({
-    "Detergente Alcalino": 25000, // mL (exemplo)
-    "Ácido Nítrico": 12000,
-    "Sanitizante": 8000,
-  }));
+  const [estoqueML, setEstoqueML] = useState(
+    () =>
+      memoData.estoqueML ?? {
+        "Detergente Alcalino": 25000, // mL (exemplo)
+        "Ácido Nítrico": 12000,
+        "Sanitizante": 8000,
+      }
+  );
 
-  const [ciclos, setCiclos] = useState(() => [
-    {
-      id: "c1",
-      nome: "CIP Ordenhadeira",
-      tipo: "Ordenhadeira",
-      diasSemana: [1, 2, 3, 4, 5, 6], // Seg..Sáb
-      frequencia: 2,
-      etapas: [
-        { produto: "Detergente Alcalino", quantidade: 200, unidade: "mL", condicao: { tipo: "sempre" }, complementar: false },
-        { produto: "Sanitizante", quantidade: 100, unidade: "mL", condicao: { tipo: "tarde" }, complementar: true },
-      ],
-    },
-  ]);
+  const [ciclos, setCiclos] = useState(
+    () =>
+      memoData.ciclos ?? [
+        {
+          id: "c1",
+          nome: "CIP Ordenhadeira",
+          tipo: "Ordenhadeira",
+          diasSemana: [1, 2, 3, 4, 5, 6], // Seg..Sáb
+          frequencia: 2,
+          etapas: [
+            {
+              produto: "Detergente Alcalino",
+              quantidade: 200,
+              unidade: "mL",
+              condicao: { tipo: "sempre" },
+              complementar: false,
+            },
+            {
+              produto: "Sanitizante",
+              quantidade: 100,
+              unidade: "mL",
+              condicao: { tipo: "tarde" },
+              complementar: true,
+            },
+          ],
+        },
+      ]
+  );
 
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState("");
@@ -90,6 +117,20 @@ export default function Limpeza() {
   const [modal, setModal] = useState({ open: false, index: null, ciclo: null });
   const [planoDe, setPlanoDe] = useState(null);
   const [excluirIdx, setExcluirIdx] = useState(null);
+
+  useEffect(() => {
+    const memo = MEMO_LIMPEZA.data;
+    if (memo?.precoPorML === precoPorML && memo?.estoqueML === estoqueML && memo?.ciclos === ciclos) {
+      return;
+    }
+    MEMO_LIMPEZA.data = {
+      ...(memo || {}),
+      precoPorML,
+      estoqueML,
+      ciclos,
+    };
+    MEMO_LIMPEZA.lastAt = Date.now();
+  }, [precoPorML, estoqueML, ciclos]);
 
   useEffect(() => {
     // Layout-only: não busca nada

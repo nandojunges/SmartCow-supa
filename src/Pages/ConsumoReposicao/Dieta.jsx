@@ -14,6 +14,11 @@ import { useFazenda } from "../../context/FazendaContext";
 import { enqueue, kvGet, kvSet } from "../../offline/localDB";
 import ModalDieta from "./ModalDieta";
 
+let MEMO_DIETA = {
+  data: null,
+  lastAt: 0,
+};
+
 const CACHE_DIETA_KEY = "cache:dieta:list";
 
 function dateOnlyToISO(d) {
@@ -25,15 +30,19 @@ function dateOnlyToISO(d) {
 
 export default function Dieta({ onCountChange }) {
   const { fazendaAtualId } = useFazenda();
-  const [dietas, setDietas] = useState([]);
+  const memoData = MEMO_DIETA.data || {};
+  const [dietas, setDietas] = useState(() => memoData.dietas ?? []);
   const [hoveredRowId, setHoveredRowId] = useState(null);
   const [hoveredColKey, setHoveredColKey] = useState(null);
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
+  const [sortConfig, setSortConfig] = useState(
+    () => memoData.sortConfig ?? { key: null, direction: null }
+  );
   const [openPopoverKey, setOpenPopoverKey] = useState(null);
-  const [filtros, setFiltros] = useState({ lote: "__ALL__" });
+  const [filtros, setFiltros] = useState(() => memoData.filtros ?? { lote: "__ALL__" });
 
-  const [loading, setLoading] = useState(false);
-  const [erro, setErro] = useState("");
+  const [loading, setLoading] = useState(() => !memoData.dietas);
+  const [atualizando, setAtualizando] = useState(false);
+  const [erro, setErro] = useState(() => memoData.erro ?? "");
 
   const [modal, setModal] = useState({ open: false, dieta: null });
   const [excluir, setExcluir] = useState({ open: false, dieta: null });
@@ -49,6 +58,21 @@ export default function Dieta({ onCountChange }) {
     },
     []
   );
+
+  useEffect(() => {
+    const memo = MEMO_DIETA.data;
+    if (memo?.dietas === dietas && memo?.sortConfig === sortConfig && memo?.filtros === filtros) {
+      return;
+    }
+    MEMO_DIETA.data = {
+      ...(memo || {}),
+      dietas,
+      sortConfig,
+      filtros,
+      erro,
+    };
+    MEMO_DIETA.lastAt = Date.now();
+  }, [dietas, sortConfig, filtros, erro]);
 
   useEffect(() => onCountChange?.(dietas.length), [dietas.length, onCountChange]);
 
@@ -134,18 +158,31 @@ export default function Dieta({ onCountChange }) {
 
   /** ===================== LOAD DIETAS (BANCO) ===================== */
   const loadDietas = useCallback(async () => {
-    setLoading(true);
+    const memoFresh = MEMO_DIETA.data && Date.now() - MEMO_DIETA.lastAt < 30000;
+    const hasData = Array.isArray(dietas) && dietas.length > 0;
+    if (memoFresh && hasData) {
+      setLoading(false);
+      setAtualizando(false);
+      return;
+    }
+    if (hasData) {
+      setAtualizando(true);
+    } else {
+      setLoading(true);
+    }
     setErro("");
 
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       const cache = normalizeDietaCache(await kvGet(CACHE_DIETA_KEY));
       setDietas(cache);
       setLoading(false);
+      setAtualizando(false);
       return;
     }
 
     if (!fazendaAtualId) {
       setLoading(false);
+      setAtualizando(false);
       setErro("Selecione uma fazenda para carregar as dietas.");
       return;
     }
@@ -173,6 +210,7 @@ export default function Dieta({ onCountChange }) {
       console.error("Erro loadDietas:", error);
       setErro(error?.message || "Erro ao carregar dietas.");
       setLoading(false);
+      setAtualizando(false);
       return;
     }
 
@@ -192,7 +230,8 @@ export default function Dieta({ onCountChange }) {
 
     await updateCache(list);
     setLoading(false);
-  }, [fazendaAtualId, normalizeDietaCache, updateCache]);
+    setAtualizando(false);
+  }, [dietas, fazendaAtualId, normalizeDietaCache, updateCache]);
 
   useEffect(() => {
     loadDietas();
@@ -367,7 +406,7 @@ export default function Dieta({ onCountChange }) {
           Dica: clique no título das colunas habilitadas para ordenar/filtrar. Clique novamente para
           fechar.
         </div>
-        {loading && hasDietas && (
+        {atualizando && hasDietas && (
           <div className="text-xs text-slate-500 mb-2">Atualizando dietas...</div>
         )}
         <div className="st-table-container">
