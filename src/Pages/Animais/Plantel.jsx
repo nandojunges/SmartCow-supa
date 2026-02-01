@@ -77,78 +77,86 @@ function delNumeroFromParto(partoStr, secagemOpcional) {
 }
 
 function agregarReproEventosPorAnimal(eventos = []) {
-  const mapa = {};
-  const tiposIa = ["IA", "INSEMINACAO"];
+  const grupos = {};
+  const tiposIa = ["IA", "INSEMINACAO", "IATF"];
   const tiposDg = ["DG", "DIAGNOSTICO_GESTACAO"];
 
-  const atualizarSeMaisRecente = (atual, candidato) => {
-    if (!candidato?.data_evento) return atual;
-    if (!atual?.data_evento) return candidato;
-    const dataAtual = parseDateFlexible(atual.data_evento);
-    const dataCandidato = parseDateFlexible(candidato.data_evento);
-    if (!dataCandidato) return atual;
-    if (!dataAtual || dataCandidato > dataAtual) return candidato;
-    return atual;
+  const normalizarResultadoDg = (valor) => {
+    if (valor === null || valor === undefined) return "";
+    const texto = String(valor).trim().toLowerCase();
+    if (!texto) return "";
+    const positivos = ["positivo", "pos", "p", "true"];
+    const negativos = ["negativo", "neg", "n", "false"];
+    if (positivos.includes(texto)) return "POSITIVO";
+    if (negativos.includes(texto)) return "NEGATIVO";
+    return "";
   };
 
   (eventos || []).forEach((evento) => {
     const animalId = evento?.animal_id;
     if (!animalId) return;
-    const tipo = String(evento?.tipo || "").toUpperCase();
-    if (!mapa[animalId]) {
-      mapa[animalId] = {
-        ultimo_parto: null,
-        ultima_secagem: null,
-        ultima_ia: null,
-        ultimo_dg: null,
-      };
-    }
-    if (tipo === "PARTO") {
-      mapa[animalId].ultimo_parto = atualizarSeMaisRecente(
-        mapa[animalId].ultimo_parto,
-        evento
-      );
-      return;
-    }
-    if (tipo === "SECAGEM") {
-      mapa[animalId].ultima_secagem = atualizarSeMaisRecente(
-        mapa[animalId].ultima_secagem,
-        evento
-      );
-      return;
-    }
-    if (tiposIa.includes(tipo)) {
-      mapa[animalId].ultima_ia = atualizarSeMaisRecente(
-        mapa[animalId].ultima_ia,
-        evento
-      );
-      return;
-    }
-    if (tiposDg.includes(tipo)) {
-      mapa[animalId].ultimo_dg = atualizarSeMaisRecente(
-        mapa[animalId].ultimo_dg,
-        evento
-      );
-    }
+    if (!grupos[animalId]) grupos[animalId] = [];
+    grupos[animalId].push(evento);
   });
 
   const resultado = {};
-  Object.entries(mapa).forEach(([animalId, eventosAnimal]) => {
-    const ultimoParto = eventosAnimal.ultimo_parto?.data_evento ?? null;
-    const ultimaSecagem = eventosAnimal.ultima_secagem?.data_evento ?? null;
-    const ultimaIa = eventosAnimal.ultima_ia?.data_evento ?? null;
-    const ultimoDg = eventosAnimal.ultimo_dg ?? null;
-    const resultadoDg = String(ultimoDg?.resultado_dg || "").toUpperCase();
+  Object.entries(grupos).forEach(([animalId, eventosAnimal]) => {
+    const eventosComData = (eventosAnimal || []).map((evento) => ({
+      ...evento,
+      _data: parseDateFlexible(evento?.data_evento),
+    }));
+
+    const ultimoPartoEvento = eventosComData
+      .filter((evento) => String(evento?.tipo || "").toUpperCase() === "PARTO")
+      .reduce((maisRecente, evento) => {
+        if (!evento._data) return maisRecente;
+        if (!maisRecente?._data || evento._data > maisRecente._data) return evento;
+        return maisRecente;
+      }, null);
+
+    const dataUltimoParto = ultimoPartoEvento?._data || null;
+    const eventosDoCiclo = dataUltimoParto
+      ? eventosComData.filter((evento) => evento._data && evento._data > dataUltimoParto)
+      : eventosComData.filter((evento) => evento._data);
+
+    const ultimaIaEvento = eventosDoCiclo
+      .filter((evento) => tiposIa.includes(String(evento?.tipo || "").toUpperCase()))
+      .reduce((maisRecente, evento) => {
+        if (!evento._data) return maisRecente;
+        if (!maisRecente?._data || evento._data > maisRecente._data) return evento;
+        return maisRecente;
+      }, null);
+
+    const ultimoDgEvento = eventosDoCiclo
+      .filter((evento) => tiposDg.includes(String(evento?.tipo || "").toUpperCase()))
+      .reduce((maisRecente, evento) => {
+        if (!evento._data) return maisRecente;
+        if (!maisRecente?._data || evento._data > maisRecente._data) return evento;
+        return maisRecente;
+      }, null);
+
+    const ultimaSecagemEvento = eventosDoCiclo
+      .filter((evento) => String(evento?.tipo || "").toUpperCase() === "SECAGEM")
+      .reduce((maisRecente, evento) => {
+        if (!evento._data) return maisRecente;
+        if (!maisRecente?._data || evento._data > maisRecente._data) return evento;
+        return maisRecente;
+      }, null);
+
+    const ultimoParto = ultimoPartoEvento?.data_evento ?? null;
+    const ultimaSecagem = ultimaSecagemEvento?.data_evento ?? null;
+    const ultimaIa = ultimaIaEvento?.data_evento ?? null;
+    const resultadoDg = normalizarResultadoDg(ultimoDgEvento?.resultado_dg);
 
     const del = delNumeroFromParto(ultimoParto, ultimaSecagem);
 
     let statusReprodutivo = "—";
     if (resultadoDg === "POSITIVO") {
-      statusReprodutivo = "prenha";
+      statusReprodutivo = "PEV";
     } else if (resultadoDg === "NEGATIVO") {
-      statusReprodutivo = "vazia";
+      statusReprodutivo = "VAZ";
     } else if (ultimaIa) {
-      statusReprodutivo = "inseminada";
+      statusReprodutivo = "INS";
     }
 
     let previsaoParto = null;
