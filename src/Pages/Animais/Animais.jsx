@@ -312,8 +312,15 @@ export default function Animais() {
       const inativos = lista
         .filter((animal) => animal?.ativo === false)
         .map((animal) => ({
-          ...animal,
-          status: animal?.status ?? "inativo",
+          id: animal?.id,
+          numero: animal?.numero,
+          brinco: animal?.brinco,
+          saida_id: null,
+          tipo_saida: "",
+          motivo: "",
+          data_saida: "",
+          observacoes: "",
+          valor: null,
         }));
 
       const aviso = "";
@@ -406,8 +413,8 @@ export default function Animais() {
           tipo_saida: ultima?.tipo_saida || "",
           motivo: ultima?.motivo || "",
           data_saida: dataFormatada,
-          observacao_saida: ultima?.observacoes || "",
-          valor_saida: ultima?.valor ?? null,
+          observacoes: ultima?.observacoes || "",
+          valor: ultima?.valor ?? null,
         };
       });
 

@@ -445,8 +445,14 @@ export default function CadastroAnimal() {
   };
 
   const salvar = async () => {
-    if (!brinco || !nascimento || !sexo || !raca) {
-      setMensagemErro("Preencha Brinco, Nascimento, Sexo e Raça.");
+    if (!brinco || !sexo) {
+      setMensagemErro("Preencha Brinco e Sexo.");
+      setTimeout(() => setMensagemErro(""), 2500);
+      return;
+    }
+
+    if (!nascimento || !raca) {
+      setMensagemErro("Preencha Nascimento e Raça.");
       setTimeout(() => setMensagemErro(""), 2500);
       return;
     }
@@ -465,35 +471,22 @@ export default function CadastroAnimal() {
         ? Number(valorCompra.replace(/\./g, "").replace(",", "."))
         : null;
 
-    const ultimoPartoISO = dataBRParaISO(ultimoPartoResumo);
-    const { data: authData } = await supabase.auth.getUser();
-    const userId = authData?.user?.id || null;
-
     const payloadAnimal = {
       numero: Number(numero),
       brinco,
       nascimento: nascimentoISO,
       sexo,
       raca_id: raca,
-      categoria: categoria || null,
-      idade: idade || null,
       origem,
-      situacao_produtiva: sitProd || null,
-      situacao_reprodutiva: sitReprod || null,
-      ultimo_parto: ultimoPartoISO,
       valor_compra: valorCompraNumero,
       data_entrada: dataEntradaISO,
       pai_nome: pai || null,
       mae_nome: mae || null,
-      categoria_atual: categoria || null,
-      idade_meses: mesesIdade || null,
       fazenda_id: fazendaAtualId,
-    };
-
-    const payloadMinimo = {
-      ...payloadAnimal,
       ativo: true,
     };
+
+    const payloadMinimo = payloadAnimal;
 
     const montarEventos = (animalId) => {
       const eventos = [];
@@ -508,7 +501,6 @@ export default function CadastroAnimal() {
             tipo,
             data_evento: iso,
             fazenda_id: fazendaAtualId,
-            user_id: userId,
           });
         });
       };
@@ -541,7 +533,7 @@ export default function CadastroAnimal() {
 
     const { data: animalData, error: animalError } = await supabase
       .from("animais")
-      .insert(payloadAnimal)
+      .insert(payloadMinimo)
       .select()
       .single();
 

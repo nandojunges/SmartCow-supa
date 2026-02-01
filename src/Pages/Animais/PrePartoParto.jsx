@@ -37,7 +37,7 @@ async function loadConfigManejo(userId, fazendaId) {
 
     if (error) {
       if (status === 406 || error.code === "PGRST116") {
-        const defaults = { ...DEFAULT_CFG, user_id: userId, fazenda_id: fazendaId };
+        const defaults = { ...DEFAULT_CFG, fazenda_id: fazendaId };
         await supabase
           .from("config_manejo_repro")
           .upsert(defaults, { onConflict: "user_id,fazenda_id" });
@@ -53,9 +53,9 @@ async function loadConfigManejo(userId, fazendaId) {
     }
   } catch (error) {
     const cached = await kvGet(cfgKey(userId, fazendaId));
-    return { ...DEFAULT_CFG, ...(cached || {}), user_id: userId, fazenda_id: fazendaId };
+    return { ...DEFAULT_CFG, ...(cached || {}), fazenda_id: fazendaId };
   }
-  return { ...DEFAULT_CFG, user_id: userId, fazenda_id: fazendaId };
+  return { ...DEFAULT_CFG, fazenda_id: fazendaId };
 }
 
 async function saveCfg(userId, fazendaId, patch) {
@@ -64,7 +64,6 @@ async function saveCfg(userId, fazendaId, patch) {
   const merged = {
     ...cached,
     ...patch,
-    user_id: userId,
     fazenda_id: fazendaId,
   };
   await kvSet(cfgKey(userId, fazendaId), merged);
@@ -415,11 +414,27 @@ export default function PrePartoParto({ isOnline = navigator.onLine }) {
         data_evento: payload.dataInicio,
         observacoes: payload.observacoes || null,
         fazenda_id: fazendaAtualId,
-        user_id: userId,
       };
+
+      const loteDestinoId = cfg?.lote_destino_preparto_id ?? null;
 
       if (!navigator.onLine) {
         await enqueue("repro_eventos.insert", evento);
+        if (loteDestinoId) {
+          const dataMudanca = new Date().toISOString().split("T")[0];
+          await enqueue("animais_lote_historico.insert", {
+            animal_id: modalPreParto.id,
+            lote_id: loteDestinoId,
+            data_mudanca: dataMudanca,
+            origem: "preparto",
+            fazenda_id: fazendaAtualId,
+          });
+          await enqueue("animais.upsert", {
+            id: modalPreParto.id,
+            lote_id: loteDestinoId,
+            fazenda_id: fazendaAtualId,
+          });
+        }
         setAcaoMensagem("✅ Pré-parto registrado offline. Será sincronizado ao reconectar.");
         setModalPreParto(null);
         return;
@@ -427,6 +442,26 @@ export default function PrePartoParto({ isOnline = navigator.onLine }) {
 
       const { error } = await supabase.from("repro_eventos").insert(evento);
       if (error) throw error;
+
+      if (loteDestinoId) {
+        const dataMudanca = new Date().toISOString().split("T")[0];
+        const { error: historicoError } = await supabase
+          .from("animais_lote_historico")
+          .insert({
+            animal_id: modalPreParto.id,
+            lote_id: loteDestinoId,
+            data_mudanca: dataMudanca,
+            origem: "preparto",
+            fazenda_id: fazendaAtualId,
+          });
+        if (historicoError) throw historicoError;
+
+        const { error: updateError } = await withFazendaId(
+          supabase.from("animais").update({ lote_id: loteDestinoId }),
+          fazendaAtualId
+        ).eq("id", modalPreParto.id);
+        if (updateError) throw updateError;
+      }
 
       setAcaoMensagem("✅ Pré-parto registrado com sucesso.");
       setModalPreParto(null);
@@ -451,11 +486,61 @@ export default function PrePartoParto({ isOnline = navigator.onLine }) {
         data_evento: payload.dataParto,
         observacoes: payload.observacoes || null,
         fazenda_id: fazendaAtualId,
-        user_id: userId,
+      };
+
+      const selecionarLoteLactacao = (lista) => {
+        const candidatos = (lista || []).filter(
+          (lote) =>
+            lote?.ativo !== false &&
+            String(lote?.funcao || "").trim().toLowerCase() === "lactação"
+        );
+        if (candidatos.length === 0) return null;
+        return candidatos
+          .slice()
+          .sort((a, b) => {
+            const aCreated = a?.created_at ? new Date(a.created_at).getTime() : 0;
+            const bCreated = b?.created_at ? new Date(b.created_at).getTime() : 0;
+            if (aCreated !== bCreated) return aCreated - bCreated;
+            const aNome = String(a?.nome || "").toLowerCase();
+            const bNome = String(b?.nome || "").toLowerCase();
+            return aNome.localeCompare(bNome);
+          })[0];
+      };
+
+      const obterLoteLactacaoOnline = async () => {
+        const { data, error } = await withFazendaId(
+          supabase
+            .from("lotes")
+            .select("id,nome,funcao,ativo,created_at")
+            .eq("funcao", "Lactação")
+            .eq("ativo", true)
+            .order("created_at", { ascending: true })
+            .order("nome", { ascending: true })
+            .limit(1),
+          fazendaAtualId
+        );
+        if (error) throw error;
+        return Array.isArray(data) ? data[0] : null;
       };
 
       if (!navigator.onLine) {
         await enqueue("repro_eventos.insert", evento);
+        const loteOffline = selecionarLoteLactacao(lotes);
+        if (loteOffline?.id) {
+          const dataMudanca = new Date().toISOString().split("T")[0];
+          await enqueue("animais_lote_historico.insert", {
+            animal_id: modalParto.id,
+            lote_id: loteOffline.id,
+            data_mudanca: dataMudanca,
+            origem: "parto",
+            fazenda_id: fazendaAtualId,
+          });
+          await enqueue("animais.upsert", {
+            id: modalParto.id,
+            lote_id: loteOffline.id,
+            fazenda_id: fazendaAtualId,
+          });
+        }
         setAcaoMensagem("✅ Parto registrado offline. Será sincronizado ao reconectar.");
         setModalParto(null);
         return;
@@ -463,6 +548,27 @@ export default function PrePartoParto({ isOnline = navigator.onLine }) {
 
       const { error } = await supabase.from("repro_eventos").insert(evento);
       if (error) throw error;
+
+      const loteLactacao = await obterLoteLactacaoOnline();
+      if (loteLactacao?.id) {
+        const dataMudanca = new Date().toISOString().split("T")[0];
+        const { error: historicoError } = await supabase
+          .from("animais_lote_historico")
+          .insert({
+            animal_id: modalParto.id,
+            lote_id: loteLactacao.id,
+            data_mudanca: dataMudanca,
+            origem: "parto",
+            fazenda_id: fazendaAtualId,
+          });
+        if (historicoError) throw historicoError;
+
+        const { error: updateError } = await withFazendaId(
+          supabase.from("animais").update({ lote_id: loteLactacao.id }),
+          fazendaAtualId
+        ).eq("id", modalParto.id);
+        if (updateError) throw updateError;
+      }
 
       setAcaoMensagem("✅ Parto registrado com sucesso.");
       setModalParto(null);

@@ -31,11 +31,11 @@ const isInativo = (a) => {
   if (!a) return false;
   if ((a.status ?? "").toLowerCase() === "inativo") return true;
 
-  if (a.tipo_saida || a.data_saida || a.motivo_saida || a.observacao_saida) {
+  if (a.saida_id || a.tipo_saida || a.data_saida || a.motivo || a.observacoes || a.valor) {
     return true;
   }
 
-  return false;
+  return Boolean(a.id);
 };
 
 export default function Inativas({
@@ -180,17 +180,10 @@ export default function Inativas({
               <tbody>
                 {lista.map((a, rIdx) => {
                   const tipoSaida = a.tipo_saida || "—";
-                  const motivoSaida = a.motivo_saida || "—";
+                  const motivoSaida = a.motivo || "—";
                   const dataSaida = a.data_saida || null;
-                  const valorSaida = a.valor_saida ?? a.valor_venda ?? null;
-
-                  // pega observação independente do nome da chave
-                  const observacoesSaida =
-                    a.observacao_saida ??
-                    a.observacao ??
-                    a.observacoesSaida ??
-                    a.observacoes_saida ??
-                    "—";
+                  const valorSaida = a.valor ?? null;
+                  const observacoesSaida = a.observacoes || "—";
 
                   const idRow = a.id ?? `${a.numero}-${rIdx}`;
                   const busy = loadingId === a.id;
