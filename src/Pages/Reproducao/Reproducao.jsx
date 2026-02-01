@@ -32,6 +32,7 @@ export default function Reproducao({
   const [filtroStatus, setFiltroStatus] = useState("todos");
   const [busca, setBusca] = useState("");
   const [modalAberto, setModalAberto] = useState(null);
+  const [mostrarMaisFiltros, setMostrarMaisFiltros] = useState(false);
 
   const animaisLista = Array.isArray(animais) ? animais : [];
   const tourosLista = Array.isArray(touros) ? touros : [];
@@ -199,63 +200,96 @@ export default function Reproducao({
       />
 
       <div className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="st-filter__label min-w-[220px]">
-            Busca
-            <input
-              type="text"
-              className="st-filter-input"
-              placeholder="Buscar animal..."
-              value={busca}
-              onChange={(event) => setBusca(event.target.value)}
-            />
-          </label>
-          <div className="flex flex-wrap items-center gap-2">
-            {filtrosStatus.map((chip) => (
-              <button
-                key={chip.key}
-                type="button"
-                onClick={() => setFiltroStatus(chip.key)}
-                className={`st-chip ${
-                  filtroStatus === chip.key ? "st-chip--info" : "st-chip--muted"
-                }`}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="st-filter__label min-w-[220px]">
+              Busca
+              <input
+                type="text"
+                className="st-filter-input"
+                placeholder="Buscar animal..."
+                value={busca}
+                onChange={(event) => setBusca(event.target.value)}
+              />
+            </label>
+            <label className="st-filter__label min-w-[160px]">
+              Status
+              <select
+                className="st-filter-input st-select--compact"
+                value={filtroStatus}
+                onChange={(event) => setFiltroStatus(event.target.value)}
               >
-                {chip.label}
-              </button>
-            ))}
+                {filtrosStatus.map((status) => (
+                  <option key={status.key} value={status.key}>
+                    {status.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              className="st-btn"
+              onClick={() => setMostrarMaisFiltros((prev) => !prev)}
+              aria-expanded={mostrarMaisFiltros}
+            >
+              Mais filtros
+            </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="st-btn"
+              onClick={() => setModalAberto("protocolos")}
+            >
+              Protocolos
+            </button>
+            <button
+              type="button"
+              className="st-btn"
+              onClick={() => setModalAberto("cadastro")}
+            >
+              Cadastro
+            </button>
+            <button
+              type="button"
+              className="st-btn"
+              onClick={() => setModalAberto("relatorios")}
+            >
+              Relatórios
+            </button>
+            <button
+              type="button"
+              className="st-btn"
+              onClick={() => setModalAberto("inseminacoes")}
+            >
+              Inseminações
+            </button>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            className="st-btn"
-            onClick={() => setModalAberto("protocolos")}
-          >
-            Protocolos
-          </button>
-          <button
-            type="button"
-            className="st-btn"
-            onClick={() => setModalAberto("cadastro")}
-          >
-            Cadastro
-          </button>
-          <button
-            type="button"
-            className="st-btn"
-            onClick={() => setModalAberto("relatorios")}
-          >
-            Relatórios
-          </button>
-          <button
-            type="button"
-            className="st-btn"
-            onClick={() => setModalAberto("inseminacoes")}
-          >
-            Inseminações
-          </button>
-        </div>
+        {mostrarMaisFiltros ? (
+          <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <label className="st-filter__label min-w-[180px]">
+              Lote
+              <input
+                type="text"
+                className="st-filter-input"
+                placeholder="Selecionar lote"
+                disabled
+              />
+            </label>
+            <label className="st-filter__label min-w-[200px]">
+              Última IA (período)
+              <input
+                type="text"
+                className="st-filter-input"
+                placeholder="Selecionar período"
+                disabled
+              />
+            </label>
+          </div>
+        ) : null}
       </div>
 
       <TabelaReproducao
