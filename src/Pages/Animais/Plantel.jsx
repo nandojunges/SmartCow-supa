@@ -109,13 +109,36 @@ function mapearReproPorAnimal(lista = []) {
   return map;
 }
 
+const BLOQUEAR_OVERRIDE = new Set([
+  "id",
+  "user_id",
+  "fazenda_id",
+  "numero",
+  "brinco",
+  "nascimento",
+  "sexo",
+  "origem",
+  "raca_id",
+  "lote_id",
+  "ativo",
+  "created_at",
+  "updated_at",
+]);
+
 function mesclarReproEmAnimais(animais = [], repro = []) {
   const mapRepro = mapearReproPorAnimal(repro);
   return animais.map((animal) => {
     const reproRow = mapRepro[animal?.id];
     if (!reproRow) return animal;
     const { id, animal_id, ...rest } = reproRow || {};
-    return { ...animal, ...rest };
+    const merged = { ...animal };
+    Object.entries(rest).forEach(([chave, valor]) => {
+      if (BLOQUEAR_OVERRIDE.has(chave)) return;
+      if (valor === null || valor === undefined) return;
+      if (typeof valor === "string" && valor.trim() === "") return;
+      merged[chave] = valor;
+    });
+    return merged;
   });
 }
 
