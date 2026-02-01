@@ -13,7 +13,7 @@ import Inseminacoes from "./Inseminacoes.jsx";
 import Protocolos from "./Protocolos.jsx";
 import Relatorios from "./Relatorios.jsx";
 import VisaoGeral from "./VisaoGeral/VisaoGeral.jsx";
-import SubAbasReproducao from "./components/SubAbasReproducao.jsx";
+import SubAbasReproducao from "./SubAbasReproducao.jsx";
 
 /* ============================== Componente raiz ============================== */
 /**
