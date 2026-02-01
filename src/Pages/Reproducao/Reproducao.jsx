@@ -1,305 +1,202 @@
-// src/pages/Reproducao/Reproducao.jsx
-// -----------------------------------------------------------------------------
-// Tela única de Reprodução.
-// - Visão Geral como painel/summary no topo
-// - Tabela principal abaixo (tabelaModerna)
-// - Botões abrem overlay simples com componentes existentes
-// -----------------------------------------------------------------------------
-
-import { useEffect, useMemo, useState } from "react";
-import Cadastro from "./Cadastro.jsx";
-import Inseminacoes from "./Inseminacoes.jsx";
-import Protocolos from "./Protocolos.jsx";
-import Relatorios from "./Relatorios.jsx";
-import VisaoGeral from "./VisaoGeral/VisaoGeral.jsx";
-import TabelaReproducao from "./TabelaReproducao.jsx";
+import { useMemo, useState } from "react";
 import "../../styles/tabelaModerna.css";
 
-/* ============================== Componente raiz ============================== */
-/**
- * Props opcionais (pra plugar no teu estado central depois):
- * - animais, protocolos, touros, inseminadores, eventos
- * - onRegistrar: callback usado pelo VisaoGeral ao salvar IA/DG/protocolo etc.
- */
-export default function Reproducao({
-  animais = [],
-  touros = [],
-  inseminadores = [],
-  protocolos = [],
-  eventos = [],
-  onRegistrar,
-}) {
-  const [filtroStatus, setFiltroStatus] = useState("todos");
-  const [busca, setBusca] = useState("");
-  const [modalAberto, setModalAberto] = useState(null);
-  const [mostrarMaisFiltros, setMostrarMaisFiltros] = useState(false);
+const SUB_ABAS = [
+  { id: "visaoGeral", label: "Visão Geral" },
+  { id: "protocolos", label: "Protocolos" },
+  { id: "cadastro", label: "Cadastro" },
+  { id: "relatorios", label: "Relatórios" },
+  { id: "inseminacoes", label: "Inseminações" },
+];
 
-  const animaisLista = Array.isArray(animais) ? animais : [];
-  const tourosLista = Array.isArray(touros) ? touros : [];
-  const inseminadoresLista = Array.isArray(inseminadores) ? inseminadores : [];
-  const protocolosLista = Array.isArray(protocolos) ? protocolos : [];
-  const eventosLista = Array.isArray(eventos) ? eventos : [];
+export default function Reproducao() {
+  const [abaAtiva, setAbaAtiva] = useState("visaoGeral");
+  const animais = [];
 
-  const filtrosStatus = [
-    { key: "todos", label: "Todos" },
-    { key: "vazia", label: "Vazia" },
-    { key: "prenhe", label: "Prenhe" },
-    { key: "ciclando", label: "Ciclando" },
-    { key: "seca", label: "Seca" },
-  ];
-
-  const columns = useMemo(
-    () => [
-      { key: "animal", label: "Animal", className: "st-col-animal" },
-      { key: "status", label: "Status reprodutivo" },
-      { key: "ultimaIa", label: "Última IA" },
-      { key: "previsao", label: "Previsão / Observação", className: "st-td-wrap" },
-      { key: "actions", label: "Ações", className: "st-td-center col-acoes" },
-    ],
-    []
+  const contadores = useMemo(
+    () => ({
+      visaoGeral: animais.length,
+      protocolos: 0,
+      cadastro: 0,
+      relatorios: 0,
+      inseminacoes: 0,
+    }),
+    [animais.length]
   );
-
-  const rows = useMemo(() => {
-    return animaisLista.map((animal) => ({
-      ...animal,
-      animal: [animal.numero, animal.brinco, animal.nome]
-        .filter(Boolean)
-        .join(" · "),
-      status: animal.status_reprodutivo ?? animal.statusReprodutivo ?? "—",
-      ultimaIa: animal.ultima_ia ?? animal.ultimaIa ?? "—",
-      previsao: animal.previsao ?? animal.observacao ?? animal.obs ?? "—",
-    }));
-  }, [animaisLista]);
-
-  const rowsFiltradas = useMemo(() => {
-    const termo = busca.trim().toLowerCase();
-    return rows.filter((row) => {
-      const statusValor = String(row.status ?? "").toLowerCase();
-      const passaStatus =
-        filtroStatus === "todos" || statusValor.includes(filtroStatus);
-      if (!passaStatus) return false;
-      if (!termo) return true;
-      return String(row.animal ?? "").toLowerCase().includes(termo);
-    });
-  }, [busca, filtroStatus, rows]);
-
-  const handleRegistrar =
-    typeof onRegistrar === "function" ? onRegistrar : () => {};
-
-  useEffect(() => {
-    if (!modalAberto) return;
-    const handleKeyDown = (event) => {
-      if (event.key === "Escape") {
-        setModalAberto(null);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [modalAberto]);
-
-  const renderRowActions = (row) => (
-    <div className="flex flex-wrap items-center justify-center gap-2">
-      <button
-        type="button"
-        className="st-btn"
-        onClick={() => handleRegistrar("IA", { animal_id: row.id })}
-      >
-        IA
-      </button>
-      <button
-        type="button"
-        className="st-btn"
-        onClick={() => handleRegistrar("DG", { animal_id: row.id })}
-      >
-        DG
-      </button>
-      <button
-        type="button"
-        className="st-btn"
-        onClick={() => handleRegistrar("PROTOCOLO", { animal_id: row.id })}
-      >
-        Protocolo
-      </button>
-      <button
-        type="button"
-        className="st-btn"
-        onClick={() => {}}
-      >
-        Ficha
-      </button>
-    </div>
-  );
-
-  const renderizarModal = () => {
-    if (!modalAberto) return null;
-
-    let titulo = "";
-    let conteudo = null;
-
-    if (modalAberto === "protocolos") {
-      titulo = "Protocolos";
-      conteudo = <Protocolos protocolos={protocolosLista} />;
-    }
-
-    if (modalAberto === "cadastro") {
-      titulo = "Cadastro";
-      conteudo = (
-        <Cadastro
-          touros={tourosLista}
-          inseminadores={inseminadoresLista}
-        />
-      );
-    }
-
-    if (modalAberto === "relatorios") {
-      titulo = "Relatórios";
-      conteudo = <Relatorios eventos={eventosLista} />;
-    }
-
-    if (modalAberto === "inseminacoes") {
-      titulo = "Inseminações";
-      conteudo = <Inseminacoes eventos={eventosLista} />;
-    }
-
-    return (
-      <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-        onMouseDown={(event) => {
-          if (event.target === event.currentTarget) {
-            setModalAberto(null);
-          }
-        }}
-        role="dialog"
-        aria-modal="true"
-      >
-        <div className="w-full max-w-4xl rounded-2xl bg-white p-4 shadow-xl">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <h2 className="text-base font-semibold text-slate-800">{titulo}</h2>
-            <button
-              type="button"
-              className="st-btn"
-              onClick={() => setModalAberto(null)}
-              aria-label="Fechar modal"
-            >
-              Fechar
-            </button>
-          </div>
-          <div className="max-h-[70vh] overflow-auto">{conteudo}</div>
-        </div>
-      </div>
-    );
-  };
 
   return (
-    <section className="w-full space-y-6">
-      <VisaoGeral
-        animais={animaisLista}
-        touros={tourosLista}
-        inseminadores={inseminadoresLista}
-        protocolos={protocolosLista}
-      />
+    <section className="w-full">
+      <div
+        style={{
+          display: "flex",
+          gap: 20,
+          padding: "4px 6px 0",
+          borderBottom: "1px solid #e5e7eb",
+          marginBottom: 8,
+        }}
+      >
+        {SUB_ABAS.map((aba) => {
+          const active = abaAtiva === aba.id;
 
-      <div className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-end gap-3">
-            <label className="st-filter__label min-w-[220px]">
-              Busca
-              <input
-                type="text"
-                className="st-filter-input"
-                placeholder="Buscar animal..."
-                value={busca}
-                onChange={(event) => setBusca(event.target.value)}
-              />
-            </label>
-            <label className="st-filter__label min-w-[160px]">
-              Status
-              <select
-                className="st-filter-input st-select--compact"
-                value={filtroStatus}
-                onChange={(event) => setFiltroStatus(event.target.value)}
+          return (
+            <button
+              key={aba.id}
+              onClick={() => setAbaAtiva(aba.id)}
+              style={{
+                appearance: "none",
+                background: active ? "rgba(20,184,166,0.10)" : "transparent",
+                border: "1px solid",
+                borderColor: active ? "rgba(20,184,166,0.35)" : "transparent",
+                padding: "8px 12px 10px",
+                borderRadius: 10,
+                fontSize: 14,
+                fontWeight: active ? 800 : 650,
+                color: active ? "#0f766e" : "#334155",
+                cursor: "pointer",
+                position: "relative",
+                outline: "none",
+                transition:
+                  "background 160ms ease, border-color 160ms ease, transform 120ms ease",
+              }}
+              onMouseDown={(event) =>
+                (event.currentTarget.style.transform = "translateY(1px)")
+              }
+              onMouseUp={(event) =>
+                (event.currentTarget.style.transform = "translateY(0px)")
+              }
+              onMouseLeave={(event) =>
+                (event.currentTarget.style.transform = "translateY(0px)")
+              }
+              onFocus={(event) => {
+                event.currentTarget.style.boxShadow =
+                  "0 0 0 3px rgba(20,184,166,0.25)";
+              }}
+              onBlur={(event) => {
+                event.currentTarget.style.boxShadow = "none";
+              }}
+            >
+              {aba.label}
+              <span
+                style={{
+                  marginLeft: 8,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  padding: "1px 6px",
+                  borderRadius: 999,
+                  background: active
+                    ? "rgba(15,118,110,0.12)"
+                    : "rgba(148,163,184,0.18)",
+                  color: active ? "#0f766e" : "#64748b",
+                }}
               >
-                {filtrosStatus.map((status) => (
-                  <option key={status.key} value={status.key}>
-                    {status.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              type="button"
-              className="st-btn"
-              onClick={() => setMostrarMaisFiltros((prev) => !prev)}
-              aria-expanded={mostrarMaisFiltros}
-            >
-              Mais filtros
+                {contadores[aba.id]}
+              </span>
+              {active && (
+                <span
+                  style={{
+                    position: "absolute",
+                    left: 10,
+                    right: 10,
+                    bottom: -2,
+                    height: 2,
+                    borderRadius: 2,
+                    background: "#14b8a6",
+                  }}
+                />
+              )}
             </button>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              className="st-btn"
-              onClick={() => setModalAberto("protocolos")}
-            >
-              Protocolos
-            </button>
-            <button
-              type="button"
-              className="st-btn"
-              onClick={() => setModalAberto("cadastro")}
-            >
-              Cadastro
-            </button>
-            <button
-              type="button"
-              className="st-btn"
-              onClick={() => setModalAberto("relatorios")}
-            >
-              Relatórios
-            </button>
-            <button
-              type="button"
-              className="st-btn"
-              onClick={() => setModalAberto("inseminacoes")}
-            >
-              Inseminações
-            </button>
-          </div>
-        </div>
-
-        {mostrarMaisFiltros ? (
-          <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <label className="st-filter__label min-w-[180px]">
-              Lote
-              <input
-                type="text"
-                className="st-filter-input"
-                placeholder="Selecionar lote"
-                disabled
-              />
-            </label>
-            <label className="st-filter__label min-w-[200px]">
-              Última IA (período)
-              <input
-                type="text"
-                className="st-filter-input"
-                placeholder="Selecionar período"
-                disabled
-              />
-            </label>
-          </div>
-        ) : null}
+          );
+        })}
       </div>
 
-      <TabelaReproducao
-        columns={columns}
-        rows={rowsFiltradas}
-        renderActions={renderRowActions}
-        emptyMessage="Nenhum animal encontrado…"
-      />
-
-      {renderizarModal()}
+      <div style={{ paddingTop: 2 }}>
+        <div style={{ display: "block" }} aria-hidden={abaAtiva !== "visaoGeral"}>
+          <div className="st-table-container">
+            <div className="st-table-wrap">
+              <table className="st-table st-table--darkhead">
+                <colgroup>
+                  <col style={{ width: "24%" }} />
+                  <col style={{ width: "18%" }} />
+                  <col style={{ width: "14%" }} />
+                  <col style={{ width: "30%" }} />
+                  <col style={{ width: "14%" }} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th className="col-animal st-col-animal">
+                      <span className="st-th-label">Animal</span>
+                    </th>
+                    <th>
+                      <span className="st-th-label">Status reprodutivo</span>
+                    </th>
+                    <th>
+                      <span className="st-th-label">Última IA</span>
+                    </th>
+                    <th>
+                      <span className="st-th-label">Previsão / Observação</span>
+                    </th>
+                    <th className="st-td-center col-acoes">
+                      <span className="st-th-label">Ações</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {animais.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={5}
+                        style={{ padding: 18, color: "#64748b", fontWeight: 700 }}
+                      >
+                        Nenhum animal encontrado...
+                      </td>
+                    </tr>
+                  ) : (
+                    animais.map((animal, index) => (
+                      <tr key={animal.id ?? index}>
+                        <td className="col-animal st-col-animal">
+                          <div className="st-animal">
+                            <span className="st-animal-num">
+                              {animal.numero ?? "—"}
+                            </span>
+                            <div className="st-animal-main">
+                              <div className="st-animal-title">
+                                {animal.nome ?? "Animal"}
+                              </div>
+                              <div className="st-animal-sub">
+                                <span>
+                                  {animal.brinco ? `Brinco ${animal.brinco}` : "—"}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td>{animal.status_reprodutivo ?? "—"}</td>
+                        <td>{animal.ultima_ia ?? "—"}</td>
+                        <td className="st-td-wrap">
+                          {animal.previsao ?? animal.observacao ?? "—"}
+                        </td>
+                        <td className="st-td-center col-acoes">
+                          <div className="flex flex-wrap items-center justify-center gap-2">
+                            <button type="button" className="st-btn">
+                              Registrar IA
+                            </button>
+                            <button type="button" className="st-btn">
+                              DG
+                            </button>
+                            <button type="button" className="st-btn">
+                              Ficha
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
     </section>
   );
 }
