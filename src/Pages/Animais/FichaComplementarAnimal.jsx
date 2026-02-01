@@ -63,13 +63,14 @@ export default function FichaComplementarAnimal({
   atualizarDataLista,
   limparCamposVazios,
   adicionarCampoSeUltimoPreenchido,
+  onAdicionarEvento,
   inputBase,
   lbl,
 }) {
   const estiloInput = inputBase || inputBasePadrao;
   const estiloLbl = lbl || lblPadrao;
 
-  const renderListaDatas = (lista, setLista, label) => (
+  const renderListaDatas = (lista, setLista, label, tipo) => (
     <div style={{ marginTop: 24 }}>
       <label style={estiloLbl}>{label}</label>
       {lista.map((data, index) => (
@@ -90,7 +91,13 @@ export default function FichaComplementarAnimal({
             <button
               type="button"
               style={botaoAzulMais}
-              onClick={() => adicionarCampoSeUltimoPreenchido(lista, setLista)}
+              onClick={async () => {
+                const ultimaData = lista[lista.length - 1];
+                if (ultimaData && ultimaData.length === 10 && onAdicionarEvento) {
+                  await onAdicionarEvento({ tipo, data: ultimaData });
+                }
+                adicionarCampoSeUltimoPreenchido(lista, setLista);
+              }}
               title="Adicionar nova data"
             >
               +
@@ -133,13 +140,15 @@ export default function FichaComplementarAnimal({
       {renderListaDatas(
         inseminacoesAnteriores,
         setInseminacoesAnteriores,
-        "Inseminações anteriores"
+        "Inseminações anteriores",
+        "IA"
       )}
-      {renderListaDatas(partosAnteriores, setPartosAnteriores, "Partos anteriores")}
+      {renderListaDatas(partosAnteriores, setPartosAnteriores, "Partos anteriores", "PARTO")}
       {renderListaDatas(
         secagensAnteriores,
         setSecagensAnteriores,
-        "Secagens anteriores"
+        "Secagens anteriores",
+        "SECAGEM"
       )}
 
       <p

@@ -103,6 +103,8 @@ export default function CadastroAnimal() {
   const { fazendaAtualId } = useFazenda();
   const CACHE_KEY = "cache:animais:list";
   const [mostrarFichaComplementar, setMostrarFichaComplementar] = useState(false);
+  const [userId, setUserId] = useState(null);
+  const [animalIdFicha, setAnimalIdFicha] = useState(null);
   // básicos
   const [numero, setNumero] = useState("1");
   const [autoNumero, setAutoNumero] = useState(true);
@@ -271,6 +273,26 @@ export default function CadastroAnimal() {
     }
   }, [autoNumero, fazendaAtualId]);
 
+  useEffect(() => {
+    let ativo = true;
+
+    const carregarUsuario = async () => {
+      const { data, error } = await supabase.auth.getUser();
+      if (error) {
+        console.warn("Erro ao obter usuário autenticado:", error);
+        return;
+      }
+      if (!ativo) return;
+      setUserId(data?.user?.id || null);
+    };
+
+    carregarUsuario();
+
+    return () => {
+      ativo = false;
+    };
+  }, []);
+
   const { br: prevPartoBR } = previsaoPartoISO(ultimaIAResumo);
 
   // idade / categoria automáticas
@@ -438,6 +460,7 @@ export default function CadastroAnimal() {
     setCategoria("");
     setMensagemErro("");
     setMensagemSucesso("");
+    setAnimalIdFicha(null);
     if (autoNumero) {
       carregarProximoNumero();
     } else {
@@ -502,6 +525,7 @@ export default function CadastroAnimal() {
             tipo,
             data_evento: iso,
             fazenda_id: fazendaAtualId,
+            user_id: userId,
           });
         });
       };
@@ -549,30 +573,51 @@ export default function CadastroAnimal() {
     await atualizarCachePlantel({ ...payloadMinimo, id: animalId });
     const eventos = montarEventos(animalId);
 
-    if (eventos.length > 0) {
-      const { error: eventosError } = await supabase
-        .from("repro_eventos")
-        .insert(eventos);
-
-      if (eventosError) {
-        console.error(eventosError);
-      }
-    }
-
     await syncCadastroReproEventos({
       fazendaId: fazendaAtualId,
       animalId,
-      dataUltimaIA: ultimaIAResumo,
-      dataUltimoParto: ultimoPartoResumo,
-      dataSecagem: ultimaSecagemResumo,
+      userId,
+      eventos,
     });
 
+    setAnimalIdFicha(animalId);
     setMensagemSucesso(
       "Animal e histórico reprodutivo básico cadastrados com sucesso!"
     );
     setTimeout(() => setMensagemSucesso(""), 2500);
+  };
 
-    limpar();
+  const registrarEventoFicha = async ({ tipo, data }) => {
+    if (!fazendaAtualId || !animalIdFicha) {
+      setMensagemErro(
+        "Salve o animal antes de registrar eventos reprodutivos na ficha."
+      );
+      setTimeout(() => setMensagemErro(""), 2500);
+      return;
+    }
+
+    const dataISO = dataBRParaISO(data);
+    if (!dataISO) return;
+
+    const evento = {
+      animal_id: animalIdFicha,
+      fazenda_id: fazendaAtualId,
+      user_id: userId,
+      tipo,
+      data_evento: dataISO,
+    };
+
+    if (!navigator.onLine) {
+      await enqueue("repro_eventos.insert", evento);
+      return;
+    }
+
+    await syncCadastroReproEventos({
+      fazendaId: fazendaAtualId,
+      animalId: animalIdFicha,
+      userId,
+      eventos: [evento],
+    });
   };
 
   /* ========= layout ========= */
@@ -836,6 +881,7 @@ export default function CadastroAnimal() {
                   adicionarCampoSeUltimoPreenchido={
                     adicionarCampoSeUltimoPreenchido
                   }
+                  onAdicionarEvento={registrarEventoFicha}
                   inputBase={inputBase}
                   lbl={lbl}
                 />

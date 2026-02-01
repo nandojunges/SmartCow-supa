@@ -21,80 +21,48 @@ const normalizarDataEvento = (valor) => {
   return null;
 };
 
-const normalizarDataSupabase = (valor) => {
-  if (!valor) return null;
-  const texto = String(valor);
-  return texto.slice(0, 10);
-};
-
 export async function syncCadastroReproEventos({
   fazendaId,
   animalId,
-  dataUltimaIA,
-  dataUltimoParto,
-  dataSecagem,
+  userId,
+  eventos = [],
 }) {
   if (!fazendaId || !animalId) return;
 
-  const dataPorTipo = {
-    IA: normalizarDataEvento(dataUltimaIA),
-    PARTO: normalizarDataEvento(dataUltimoParto),
-    SECAGEM: normalizarDataEvento(dataSecagem),
-  };
-
-  const { data: eventosExistentes, error: eventosError } = await supabase
-    .from("repro_eventos")
-    .select("id, tipo, data_evento, meta")
-    .eq("fazenda_id", fazendaId)
-    .eq("animal_id", animalId)
-    .in("tipo", TIPOS_REPRO);
-
-  if (eventosError) {
-    console.error("Erro ao buscar eventos reprodutivos do cadastro:", eventosError);
-    return;
-  }
-
-  const idsParaRemover = (eventosExistentes || [])
-    .filter((evento) => {
-      const origem = evento?.meta?.origin;
-      if (origem !== "cadastro") return false;
-      const dataAtual = normalizarDataSupabase(evento?.data_evento);
-      const dataDesejada = dataPorTipo[evento?.tipo] || null;
-      if (!dataDesejada) return true;
-      return dataAtual !== dataDesejada;
+  const eventosNormalizados = (eventos || [])
+    .map((evento) => {
+      const tipo = evento?.tipo;
+      const dataEvento =
+        evento?.data_evento ||
+        evento?.data ||
+        evento?.dataEvento ||
+        evento?.data_evento_br;
+      const data_evento = normalizarDataEvento(dataEvento);
+      if (!TIPOS_REPRO.includes(tipo) || !data_evento) return null;
+      return {
+        fazenda_id: fazendaId,
+        animal_id: animalId,
+        user_id: userId ?? null,
+        tipo,
+        data_evento,
+      };
     })
-    .map((evento) => evento.id)
     .filter(Boolean);
 
-  if (idsParaRemover.length > 0) {
-    const { error: deleteError } = await supabase
-      .from("repro_eventos")
-      .delete()
-      .eq("fazenda_id", fazendaId)
-      .in("id", idsParaRemover);
+  if (eventosNormalizados.length === 0) return;
 
-    if (deleteError) {
-      console.error("Erro ao limpar eventos de cadastro:", deleteError);
-    }
-  }
-
-  const payloadUpsert = TIPOS_REPRO.map((tipo) => {
-    const data_evento = dataPorTipo[tipo];
-    if (!data_evento) return null;
-    return {
-      fazenda_id: fazendaId,
-      animal_id: animalId,
-      tipo,
-      data_evento,
-      meta: { origin: "cadastro" },
-    };
-  }).filter(Boolean);
-
-  if (payloadUpsert.length === 0) return;
+  const eventosUnicos = Array.from(
+    new Map(
+      eventosNormalizados.map((evento) => [
+        `${evento.tipo}-${evento.data_evento}`,
+        evento,
+      ])
+    ).values()
+  );
 
   const { error: upsertError } = await supabase
     .from("repro_eventos")
-    .upsert(payloadUpsert, {
+    .upsert(eventosUnicos, {
       onConflict: "fazenda_id,animal_id,tipo,data_evento",
     });
 
