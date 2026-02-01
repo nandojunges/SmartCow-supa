@@ -1,5 +1,5 @@
 import { useState } from "react";
-import "../../styles/tabelaModerna.css";
+import "../../../styles/tabelaModerna.css";
 
 export default function TabelaReproducao({
   columns = [],
@@ -28,7 +28,7 @@ export default function TabelaReproducao({
               {safeColumns.map((column) => (
                 <th
                   key={column.key}
-                  className={["st-th", column.className].filter(Boolean).join(" ")}
+                  className={column.className}
                   onMouseEnter={() => setHoveredColKey(column.key)}
                 >
                   <span className="st-th-label">{column.label}</span>
@@ -38,8 +38,13 @@ export default function TabelaReproducao({
           </thead>
           <tbody>
             {safeRows.length === 0 ? (
-              <tr className="st-empty">
-                <td colSpan={safeColumns.length}>{emptyMessage}</td>
+              <tr>
+                <td
+                  colSpan={safeColumns.length || 1}
+                  style={{ padding: 18, color: "#64748b", fontWeight: 700 }}
+                >
+                  {emptyMessage}
+                </td>
               </tr>
             ) : (
               safeRows.map((row, index) => {
@@ -49,7 +54,7 @@ export default function TabelaReproducao({
                 return (
                   <tr
                     key={rowId}
-                    className={rowHover ? "st-row-hover" : undefined}
+                    className={rowHover ? "st-row-hover" : ""}
                     onMouseEnter={() => setHoveredRowId(rowId)}
                   >
                     {safeColumns.map((column) => {
@@ -68,13 +73,14 @@ export default function TabelaReproducao({
                         <td
                           key={`${rowId}-${column.key}`}
                           className={[
-                            "st-td",
                             column.className,
                             colHover ? "st-col-hover" : "",
+                            rowHover ? "st-row-hover" : "",
                             cellHover ? "st-cell-hover" : "",
                           ]
                             .filter(Boolean)
                             .join(" ")}
+                          onMouseEnter={() => setHoveredColKey(column.key)}
                         >
                           {cellValue ?? "—"}
                         </td>
