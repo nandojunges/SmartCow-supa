@@ -59,128 +59,6 @@ function idadeTexto(nascimento) {
   return `${anos}a ${rem}m`;
 }
 
-function delNumeroFromParto(partoStr, secagemOpcional) {
-  const parto = parseDateFlexible(partoStr);
-  if (!parto) return null;
-
-  if (secagemOpcional) {
-    const sec = parseDateFlexible(secagemOpcional);
-    if (sec && sec > parto) {
-      const dias = Math.floor((sec.getTime() - parto.getTime()) / 86400000);
-      return Number.isFinite(dias) ? Math.max(0, dias) : null;
-    }
-  }
-
-  const hoje = new Date();
-  const dias = Math.floor((hoje.getTime() - parto.getTime()) / 86400000);
-  return Number.isFinite(dias) ? Math.max(0, dias) : null;
-}
-
-function agregarReproEventosPorAnimal(eventos = []) {
-  const grupos = {};
-  const tiposIa = ["IA", "INSEMINACAO", "IATF"];
-  const tiposDg = ["DG", "DIAGNOSTICO_GESTACAO"];
-
-  const normalizarResultadoDg = (valor) => {
-    if (valor === null || valor === undefined) return "";
-    const texto = String(valor).trim().toLowerCase();
-    if (!texto) return "";
-    const positivos = ["positivo", "pos", "p", "true"];
-    const negativos = ["negativo", "neg", "n", "false"];
-    if (positivos.includes(texto)) return "POSITIVO";
-    if (negativos.includes(texto)) return "NEGATIVO";
-    return "";
-  };
-
-  (eventos || []).forEach((evento) => {
-    const animalId = evento?.animal_id;
-    if (!animalId) return;
-    if (!grupos[animalId]) grupos[animalId] = [];
-    grupos[animalId].push(evento);
-  });
-
-  const resultado = {};
-  Object.entries(grupos).forEach(([animalId, eventosAnimal]) => {
-    const eventosComData = (eventosAnimal || []).map((evento) => ({
-      ...evento,
-      _data: parseDateFlexible(evento?.data_evento),
-    }));
-
-    const ultimoPartoEvento = eventosComData
-      .filter((evento) => String(evento?.tipo || "").toUpperCase() === "PARTO")
-      .reduce((maisRecente, evento) => {
-        if (!evento._data) return maisRecente;
-        if (!maisRecente?._data || evento._data > maisRecente._data) return evento;
-        return maisRecente;
-      }, null);
-
-    const dataUltimoParto = ultimoPartoEvento?._data || null;
-    const eventosDoCiclo = dataUltimoParto
-      ? eventosComData.filter((evento) => evento._data && evento._data > dataUltimoParto)
-      : eventosComData.filter((evento) => evento._data);
-
-    const ultimaIaEvento = eventosDoCiclo
-      .filter((evento) => tiposIa.includes(String(evento?.tipo || "").toUpperCase()))
-      .reduce((maisRecente, evento) => {
-        if (!evento._data) return maisRecente;
-        if (!maisRecente?._data || evento._data > maisRecente._data) return evento;
-        return maisRecente;
-      }, null);
-
-    const ultimoDgEvento = eventosDoCiclo
-      .filter((evento) => tiposDg.includes(String(evento?.tipo || "").toUpperCase()))
-      .reduce((maisRecente, evento) => {
-        if (!evento._data) return maisRecente;
-        if (!maisRecente?._data || evento._data > maisRecente._data) return evento;
-        return maisRecente;
-      }, null);
-
-    const ultimaSecagemEvento = eventosDoCiclo
-      .filter((evento) => String(evento?.tipo || "").toUpperCase() === "SECAGEM")
-      .reduce((maisRecente, evento) => {
-        if (!evento._data) return maisRecente;
-        if (!maisRecente?._data || evento._data > maisRecente._data) return evento;
-        return maisRecente;
-      }, null);
-
-    const ultimoParto = ultimoPartoEvento?.data_evento ?? null;
-    const ultimaSecagem = ultimaSecagemEvento?.data_evento ?? null;
-    const ultimaIa = ultimaIaEvento?.data_evento ?? null;
-    const resultadoDg = normalizarResultadoDg(ultimoDgEvento?.resultado_dg);
-
-    const del = delNumeroFromParto(ultimoParto, ultimaSecagem);
-
-    let statusReprodutivo = "—";
-    if (resultadoDg === "POSITIVO") {
-      statusReprodutivo = "PEV";
-    } else if (resultadoDg === "NEGATIVO") {
-      statusReprodutivo = "VAZ";
-    } else if (ultimaIa) {
-      statusReprodutivo = "INS";
-    }
-
-    let previsaoParto = null;
-    if (ultimaIa) {
-      const dataIa = parseDateFlexible(ultimaIa);
-      if (dataIa) {
-        const previsao = new Date(dataIa);
-        previsao.setDate(previsao.getDate() + 280);
-        previsaoParto = previsao.toISOString().split("T")[0];
-      }
-    }
-
-    resultado[animalId] = {
-      ultimo_parto_calc: ultimoParto,
-      ultima_ia_calc: ultimaIa,
-      status_reprodutivo_calc: statusReprodutivo,
-      del_calc: del,
-      previsao_parto_calc: previsaoParto,
-    };
-  });
-
-  return resultado;
-}
-
 function resolveSituacaoProdutiva(animal) {
   if (!animal) return "—";
   if (animal?.sexo === "macho") return "não lactante";
@@ -190,22 +68,14 @@ function resolveSituacaoProdutiva(animal) {
 }
 
 function resolveStatusReprodutivo(animal) {
-  return (
-    animal?.status_reprodutivo_calc ||
-    animal?.situacao_reprodutiva ||
-    animal?.status_reprodutivo ||
-    "—"
-  );
+  return animal?.situacao_reprodutiva || "—";
 }
 
 function resolveDelValor(animal) {
-  if (Number.isFinite(animal?.del_calc)) {
-    return Number(animal.del_calc);
-  }
   if (Number.isFinite(Number(animal?.del))) {
     return Number(animal?.del);
   }
-  return delNumeroFromParto(animal?.ultimo_parto_calc || animal?.ultimo_parto);
+  return null;
 }
 
 function formatProducao(valor) {
@@ -306,26 +176,8 @@ export default function Plantel({ isOnline = navigator.onLine }) {
 
     if (animaisRes.error) throw animaisRes.error;
     const lista = Array.isArray(animaisRes.data) ? animaisRes.data : [];
-    const ids = lista.map((animal) => animal?.id).filter(Boolean);
-    let eventos = [];
-    if (ids.length > 0) {
-      const { data, error } = await supabase
-        .from("repro_eventos")
-        .select("animal_id, tipo, data_evento, resultado_dg")
-        .eq("fazenda_id", fazendaAtualId)
-        .in("animal_id", ids)
-        .order("data_evento", { ascending: false });
-      if (error) throw error;
-      eventos = Array.isArray(data) ? data : [];
-    }
-
-    const reproCalc = agregarReproEventosPorAnimal(eventos);
-    const combinados = lista.map((animal) => ({
-      ...animal,
-      ...(reproCalc[animal?.id] || {}),
-    }));
-    setAnimais(combinados);
-    return combinados;
+    setAnimais(lista);
+    return lista;
   }, [fazendaAtualId]);
 
   const carregarLotes = useCallback(async () => {
@@ -457,6 +309,42 @@ export default function Plantel({ isOnline = navigator.onLine }) {
     fazendaAtualId,
     isOnline,
   ]);
+
+  useEffect(() => {
+    if (!fazendaAtualId || !isOnline) return undefined;
+
+    let ativo = true;
+
+    const channel = supabase
+      .channel(`plantel-repro-eventos-${fazendaAtualId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "repro_eventos",
+          filter: `fazenda_id=eq.${fazendaAtualId}`,
+        },
+        async () => {
+          if (!ativo) return;
+          setAtualizando(true);
+          try {
+            const animaisData = await carregarAnimais();
+            await kvSet(CACHE_KEY, animaisData);
+          } catch (error) {
+            console.error("Erro ao atualizar plantel após evento reprodutivo:", error);
+          } finally {
+            if (ativo) setAtualizando(false);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      ativo = false;
+      supabase.removeChannel(channel);
+    };
+  }, [CACHE_KEY, carregarAnimais, fazendaAtualId, isOnline]);
 
   useEffect(() => {
     let ativo = true;
