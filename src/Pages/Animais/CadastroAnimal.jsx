@@ -5,6 +5,7 @@ import { supabase } from "../../lib/supabaseClient";
 import { withFazendaId } from "../../lib/fazendaScope";
 import { useFazenda } from "../../context/FazendaContext";
 import { enqueue, kvGet, kvSet } from "../../offline/localDB";
+import { syncCadastroReproEventos } from "../../lib/reproSync";
 import FichaComplementarAnimal from "./FichaComplementarAnimal";
 
 /* ============================
@@ -557,6 +558,14 @@ export default function CadastroAnimal() {
         console.error(eventosError);
       }
     }
+
+    await syncCadastroReproEventos({
+      fazendaId: fazendaAtualId,
+      animalId,
+      dataUltimaIA: ultimaIAResumo,
+      dataUltimoParto: ultimoPartoResumo,
+      dataSecagem: ultimaSecagemResumo,
+    });
 
     setMensagemSucesso(
       "Animal e histórico reprodutivo básico cadastrados com sucesso!"
