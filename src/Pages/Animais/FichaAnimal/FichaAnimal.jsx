@@ -24,6 +24,7 @@ function calcularDias(dataInicio, dataFim) {
 export default function FichaAnimal({ animal, onClose }) {
   // >>> NOVO: estado com o animal completo vindo do banco
   const [animalDetalhado, setAnimalDetalhado] = useState(animal);
+  const [resumoRepro, setResumoRepro] = useState(null);
 
   const [pesagens, setPesagens] = useState([]);
   const [ocorrencias, setOcorrencias] = useState([]);
@@ -199,7 +200,20 @@ export default function FichaAnimal({ animal, onClose }) {
 
   if (!animal) return null;
 
-  const animalParaHeader = animalDetalhado || animal;
+  const animalBase = animalDetalhado || animal;
+  const animalParaHeader = animalBase;
+  const animalParaResumo = {
+    ...animalBase,
+    ...resumoRepro,
+    ultimo_parto:
+      resumoRepro?.ultimo_parto_calc ?? animalBase?.ultimo_parto ?? null,
+    ultima_ia: resumoRepro?.ultima_ia_calc ?? animalBase?.ultima_ia ?? null,
+    del: resumoRepro?.del_calc ?? animalBase?.del ?? null,
+    situacao_reprodutiva:
+      resumoRepro?.status_reprodutivo_calc ??
+      animalBase?.situacao_reprodutiva ??
+      null,
+  };
 
   return (
     <div style={overlay} onClick={onClose}>
@@ -261,7 +275,7 @@ export default function FichaAnimal({ animal, onClose }) {
         >
           {abaAtiva === "resumo" && (
             // >>> AQUI USAMOS O OBJETO COMPLETO
-            <FichaAnimalResumo animal={animalDetalhado || animal} />
+            <FichaAnimalResumo animal={animalParaResumo} />
           )}
 
           {abaAtiva === "leite" && (
@@ -280,7 +294,7 @@ export default function FichaAnimal({ animal, onClose }) {
 
           {abaAtiva === "eventos" && <FichaAnimalEventos eventos={eventos} />}
 
-          {abaAtiva === "reproducao" && (
+          <div style={{ display: abaAtiva === "reproducao" ? "block" : "none" }}>
             <FichaAnimalReproducao
               animal={animal}
               partos={partos}
@@ -289,8 +303,9 @@ export default function FichaAnimal({ animal, onClose }) {
               secagens={secagens}
               tratamentos={tratamentos}
               ocorrencias={ocorrencias}
+              onResumoChange={setResumoRepro}
             />
-          )}
+          </div>
         </div>
       </div>
     </div>
