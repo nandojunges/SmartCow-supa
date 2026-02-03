@@ -8,38 +8,43 @@ import { kvGet, kvSet } from "../../offline/localDB";
 import "../../styles/tabelaModerna.css";
 import FichaAnimal from "./FichaAnimal/FichaAnimal";
 
-let MEMO_PLANTEL = {
-  data: null,
-  lastAt: 0,
-};
+let MEMO_PLANTEL = { data: null, lastAt: 0 };
 
-/* ========= helpers de data ========= */
-// aceita "2023-01-01" ou "dd/mm/aaaa"
+/* =========================
+   Helpers de data
+========================= */
 function parseDateFlexible(s) {
   if (!s) return null;
-  if (typeof s !== "string") s = String(s);
+  const str = String(s).trim();
+  if (!str) return null;
 
-  // ISO: yyyy-mm-dd
-  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  // ISO yyyy-mm-dd
+  let m = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (m) {
-    const y = +m[1];
-    const mo = +m[2];
-    const d = +m[3];
+    const y = +m[1],
+      mo = +m[2],
+      d = +m[3];
     const dt = new Date(y, mo - 1, d);
     return Number.isFinite(+dt) ? dt : null;
   }
 
-  // BR: dd/mm/aaaa
-  m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  // BR dd/mm/yyyy
+  m = str.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
   if (m) {
-    const d = +m[1];
-    const mo = +m[2];
-    const y = +m[3];
+    const d = +m[1],
+      mo = +m[2],
+      y = +m[3];
     const dt = new Date(y, mo - 1, d);
     return Number.isFinite(+dt) ? dt : null;
   }
 
   return null;
+}
+
+function daysBetween(dateA, dateB) {
+  if (!dateA || !dateB) return null;
+  const ms = dateA.getTime() - dateB.getTime();
+  return Math.floor(ms / (1000 * 60 * 60 * 24));
 }
 
 function idadeTexto(nascimento) {
@@ -59,43 +64,105 @@ function idadeTexto(nascimento) {
   return `${anos}a ${rem}m`;
 }
 
-function resolveSituacaoProdutiva(animal) {
-  if (!animal) return "—";
-  if (animal?.sexo === "macho") return "não lactante";
-  const delValor = resolveDelValor(animal);
-  if (Number.isFinite(delValor)) return "lactante";
-  return "seca";
-}
-
-function resolveStatusReprodutivo(animal) {
-  return animal?.situacao_reprodutiva || "—";
-}
-
-function resolveDelValor(animal) {
-  if (Number.isFinite(Number(animal?.del))) {
-    return Number(animal?.del);
-  }
-  return null;
-}
-
 function formatProducao(valor) {
-  if (!Number.isFinite(valor)) return "—";
-  return valor.toFixed(1).replace(".", ",");
+  const num = Number(valor);
+  if (!Number.isFinite(num)) return "—";
+  return num.toFixed(1).replace(".", ",");
 }
 
+/* =========================
+   Cálculos via repro_eventos
+========================= */
+function calcDel({ ultimoPartoISO, ultimaSecagemISO }) {
+  const parto = parseDateFlexible(ultimoPartoISO);
+  if (!parto) return null;
+
+  const secagem = parseDateFlexible(ultimaSecagemISO);
+  if (secagem && secagem.getTime() > parto.getTime()) return null;
+
+  return daysBetween(new Date(), parto);
+}
+
+function calcSituacaoProdutiva({
+  sexo,
+  mesesIdade,
+  ultimoPartoISO,
+  ultimaSecagemISO,
+}) {
+  if (sexo === "macho") return "não lactante";
+
+  const del = calcDel({ ultimoPartoISO, ultimaSecagemISO });
+  if (Number.isFinite(del)) return "lactante";
+
+  const parto = parseDateFlexible(ultimoPartoISO);
+  const secagem = parseDateFlexible(ultimaSecagemISO);
+
+  if (secagem && (!parto || secagem.getTime() >= parto.getTime())) return "seca";
+  if ((mesesIdade ?? 0) < 24) return "novilha";
+  return "não lactante";
+}
+
+function calcSituacaoReprodutiva({ ultimaIAISO, ultimoPartoISO, ultimaSecagemISO }) {
+  const ia = parseDateFlexible(ultimaIAISO);
+  const parto = parseDateFlexible(ultimoPartoISO);
+  const secagem = parseDateFlexible(ultimaSecagemISO);
+
+  if (!ia) return "vazia";
+
+  const temEventoDepoisDaIA =
+    (parto && parto.getTime() > ia.getTime()) ||
+    (secagem && secagem.getTime() > ia.getTime());
+
+  if (!temEventoDepoisDaIA) return "inseminada";
+  if (parto && parto.getTime() > ia.getTime()) return "PEV / pós-parto";
+  return "vazia";
+}
+
+/* =========================
+   Helpers cache (NOVO)
+========================= */
+function normalizeReproResumo(obj) {
+  if (!obj || typeof obj !== "object") return {};
+  return obj;
+}
+
+// fallback: se ainda não tem reproResumo (primeiro carregamento) usa colunas do animal
+function fallbackFromAnimal(a) {
+  // em animais, você pode ter: ultima_ia, ultimo_parto, (talvez ultima_secagem)
+  // (aqui tratamos os nomes mais comuns)
+  return {
+    ultimaIAISO: a?.ultima_ia || a?.ultimaIAISO || null,
+    ultimoPartoISO: a?.ultimo_parto || a?.ultimoPartoISO || null,
+    ultimaSecagemISO: a?.ultima_secagem || a?.ultimaSecagemISO || null,
+  };
+}
+
+/* =========================
+   Componente
+========================= */
 export default function Plantel({ isOnline = navigator.onLine }) {
-  const CACHE_KEY = "cache:animais:list";
-  const CACHE_FALLBACK_KEY = "cache:animais:plantel:v1";
   const { fazendaAtualId } = useFazenda();
+
+  const CACHE_ANIMAIS = "cache:animais:list";
+  const CACHE_FALLBACK = "cache:animais:plantel:v1";
+
+  // ✅ NOVOS caches do Plantel (local devido p/ reproResumo)
+  const CACHE_PLANTEL_BUNDLE = `cache:plantel:bundle:${fazendaAtualId || "none"}:v1`;
+  const CACHE_REPRO_RESUMO = `cache:plantel:reproResumo:${fazendaAtualId || "none"}:v1`;
+
   const memoData = MEMO_PLANTEL.data || {};
   const [animais, setAnimais] = useState(() => memoData.animais ?? []);
   const [racaMap, setRacaMap] = useState(() => memoData.racaMap ?? {});
+  const [lotes, setLotes] = useState(() => memoData.lotes ?? []);
+  const [reproResumo, setReproResumo] = useState(() => memoData.reproResumo ?? {});
+
   const [carregando, setCarregando] = useState(() => !memoData.animais);
   const [atualizando, setAtualizando] = useState(false);
   const [erro, setErro] = useState("");
   const [offlineAviso, setOfflineAviso] = useState("");
-  const [lotes, setLotes] = useState(() => memoData.lotes ?? []);
   const [loteAviso, setLoteAviso] = useState("");
+
+  // UI
   const [hoveredRowId, setHoveredRowId] = useState(null);
   const [hoveredColKey, setHoveredColKey] = useState(null);
   const [ultProducao, setUltProducao] = useState({});
@@ -107,6 +174,7 @@ export default function Plantel({ isOnline = navigator.onLine }) {
     left: "50%",
     transform: "translateX(-50%)",
   });
+
   const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
   const [filtros, setFiltros] = useState({
     lote: "__ALL__",
@@ -126,56 +194,25 @@ export default function Plantel({ isOnline = navigator.onLine }) {
   const abrirFichaAnimal = (animal) => setAnimalSelecionado(animal);
   const fecharFichaAnimal = () => setAnimalSelecionado(null);
 
+  // memo
   useEffect(() => {
-    const memo = MEMO_PLANTEL.data;
-    if (memo?.animais === animais && memo?.lotes === lotes && memo?.racaMap === racaMap) {
-      return;
-    }
-    MEMO_PLANTEL.data = {
-      ...(memo || {}),
-      animais,
-      lotes,
-      racaMap,
-    };
+    MEMO_PLANTEL.data = { animais, lotes, racaMap, reproResumo };
     MEMO_PLANTEL.lastAt = Date.now();
-  }, [animais, lotes, racaMap]);
+  }, [animais, lotes, racaMap, reproResumo]);
 
-  const loteOptions = useMemo(() => {
-    const baseOptions = (lotes || []).map((lote) => {
-      const label =
-        lote.nome ??
-        lote.nome ??
-        lote.descricao ??
-        lote.titulo ??
-        lote.label ??
-        String(lote.id ?? "—");
-      return {
-        value: lote.id,
-        label,
-      };
-    });
-    return [{ value: null, label: "Sem lote" }, ...baseOptions];
-  }, [lotes]);
-
-  const lotesById = useMemo(() => {
-    const map = {};
-    (lotes || []).forEach((lote) => {
-      if (lote?.id == null) return;
-      map[lote.id] = lote.nome ?? lote.descricao ?? lote.titulo ?? lote.label ?? String(lote.id);
-    });
-    return map;
-  }, [lotes]);
-
+  /* =========================
+     Loaders
+  ========================= */
   const carregarAnimais = useCallback(async () => {
-    const animaisRes = await withFazendaId(
+    const res = await withFazendaId(
       supabase.from("animais").select("*"),
       fazendaAtualId
     )
       .eq("ativo", true)
       .order("numero", { ascending: true });
 
-    if (animaisRes.error) throw animaisRes.error;
-    const lista = Array.isArray(animaisRes.data) ? animaisRes.data : [];
+    if (res.error) throw res.error;
+    const lista = Array.isArray(res.data) ? res.data : [];
     setAnimais(lista);
     return lista;
   }, [fazendaAtualId]);
@@ -186,11 +223,7 @@ export default function Plantel({ isOnline = navigator.onLine }) {
       fazendaAtualId
     ).order("id", { ascending: true });
 
-    if (error) {
-      console.error("Erro ao carregar lotes:", error);
-      return [];
-    }
-
+    if (error) return [];
     const lista = Array.isArray(data) ? data : [];
     setLotes(lista);
     return lista;
@@ -201,49 +234,115 @@ export default function Plantel({ isOnline = navigator.onLine }) {
       supabase.from("racas").select("id, nome"),
       fazendaAtualId
     );
-
     if (error) throw error;
 
     const map = {};
-    (data || []).forEach((r) => {
-      map[r.id] = r.nome;
-    });
+    (data || []).forEach((r) => (map[r.id] = r.nome));
     setRacaMap(map);
     return map;
   }, [fazendaAtualId]);
 
+  // ✅ busca eventos reprodutivos e monta resumo por animal (e salva em cache local devido)
+  const carregarResumoRepro = useCallback(
+    async (animalIds) => {
+      if (!fazendaAtualId) return {};
+      if (!Array.isArray(animalIds) || animalIds.length === 0) {
+        setReproResumo({});
+        await kvSet(CACHE_REPRO_RESUMO, {});
+        return {};
+      }
+
+      const { data, error } = await withFazendaId(
+        supabase.from("repro_eventos").select("animal_id,tipo,data_evento"),
+        fazendaAtualId
+      )
+        .in("animal_id", animalIds)
+        .in("tipo", ["IA", "PARTO", "SECAGEM"])
+        .order("data_evento", { ascending: false })
+        .limit(5000);
+
+      if (error) {
+        console.error("Erro ao carregar repro_eventos:", error);
+        setReproResumo({});
+        await kvSet(CACHE_REPRO_RESUMO, {});
+        return {};
+      }
+
+      const rows = Array.isArray(data) ? data : [];
+
+      const map = {};
+      for (const ev of rows) {
+        const id = ev?.animal_id;
+        if (!id) continue;
+
+        if (!map[id])
+          map[id] = {
+            ultimaIAISO: null,
+            ultimoPartoISO: null,
+            ultimaSecagemISO: null,
+          };
+
+        if (ev.tipo === "IA" && !map[id].ultimaIAISO) map[id].ultimaIAISO = ev.data_evento;
+        if (ev.tipo === "PARTO" && !map[id].ultimoPartoISO) map[id].ultimoPartoISO = ev.data_evento;
+        if (ev.tipo === "SECAGEM" && !map[id].ultimaSecagemISO) map[id].ultimaSecagemISO = ev.data_evento;
+      }
+
+      setReproResumo(map);
+      await kvSet(CACHE_REPRO_RESUMO, map);
+      return map;
+    },
+    [fazendaAtualId, CACHE_REPRO_RESUMO]
+  );
+
   const carregarDoCache = useCallback(async () => {
-    const cachePrimario = await kvGet(CACHE_KEY);
-    const cacheFallback = cachePrimario ? null : await kvGet(CACHE_FALLBACK_KEY);
-    const cache = cachePrimario ?? cacheFallback;
-    if (!cache) return false;
-    if (Array.isArray(cache)) {
-      setAnimais(cache.filter((animal) => animal?.ativo !== false));
+    // 1) tenta bundle do plantel (novo)
+    const bundle = await kvGet(CACHE_PLANTEL_BUNDLE);
+    if (bundle && typeof bundle === "object") {
+      if (Array.isArray(bundle.animais)) setAnimais(bundle.animais.filter((a) => a?.ativo !== false));
+      if (Array.isArray(bundle.lotes)) setLotes(bundle.lotes);
+      if (bundle.racaMap && typeof bundle.racaMap === "object") setRacaMap(bundle.racaMap);
+      if (bundle.reproResumo && typeof bundle.reproResumo === "object")
+        setReproResumo(normalizeReproResumo(bundle.reproResumo));
       return true;
     }
-    if (Array.isArray(cache.animais)) {
-      setAnimais(cache.animais.filter((animal) => animal?.ativo !== false));
-      return true;
+
+    // 2) cai pro cache antigo de animais (mantém teu fluxo)
+    const prim = await kvGet(CACHE_ANIMAIS);
+    const fallback = prim ? null : await kvGet(CACHE_FALLBACK);
+    const cache = prim ?? fallback;
+
+    if (cache) {
+      if (Array.isArray(cache)) {
+        setAnimais(cache.filter((a) => a?.ativo !== false));
+      } else if (Array.isArray(cache.animais)) {
+        setAnimais(cache.animais.filter((a) => a?.ativo !== false));
+      }
     }
-    return false;
-  }, [CACHE_FALLBACK_KEY, CACHE_KEY]);
+
+    // 3) tenta reproResumo separado
+    const repro = await kvGet(CACHE_REPRO_RESUMO);
+    if (repro && typeof repro === "object") setReproResumo(normalizeReproResumo(repro));
+
+    return Boolean(cache || repro);
+  }, [
+    CACHE_ANIMAIS,
+    CACHE_FALLBACK,
+    CACHE_PLANTEL_BUNDLE,
+    CACHE_REPRO_RESUMO,
+  ]);
 
   useEffect(() => {
     if (!fazendaAtualId) {
       setCarregando(false);
       setAtualizando(false);
-      return undefined;
+      return;
     }
 
     let ativo = true;
 
-    async function carregarDados() {
-      const memoFresh =
-        MEMO_PLANTEL.data && Date.now() - MEMO_PLANTEL.lastAt < 30000;
-      const hasData =
-        (Array.isArray(animais) && animais.length > 0) ||
-        (Array.isArray(lotes) && lotes.length > 0) ||
-        Object.keys(racaMap || {}).length > 0;
+    (async () => {
+      const memoFresh = MEMO_PLANTEL.data && Date.now() - MEMO_PLANTEL.lastAt < 30000;
+      const hasData = Array.isArray(animais) && animais.length > 0;
 
       if (memoFresh && hasData) {
         setCarregando(false);
@@ -251,19 +350,17 @@ export default function Plantel({ isOnline = navigator.onLine }) {
         return;
       }
 
-      if (hasData) {
-        setAtualizando(true);
-      } else {
-        setCarregando(true);
-      }
       setErro("");
       setLoteAviso("");
       setOfflineAviso("");
 
+      if (hasData) setAtualizando(true);
+      else setCarregando(true);
+
       try {
         if (!isOnline) {
-          const cacheOk = await carregarDoCache();
-          if (!cacheOk) {
+          const ok = await carregarDoCache();
+          if (!ok) {
             setOfflineAviso(
               "Sem dados offline ainda. Conecte na internet uma vez para baixar os animais."
             );
@@ -271,81 +368,154 @@ export default function Plantel({ isOnline = navigator.onLine }) {
           return;
         }
 
-        if (!ativo) return;
-
         const [animaisData, lotesData, racasData] = await Promise.all([
           carregarAnimais(),
           carregarLotes(),
           carregarRacas(),
         ]);
 
-        await kvSet(CACHE_KEY, animaisData);
+        const ids = (animaisData || []).map((a) => a.id).filter(Boolean);
+        const reproMap = await carregarResumoRepro(ids);
+
+        // ✅ salva bundle completo (local devido do Plantel)
+        await kvSet(CACHE_PLANTEL_BUNDLE, {
+          animais: animaisData,
+          lotes: lotesData,
+          racaMap: racasData,
+          reproResumo: reproMap,
+          savedAt: Date.now(),
+          fazenda_id: fazendaAtualId,
+        });
+
+        // mantém teu cache antigo também
+        await kvSet(CACHE_ANIMAIS, animaisData);
       } catch (e) {
         console.error("Erro ao carregar plantel:", e);
         if (!ativo) return;
-        const cacheOk = await carregarDoCache();
-        if (!cacheOk) {
+        const ok = await carregarDoCache();
+        if (!ok)
           setErro(
-            "Não foi possível carregar os animais. Sem dados offline ainda. Conecte na internet uma vez para baixar os animais."
+            "Não foi possível carregar os animais. Conecte na internet uma vez para baixar os dados."
           );
-        }
       } finally {
         if (ativo) {
           setCarregando(false);
           setAtualizando(false);
         }
       }
-    }
+    })();
 
-    carregarDados();
     return () => {
       ativo = false;
     };
   }, [
-    carregarAnimais,
-    carregarDoCache,
-    carregarLotes,
-    carregarRacas,
     fazendaAtualId,
     isOnline,
+    carregarAnimais,
+    carregarLotes,
+    carregarRacas,
+    carregarResumoRepro,
+    carregarDoCache,
+    CACHE_ANIMAIS,
+    CACHE_PLANTEL_BUNDLE,
+    animais,
   ]);
 
-  useEffect(() => {
-    if (!fazendaAtualId || !isOnline) return undefined;
+  /* =========================
+     Lotes (mantido)
+  ========================= */
+  const loteOptions = useMemo(() => {
+    const base = (lotes || []).map((l) => ({
+      value: l.id,
+      label: l.nome ?? l.descricao ?? l.titulo ?? l.label ?? String(l.id ?? "—"),
+    }));
+    return [{ value: null, label: "Sem lote" }, ...base];
+  }, [lotes]);
 
-    let ativo = true;
+  const lotesById = useMemo(() => {
+    const map = {};
+    (lotes || []).forEach((l) => {
+      if (l?.id == null) return;
+      map[l.id] = l.nome ?? l.descricao ?? l.titulo ?? l.label ?? String(l.id);
+    });
+    return map;
+  }, [lotes]);
 
-    const channel = supabase
-      .channel(`plantel-repro-eventos-${fazendaAtualId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "repro_eventos",
-          filter: `fazenda_id=eq.${fazendaAtualId}`,
-        },
-        async () => {
-          if (!ativo) return;
-          setAtualizando(true);
-          try {
-            const animaisData = await carregarAnimais();
-            await kvSet(CACHE_KEY, animaisData);
-          } catch (error) {
-            console.error("Erro ao atualizar plantel após evento reprodutivo:", error);
-          } finally {
-            if (ativo) setAtualizando(false);
-          }
-        }
-      )
-      .subscribe();
+  const resolveSelectedLote = useCallback(
+    (animal) => {
+      const val = animal?.[LOTE_FIELD];
+      if (val == null) return loteOptions.find((o) => o.value === null) || null;
+      return loteOptions.find((o) => o.value === val) || null;
+    },
+    [loteOptions]
+  );
 
-    return () => {
-      ativo = false;
-      supabase.removeChannel(channel);
-    };
-  }, [CACHE_KEY, carregarAnimais, fazendaAtualId, isOnline]);
+  const resolveLoteLabel = useCallback(
+    (animal) => {
+      const val = animal?.[LOTE_FIELD];
+      if (val == null || val === "") return "Sem lote";
+      return lotesById[val] || "Sem lote";
+    },
+    [lotesById]
+  );
 
+  const closeLoteEdit = useCallback(() => setEditingLoteId(null), []);
+  const handleLoteBlur = useCallback(() => setTimeout(() => setEditingLoteId(null), 150), []);
+
+  const handleSetLote = useCallback(
+    async (animal, option) => {
+      if (!animal?.id) return;
+
+      if (!fazendaAtualId) {
+        setLoteAviso("Selecione uma fazenda antes de alterar o lote.");
+        return;
+      }
+      if (!navigator.onLine) {
+        setLoteAviso("Sem conexão. Conecte para alterar o lote.");
+        return;
+      }
+
+      const valorNovo = option?.value ?? null;
+      const valorAnterior = animal?.[LOTE_FIELD] ?? null;
+
+      setAnimais((prev) =>
+        prev.map((a) => (a.id === animal.id ? { ...a, [LOTE_FIELD]: valorNovo } : a))
+      );
+      setLoteAviso("");
+
+      try {
+        const dataMudanca = new Date().toISOString().split("T")[0];
+
+        const { error: histErr } = await supabase.from("animais_lote_historico").insert({
+          animal_id: animal.id,
+          lote_id: valorNovo,
+          data_mudanca: dataMudanca,
+          origem: "manual",
+          fazenda_id: fazendaAtualId,
+        });
+        if (histErr) throw histErr;
+
+        const { error: updErr } = await withFazendaId(
+          supabase.from("animais").update({ [LOTE_FIELD]: valorNovo }),
+          fazendaAtualId
+        ).eq("id", animal.id);
+        if (updErr) throw updErr;
+
+        closeLoteEdit();
+      } catch (e) {
+        console.error(e);
+        setAnimais((prev) =>
+          prev.map((a) => (a.id === animal.id ? { ...a, [LOTE_FIELD]: valorAnterior } : a))
+        );
+        setLoteAviso("Não foi possível atualizar o lote. Tente novamente.");
+      }
+    },
+    [fazendaAtualId, closeLoteEdit]
+  );
+
+  /* =========================
+     Última produção (mantido)
+  ========================= */
   useEffect(() => {
     let ativo = true;
 
@@ -359,35 +529,11 @@ export default function Plantel({ isOnline = navigator.onLine }) {
         return;
       }
 
-      const ids = animais
-        .filter((animal) => /lact|lac/i.test(String(resolveSituacaoProdutiva(animal) || "")))
-        .map((animal) => animal.id)
-        .filter(Boolean);
+      const ids = animais.map((a) => a.id).filter(Boolean);
       if (ids.length === 0) {
         if (ativo) setUltProducao({});
         return;
       }
-
-      const extrairValor = (registro) => {
-        const totalRaw =
-          registro?.total ??
-          registro?.total_litros ??
-          registro?.litros_total;
-        if (Number.isFinite(Number(totalRaw))) return Number(totalRaw);
-
-        const somaCampos = ["manha", "tarde", "terceira", "noite"];
-        const soma = somaCampos.reduce((acc, campo) => {
-          const valor = Number(registro?.[campo] ?? 0);
-          return Number.isFinite(valor) ? acc + valor : acc;
-        }, 0);
-        if (soma > 0) return soma;
-
-        const valorRaw = [registro?.litros, registro?.volume, registro?.producao].find(
-          (valor) => valor != null && valor !== ""
-        );
-        const valor = Number(valorRaw);
-        return Number.isFinite(valor) ? valor : null;
-      };
 
       try {
         const { data, error } = await withFazendaId(
@@ -396,94 +542,148 @@ export default function Plantel({ isOnline = navigator.onLine }) {
         )
           .in("animal_id", ids)
           .order("data_medicao", { ascending: false })
-          .limit(800);
+          .limit(1200);
 
         if (error) {
-          console.error("Erro ao carregar medicoes_leite:", error);
           if (ativo) setUltProducao({});
           return;
         }
 
         const registros = Array.isArray(data) ? data : [];
-        if (!registros.length) {
-          if (ativo) setUltProducao({});
-          return;
+        const mapa = {};
+        for (const r of registros) {
+          const id = r?.animal_id;
+          if (!id || Object.prototype.hasOwnProperty.call(mapa, id)) continue;
+
+          const totalRaw = r?.total ?? r?.total_litros ?? r?.litros_total;
+          const total = Number(totalRaw);
+          if (Number.isFinite(total)) {
+            mapa[id] = total;
+            continue;
+          }
+
+          const soma = ["manha", "tarde", "terceira", "noite"].reduce((acc, f) => {
+            const v = Number(r?.[f] ?? 0);
+            return Number.isFinite(v) ? acc + v : acc;
+          }, 0);
+          if (soma > 0) mapa[id] = soma;
         }
 
-        const mapa = {};
-        registros.forEach((registro) => {
-          const animalId = registro?.animal_id;
-          if (!animalId || Object.prototype.hasOwnProperty.call(mapa, animalId)) return;
-          const valor = extrairValor(registro);
-          if (Number.isFinite(valor)) {
-            mapa[animalId] = valor;
-          }
-        });
         if (ativo) setUltProducao(mapa);
-      } catch (error) {
-        console.error("Erro ao carregar ultima produção de leite:", error);
+      } catch {
         if (ativo) setUltProducao({});
       }
     }
 
     carregarUltimaProducao();
-
     return () => {
       ativo = false;
     };
   }, [animais, fazendaAtualId, isOnline]);
 
+  /* =========================
+     Resolver DEL / Status via resumo repro (AGORA COM FALLBACK)
+  ========================= */
+  const resolveMesesIdade = useCallback((animal) => {
+    const nasc = parseDateFlexible(animal?.nascimento);
+    if (!nasc) return 0;
+    const hoje = new Date();
+    let meses =
+      (hoje.getFullYear() - nasc.getFullYear()) * 12 +
+      (hoje.getMonth() - nasc.getMonth());
+    if (hoje.getDate() < nasc.getDate()) meses -= 1;
+    return Math.max(0, meses);
+  }, []);
+
+  const resolveRepro = useCallback(
+    (animal) => {
+      const id = animal?.id;
+      const fromMap = id ? reproResumo?.[id] : null;
+      if (fromMap && (fromMap.ultimaIAISO || fromMap.ultimoPartoISO || fromMap.ultimaSecagemISO)) {
+        return fromMap;
+      }
+      // ✅ fallback: usa campos do animal enquanto reproResumo não veio
+      return fallbackFromAnimal(animal);
+    },
+    [reproResumo]
+  );
+
+  const resolveDelValor = useCallback(
+    (animal) => {
+      const r = resolveRepro(animal);
+      return calcDel(r);
+    },
+    [resolveRepro]
+  );
+
+  const resolveSituacaoProdutiva = useCallback(
+    (animal) => {
+      const r = resolveRepro(animal);
+      return calcSituacaoProdutiva({
+        sexo: animal?.sexo,
+        mesesIdade: resolveMesesIdade(animal),
+        ultimoPartoISO: r.ultimoPartoISO,
+        ultimaSecagemISO: r.ultimaSecagemISO,
+      });
+    },
+    [resolveMesesIdade, resolveRepro]
+  );
+
+  const resolveStatusReprodutivo = useCallback(
+    (animal) => {
+      const r = resolveRepro(animal);
+      return calcSituacaoReprodutiva(r);
+    },
+    [resolveRepro]
+  );
+
+  /* =========================
+     Filtros / ordenação (mantido)
+  ========================= */
   const linhas = useMemo(() => (Array.isArray(animais) ? animais : []), [animais]);
+
   const situacoesProdutivas = useMemo(() => {
-    const valores = new Set();
-    linhas.forEach((animal) => {
-      const valor = String(resolveSituacaoProdutiva(animal) || "").trim();
-      if (valor) valores.add(valor);
-    });
-    return Array.from(valores).sort((a, b) => a.localeCompare(b));
-  }, [linhas]);
+    const set = new Set();
+    linhas.forEach((a) => set.add(resolveSituacaoProdutiva(a)));
+    return Array.from(set).filter(Boolean).sort((a, b) => a.localeCompare(b));
+  }, [linhas, resolveSituacaoProdutiva]);
 
   const situacoesReprodutivas = useMemo(() => {
-    const valores = new Set();
-    linhas.forEach((animal) => {
-      const valor = String(resolveStatusReprodutivo(animal) || "").trim();
-      if (valor) valores.add(valor);
-    });
-    return Array.from(valores).sort((a, b) => a.localeCompare(b));
-  }, [linhas]);
+    const set = new Set();
+    linhas.forEach((a) => set.add(resolveStatusReprodutivo(a)));
+    return Array.from(set).filter(Boolean).sort((a, b) => a.localeCompare(b));
+  }, [linhas, resolveStatusReprodutivo]);
 
   const allValue = "__ALL__";
   const semLoteValue = "__SEM_LOTE__";
 
   const origensDisponiveis = useMemo(() => {
-    const valores = new Set();
-    linhas.forEach((animal) => {
-      const valor = String(animal?.origem || "").trim();
-      if (valor) valores.add(valor);
+    const set = new Set();
+    linhas.forEach((a) => {
+      if (a?.origem) set.add(a.origem);
     });
-    return Array.from(valores).sort((a, b) => a.localeCompare(b));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [linhas]);
 
   const racasDisponiveis = useMemo(() => {
-    const valores = new Map();
-    linhas.forEach((animal) => {
-      const id = animal?.raca_id;
+    const map = new Map();
+    linhas.forEach((a) => {
+      const id = a?.raca_id;
       if (id == null) return;
       const nome = racaMap[id];
-      if (nome) valores.set(id, nome);
+      if (nome) map.set(id, nome);
     });
-    return Array.from(valores.entries())
+    return Array.from(map.entries())
       .map(([id, nome]) => ({ id, nome }))
       .sort((a, b) => a.nome.localeCompare(b.nome));
   }, [linhas, racaMap]);
 
   const sexosDisponiveis = useMemo(() => {
-    const valores = new Set();
-    linhas.forEach((animal) => {
-      const valor = String(animal?.sexo || "").trim();
-      if (valor) valores.add(valor);
+    const set = new Set();
+    linhas.forEach((a) => {
+      if (a?.sexo) set.add(a.sexo);
     });
-    return Array.from(valores).sort((a, b) => a.localeCompare(b));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [linhas]);
 
   const situacaoProdutivaOptions = useMemo(
@@ -492,52 +692,33 @@ export default function Plantel({ isOnline = navigator.onLine }) {
       { value: "lac", label: "LAC" },
       { value: "nao_lactante", label: "Não lactante" },
       ...situacoesProdutivas
-        .filter((valor) => !/lact|lac/i.test(valor))
-        .map((valor) => ({ value: valor, label: valor })),
+        .filter((v) => !/lact|lac/i.test(v))
+        .map((v) => ({ value: v, label: v })),
     ],
     [allValue, situacoesProdutivas]
   );
 
   const situacaoReprodutivaOptions = useMemo(
-    () => [
-      { value: allValue, label: "Todos" },
-      ...situacoesReprodutivas.map((valor) => ({
-        value: valor,
-        label: valor,
-      })),
-    ],
+    () => [{ value: allValue, label: "Todos" }, ...situacoesReprodutivas.map((v) => ({ value: v, label: v }))],
     [allValue, situacoesReprodutivas]
   );
 
   const origemOptions = useMemo(
-    () => [
-      { value: allValue, label: "Todos" },
-      ...origensDisponiveis.map((valor) => ({
-        value: valor,
-        label: valor,
-      })),
-    ],
+    () => [{ value: allValue, label: "Todos" }, ...origensDisponiveis.map((v) => ({ value: v, label: v }))],
     [allValue, origensDisponiveis]
   );
 
   const racaOptions = useMemo(
-    () => [
-      { value: allValue, label: "Todas" },
-      ...racasDisponiveis.map((raca) => ({
-        value: raca.id,
-        label: raca.nome,
-      })),
-    ],
+    () => [{ value: allValue, label: "Todas" }, ...racasDisponiveis.map((r) => ({ value: r.id, label: r.nome }))],
     [allValue, racasDisponiveis]
   );
 
   const sexoOptions = useMemo(
     () => [
       { value: allValue, label: "Todos" },
-      ...sexosDisponiveis.map((sexo) => ({
-        value: sexo,
-        label:
-          sexo === "macho" ? "Macho" : sexo === "femea" ? "Fêmea" : sexo,
+      ...sexosDisponiveis.map((s) => ({
+        value: s,
+        label: s === "macho" ? "Macho" : s === "femea" ? "Fêmea" : s,
       })),
     ],
     [allValue, sexosDisponiveis]
@@ -547,89 +728,38 @@ export default function Plantel({ isOnline = navigator.onLine }) {
     () => [
       { value: allValue, label: "Todos" },
       { value: semLoteValue, label: "Sem lote" },
-      ...(lotes || []).map((lote) => {
-        const label =
-          lote.nome ??
-          lote.descricao ??
-          lote.titulo ??
-          lote.label ??
-          String(lote.id ?? "—");
-        return {
-          value: lote.id,
-          label,
-        };
-      }),
+      ...(lotes || []).map((l) => ({
+        value: l.id,
+        label: l.nome ?? l.descricao ?? l.titulo ?? l.label ?? String(l.id ?? "—"),
+      })),
     ],
     [allValue, lotes, semLoteValue]
   );
 
   const resolveOption = useCallback((options, value) => {
-    const found = options.find(
-      (option) => String(option.value) === String(value)
-    );
+    const found = options.find((o) => String(o.value) === String(value));
     return found || options[0] || null;
   }, []);
 
   const selectStylesCompact = useMemo(
     () => ({
-      container: (base) => ({
-        ...base,
-        width: "100%",
-        fontSize: 13,
-      }),
+      container: (base) => ({ ...base, width: "100%", fontSize: 13 }),
       control: (base, state) => ({
         ...base,
         minHeight: 34,
-        height: "auto",
         borderRadius: 10,
         fontWeight: 700,
         fontSize: 13,
-        borderColor: state.isFocused
-          ? "rgba(37,99,235,0.55)"
-          : "rgba(37,99,235,0.25)",
+        borderColor: state.isFocused ? "rgba(37,99,235,0.55)" : "rgba(37,99,235,0.25)",
         boxShadow: "none",
         backgroundColor: "#fff",
         cursor: "pointer",
-        ":hover": {
-          borderColor: "rgba(37,99,235,0.55)",
-        },
+        ":hover": { borderColor: "rgba(37,99,235,0.55)" },
       }),
-      valueContainer: (base) => ({
-        ...base,
-        padding: "0 8px",
-      }),
-      input: (base) => ({
-        ...base,
-        margin: 0,
-        padding: 0,
-      }),
-      singleValue: (base) => ({
-        ...base,
-        maxWidth: "100%",
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-        fontSize: 13,
-      }),
-      placeholder: (base) => ({
-        ...base,
-        fontSize: 13,
-      }),
-      indicatorsContainer: (base) => ({
-        ...base,
-        height: 34,
-      }),
-      option: (base) => ({
-        ...base,
-        fontSize: 13,
-      }),
-      menu: (base) => ({
-        ...base,
-        zIndex: 20,
-      }),
-      menuPortal: (base) => ({
-        ...base,
-        zIndex: 9999,
-      }),
+      valueContainer: (base) => ({ ...base, padding: "0 8px" }),
+      indicatorsContainer: (base) => ({ ...base, height: 34 }),
+      menu: (base) => ({ ...base, zIndex: 20 }),
+      menuPortal: (base) => ({ ...base, zIndex: 9999 }),
     }),
     []
   );
@@ -651,12 +781,9 @@ export default function Plantel({ isOnline = navigator.onLine }) {
       const desiredLeft = thRect.left + left;
       const desiredRight = desiredLeft + popRect.width;
 
-      if (desiredRight > window.innerWidth - 8) {
+      if (desiredRight > window.innerWidth - 8)
         left = window.innerWidth - 8 - popRect.width - thRect.left;
-      }
-      if (desiredLeft < 8) {
-        left = 8 - thRect.left;
-      }
+      if (desiredLeft < 8) left = 8 - thRect.left;
 
       setPopoverStyle({ left: `${left}px`, transform: "translateX(0)" });
     };
@@ -671,106 +798,6 @@ export default function Plantel({ isOnline = navigator.onLine }) {
       window.removeEventListener("scroll", updatePosition, true);
     };
   }, [openPopoverKey]);
-
-  const closeLoteEdit = useCallback(() => {
-    setEditingLoteId(null);
-  }, []);
-
-  const handleLoteBlur = useCallback(() => {
-    setTimeout(() => {
-      setEditingLoteId(null);
-    }, 150);
-  }, []);
-
-  const resolveSelectedLote = useCallback(
-    (animal) => {
-      const valorAtual = animal?.[LOTE_FIELD];
-      if (valorAtual == null) {
-        return loteOptions.find((opt) => opt.value === null) || null;
-      }
-      return loteOptions.find((opt) => opt.value === valorAtual) || null;
-    },
-    [LOTE_FIELD, loteOptions]
-  );
-
-  const resolveLoteLabel = useCallback(
-    (animal) => {
-      if (!animal) return "Sem lote";
-      const valorAtual = animal[LOTE_FIELD];
-      if (valorAtual == null || valorAtual === "") return "Sem lote";
-      return lotesById[valorAtual] || "Sem lote";
-    },
-    [LOTE_FIELD, lotesById]
-  );
-
-  const handleSetLote = useCallback(
-    async (animal, option) => {
-      if (!animal?.id) return;
-      const loteId = option?.value ?? null;
-      const valorNovo = loteId;
-      const valorAnterior = animal[LOTE_FIELD] ?? null;
-
-      if (!fazendaAtualId) {
-        setLoteAviso("Selecione uma fazenda antes de alterar o lote.");
-        return;
-      }
-
-      if (!navigator.onLine) {
-        setLoteAviso("Sem conexão. Conecte para alterar o lote.");
-        return;
-      }
-
-      setAnimais((prev) =>
-        prev.map((item) =>
-          item.id === animal.id
-            ? { ...item, [LOTE_FIELD]: valorNovo }
-            : item
-        )
-      );
-      setLoteAviso("");
-
-      try {
-        const dataMudanca = new Date().toISOString().split("T")[0];
-        const { error: historicoError } = await supabase
-          .from("animais_lote_historico")
-          .insert({
-            animal_id: animal.id,
-            lote_id: valorNovo,
-            data_mudanca: dataMudanca,
-            origem: "manual",
-            fazenda_id: fazendaAtualId,
-          });
-
-        if (historicoError) throw historicoError;
-
-        const { error: updateErr } = await withFazendaId(
-          supabase.from("animais").update({ [LOTE_FIELD]: valorNovo }),
-          fazendaAtualId
-        ).eq("id", animal.id);
-
-        if (updateErr) throw updateErr;
-
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (user?.id) {
-          await carregarAnimais(user.id);
-        }
-        closeLoteEdit();
-      } catch (error) {
-        setAnimais((prev) =>
-          prev.map((item) =>
-            item.id === animal.id
-              ? { ...item, [LOTE_FIELD]: valorAnterior }
-              : item
-          )
-        );
-        setLoteAviso("Não foi possível atualizar o lote. Tente novamente.");
-        return;
-      }
-    },
-    [LOTE_FIELD, carregarAnimais, closeLoteEdit, fazendaAtualId]
-  );
 
   useEffect(() => {
     if (!openPopoverKey) return;
@@ -817,134 +844,66 @@ export default function Plantel({ isOnline = navigator.onLine }) {
     setOpenPopoverKey((prev) => (prev === key ? null : key));
   }, []);
 
-  const filtrosAtivos = useMemo(() => {
-    const chips = [];
-    if (filtros.lote !== allValue) {
-      const label =
-        filtros.lote === semLoteValue
-          ? "Sem lote"
-          : lotesById[filtros.lote] || "Lote";
-      chips.push({ key: "lote", label: `Lote: ${label}` });
-    }
-    if (filtros.situacaoProdutiva !== allValue) {
-      const label =
-        filtros.situacaoProdutiva === "lac"
-          ? "LAC"
-          : filtros.situacaoProdutiva === "nao_lactante"
-            ? "Não lactante"
-            : filtros.situacaoProdutiva;
-      chips.push({ key: "situacaoProdutiva", label: `Produtiva: ${label}` });
-    }
-    if (filtros.situacaoReprodutiva !== allValue) {
-      chips.push({
-        key: "situacaoReprodutiva",
-        label: `Reprodutiva: ${filtros.situacaoReprodutiva}`,
-      });
-    }
-    if (filtros.origem !== allValue) {
-      chips.push({ key: "origem", label: `Origem: ${filtros.origem}` });
-    }
-    if (filtros.animalRaca !== allValue) {
-      const racaLabel =
-        racaMap[filtros.animalRaca] || "Raça";
-      chips.push({ key: "animalRaca", label: `Raça: ${racaLabel}` });
-    }
-    if (filtros.animalSexo !== allValue) {
-      const sexoLabel =
-        filtros.animalSexo === "macho"
-          ? "Macho"
-          : filtros.animalSexo === "femea"
-            ? "Fêmea"
-            : filtros.animalSexo;
-      chips.push({ key: "animalSexo", label: `Sexo: ${sexoLabel}` });
-    }
-    if (filtros.animalBusca.trim()) {
-      chips.push({ key: "animalBusca", label: `Busca: ${filtros.animalBusca.trim()}` });
-    }
-    return chips;
-  }, [allValue, filtros, lotesById, racaMap, semLoteValue]);
-
-  const limparFiltro = useCallback((key) => {
-    setFiltros((prev) => {
-      if (key === "animalBusca") return { ...prev, animalBusca: "" };
-      if (key === "animalRaca") return { ...prev, animalRaca: allValue };
-      if (key === "animalSexo") return { ...prev, animalSexo: allValue };
-      if (key === "lote") return { ...prev, lote: allValue };
-      if (key === "situacaoProdutiva") return { ...prev, situacaoProdutiva: allValue };
-      if (key === "situacaoReprodutiva") return { ...prev, situacaoReprodutiva: allValue };
-      if (key === "origem") return { ...prev, origem: allValue };
-      return prev;
-    });
-  }, [allValue]);
-
-  const limparFiltros = useCallback(() => {
-    setFiltros({
-      lote: allValue,
-      situacaoProdutiva: allValue,
-      situacaoReprodutiva: allValue,
-      origem: allValue,
-      animalRaca: allValue,
-      animalSexo: allValue,
-      animalBusca: "",
-    });
-  }, [allValue]);
-
   const linhasFiltradas = useMemo(() => {
     const busca = filtros.animalBusca.trim().toLowerCase();
-    return linhas.filter((animal) => {
+
+    return linhas.filter((a) => {
       if (filtros.lote !== allValue) {
         if (filtros.lote === semLoteValue) {
-          if (animal?.[LOTE_FIELD] != null && animal?.[LOTE_FIELD] !== "") return false;
-        } else if (String(animal?.[LOTE_FIELD]) !== String(filtros.lote)) {
-          return false;
-        }
+          if (a?.[LOTE_FIELD] != null && a?.[LOTE_FIELD] !== "") return false;
+        } else if (String(a?.[LOTE_FIELD]) !== String(filtros.lote)) return false;
       }
 
       if (filtros.situacaoProdutiva !== allValue) {
-        const sitProd = String(resolveSituacaoProdutiva(animal) || "");
-        const isLact = /lact|lac/i.test(sitProd);
+        const sit = String(resolveSituacaoProdutiva(a) || "");
+        const isLact = /lact|lac/i.test(sit);
         if (filtros.situacaoProdutiva === "lac" && !isLact) return false;
         if (filtros.situacaoProdutiva === "nao_lactante" && isLact) return false;
         if (
           filtros.situacaoProdutiva !== "lac" &&
           filtros.situacaoProdutiva !== "nao_lactante" &&
-          sitProd !== filtros.situacaoProdutiva
-        ) {
+          sit !== filtros.situacaoProdutiva
+        )
           return false;
-        }
       }
 
       if (filtros.situacaoReprodutiva !== allValue) {
-        const sitReprod = String(resolveStatusReprodutivo(animal) || "");
-        if (sitReprod !== filtros.situacaoReprodutiva) return false;
+        const sit = String(resolveStatusReprodutivo(a) || "");
+        if (sit !== filtros.situacaoReprodutiva) return false;
       }
 
       if (filtros.origem !== allValue) {
-        const origem = String(animal?.origem || "");
-        if (origem !== filtros.origem) return false;
+        const orig = String(a?.origem || "");
+        if (orig !== filtros.origem) return false;
       }
 
       if (filtros.animalRaca !== allValue) {
-        if (String(animal?.raca_id) !== String(filtros.animalRaca)) return false;
+        if (String(a?.raca_id) !== String(filtros.animalRaca)) return false;
       }
 
       if (filtros.animalSexo !== allValue) {
-        const sexo = String(animal?.sexo || "");
-        if (sexo !== filtros.animalSexo) return false;
+        const sx = String(a?.sexo || "");
+        if (sx !== filtros.animalSexo) return false;
       }
 
       if (busca) {
-        const numero = String(animal?.numero || "").toLowerCase();
-        const brinco = String(animal?.brinco || "").toLowerCase();
-        const nome = String(animal?.nome || "").toLowerCase();
-        if (!numero.includes(busca) && !brinco.includes(busca) && !nome.includes(busca)) {
+        const numero = String(a?.numero || "").toLowerCase();
+        const brinco = String(a?.brinco || "").toLowerCase();
+        const nome = String(a?.nome || "").toLowerCase();
+        if (!numero.includes(busca) && !brinco.includes(busca) && !nome.includes(busca))
           return false;
-        }
       }
 
       return true;
     });
-  }, [allValue, filtros, linhas, LOTE_FIELD, semLoteValue]);
+  }, [
+    linhas,
+    filtros,
+    allValue,
+    semLoteValue,
+    resolveSituacaoProdutiva,
+    resolveStatusReprodutivo,
+  ]);
 
   const linhasOrdenadas = useMemo(() => {
     if (!sortConfig.key || !sortConfig.direction) return linhasFiltradas;
@@ -976,52 +935,49 @@ export default function Plantel({ isOnline = navigator.onLine }) {
       if (sortConfig.key === "animal") {
         const aNum = Number(a?.numero);
         const bNum = Number(b?.numero);
-        if (Number.isFinite(aNum) && Number.isFinite(bNum)) {
+        if (Number.isFinite(aNum) && Number.isFinite(bNum))
           return (aNum - bNum) * factor;
-        }
-        const aStr = String(a?.numero || "");
-        const bStr = String(b?.numero || "");
-        return aStr.localeCompare(bStr) * factor;
+        return String(a?.numero || "").localeCompare(String(b?.numero || "")) * factor;
       }
       return 0;
     });
+
     return sorted;
-  }, [linhasFiltradas, sortConfig, ultProducao]);
+  }, [linhasFiltradas, sortConfig, ultProducao, resolveSituacaoProdutiva, resolveDelValor]);
 
   const resumo = useMemo(() => {
     const total = linhasOrdenadas.length;
+
     const somas = linhasOrdenadas.reduce(
-      (acc, animal) => {
-        const sitProd = String(resolveSituacaoProdutiva(animal) || "");
+      (acc, a) => {
+        const sitProd = String(resolveSituacaoProdutiva(a) || "");
         const isLact = /lact|lac/i.test(sitProd);
         if (!isLact) return acc;
-        const valor = Number(ultProducao[animal?.id]);
+        const valor = Number(ultProducao[a?.id]);
         if (!Number.isFinite(valor)) return acc;
-        return {
-          soma: acc.soma + valor,
-          qtd: acc.qtd + 1,
-        };
+        return { soma: acc.soma + valor, qtd: acc.qtd + 1 };
       },
       { soma: 0, qtd: 0 }
     );
+
     const media = somas.qtd > 0 ? somas.soma / somas.qtd : null;
+
     const delSomas = linhasOrdenadas.reduce(
-      (acc, animal) => {
-        const sitProd = String(resolveSituacaoProdutiva(animal) || "");
+      (acc, a) => {
+        const sitProd = String(resolveSituacaoProdutiva(a) || "");
         const isLact = /lact|lac/i.test(sitProd);
         if (!isLact) return acc;
-        const delValor = resolveDelValor(animal);
-        if (!Number.isFinite(delValor)) return acc;
-        return {
-          soma: acc.soma + delValor,
-          qtd: acc.qtd + 1,
-        };
+        const del = resolveDelValor(a);
+        if (!Number.isFinite(del)) return acc;
+        return { soma: acc.soma + del, qtd: acc.qtd + 1 };
       },
       { soma: 0, qtd: 0 }
     );
+
     const mediaDel = delSomas.qtd > 0 ? delSomas.soma / delSomas.qtd : null;
+
     return { total, media, mediaDel };
-  }, [linhasOrdenadas, ultProducao]);
+  }, [linhasOrdenadas, ultProducao, resolveSituacaoProdutiva, resolveDelValor]);
 
   const hasAnimais = linhasOrdenadas.length > 0;
 
@@ -1031,52 +987,14 @@ export default function Plantel({ isOnline = navigator.onLine }) {
       {loteAviso && <div className="st-alert st-alert--warning">{loteAviso}</div>}
       {offlineAviso && <div className="st-filter-hint">{offlineAviso}</div>}
 
-      {filtrosAtivos.length > 0 && (
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 8,
-            alignItems: "center",
-            marginBottom: 12,
-          }}
-        >
-          {filtrosAtivos.map((chip) => (
-            <span key={chip.key} className="st-chip st-chip--muted">
-              {chip.label}
-              <button
-                type="button"
-                onClick={() => limparFiltro(chip.key)}
-                aria-label={`Remover filtro ${chip.label}`}
-                style={{
-                  border: "none",
-                  background: "transparent",
-                  padding: 0,
-                  cursor: "pointer",
-                  fontWeight: 900,
-                }}
-              >
-                ×
-              </button>
-            </span>
-          ))}
-          <button
-            type="button"
-            className="st-btn"
-            onClick={limparFiltros}
-            style={{ height: 26, padding: "0 10px", fontSize: 12 }}
-          >
-            Limpar tudo
-          </button>
-        </div>
-      )}
-
       <div className="st-filter-hint">
         Dica: clique no título da coluna para filtrar. Clique novamente para fechar.
       </div>
+
       {atualizando && hasAnimais && (
         <div className="text-xs text-slate-500 mb-2">Atualizando animais...</div>
       )}
+
       <div className="st-table-container">
         <div className="st-table-wrap">
           <table
@@ -1086,7 +1004,17 @@ export default function Plantel({ isOnline = navigator.onLine }) {
               setHoveredColKey(null);
             }}
           >
-            <colgroup><col style={{ width: "19%" }} /><col style={{ width: "14%" }} /><col style={{ width: "14%" }} /><col style={{ width: "14%" }} /><col style={{ width: "12%" }} /><col style={{ width: "6%" }} /><col style={{ width: "11%" }} /><col style={{ width: "10%" }} /></colgroup>
+            <colgroup>
+              <col style={{ width: "19%" }} />
+              <col style={{ width: "14%" }} />
+              <col style={{ width: "14%" }} />
+              <col style={{ width: "14%" }} />
+              <col style={{ width: "12%" }} />
+              <col style={{ width: "6%" }} />
+              <col style={{ width: "11%" }} />
+              <col style={{ width: "10%" }} />
+            </colgroup>
+
             <thead>
               <tr>
                 <th
@@ -1124,29 +1052,28 @@ export default function Plantel({ isOnline = navigator.onLine }) {
                       </span>
                     )}
                   </button>
+
                   {openPopoverKey === "animal" && (
                     <div
                       ref={popoverRef}
                       className="st-filter-popover"
                       style={popoverStyle}
-                      onClick={(event) => event.stopPropagation()}
+                      onClick={(e) => e.stopPropagation()}
                     >
                       <div className="st-filter">
                         <label className="st-filter__label">
                           Raça
                           <Select
-                            className="st-select--compact"
-                            classNamePrefix="st-select"
                             menuPortalTarget={portalTarget}
                             menuPosition="fixed"
                             menuShouldBlockScroll
                             styles={selectStylesCompact}
                             options={racaOptions}
                             value={resolveOption(racaOptions, filtros.animalRaca)}
-                            onChange={(option) =>
+                            onChange={(opt) =>
                               setFiltros((prev) => ({
                                 ...prev,
-                                animalRaca: option?.value ?? allValue,
+                                animalRaca: opt?.value ?? allValue,
                               }))
                             }
                           />
@@ -1155,18 +1082,16 @@ export default function Plantel({ isOnline = navigator.onLine }) {
                         <label className="st-filter__label">
                           Sexo
                           <Select
-                            className="st-select--compact"
-                            classNamePrefix="st-select"
                             menuPortalTarget={portalTarget}
                             menuPosition="fixed"
                             menuShouldBlockScroll
                             styles={selectStylesCompact}
                             options={sexoOptions}
                             value={resolveOption(sexoOptions, filtros.animalSexo)}
-                            onChange={(option) =>
+                            onChange={(opt) =>
                               setFiltros((prev) => ({
                                 ...prev,
-                                animalSexo: option?.value ?? allValue,
+                                animalSexo: opt?.value ?? allValue,
                               }))
                             }
                           />
@@ -1177,10 +1102,10 @@ export default function Plantel({ isOnline = navigator.onLine }) {
                           <input
                             type="text"
                             value={filtros.animalBusca}
-                            onChange={(event) =>
+                            onChange={(ev) =>
                               setFiltros((prev) => ({
                                 ...prev,
-                                animalBusca: event.target.value,
+                                animalBusca: ev.target.value,
                               }))
                             }
                             placeholder="Digite para filtrar"
@@ -1191,6 +1116,7 @@ export default function Plantel({ isOnline = navigator.onLine }) {
                     </div>
                   )}
                 </th>
+
                 <th
                   className="col-lote"
                   onMouseEnter={() => handleColEnter("lote")}
@@ -1215,28 +1141,27 @@ export default function Plantel({ isOnline = navigator.onLine }) {
                   >
                     <span className="st-th-label">Lote</span>
                   </button>
+
                   {openPopoverKey === "lote" && (
                     <div
                       ref={popoverRef}
                       className="st-filter-popover"
                       style={popoverStyle}
-                      onClick={(event) => event.stopPropagation()}
+                      onClick={(e) => e.stopPropagation()}
                     >
                       <label className="st-filter__label">
                         Lote
                         <Select
-                          className="st-select--compact"
-                          classNamePrefix="st-select"
                           menuPortalTarget={portalTarget}
                           menuPosition="fixed"
                           menuShouldBlockScroll
                           styles={selectStylesCompact}
                           options={loteOptionsFiltro}
                           value={resolveOption(loteOptionsFiltro, filtros.lote)}
-                          onChange={(option) =>
+                          onChange={(opt) =>
                             setFiltros((prev) => ({
                               ...prev,
-                              lote: option?.value ?? allValue,
+                              lote: opt?.value ?? allValue,
                             }))
                           }
                         />
@@ -1244,13 +1169,10 @@ export default function Plantel({ isOnline = navigator.onLine }) {
                     </div>
                   )}
                 </th>
+
                 <th
                   className="st-td-center col-sitprod"
                   onMouseEnter={() => handleColEnter("sitprod")}
-                  ref={(el) => {
-                    triggerRefs.current.sitprod = el;
-                  }}
-                  style={{ position: "relative" }}
                 >
                   <button
                     type="button"
@@ -1268,18 +1190,17 @@ export default function Plantel({ isOnline = navigator.onLine }) {
                   >
                     <span className="st-th-label">Situação produtiva</span>
                   </button>
+
                   {openPopoverKey === "sitprod" && (
                     <div
                       ref={popoverRef}
                       className="st-filter-popover"
                       style={popoverStyle}
-                      onClick={(event) => event.stopPropagation()}
+                      onClick={(e) => e.stopPropagation()}
                     >
                       <label className="st-filter__label">
                         Situação produtiva
                         <Select
-                          className="st-select--compact"
-                          classNamePrefix="st-select"
                           menuPortalTarget={portalTarget}
                           menuPosition="fixed"
                           menuShouldBlockScroll
@@ -1289,10 +1210,10 @@ export default function Plantel({ isOnline = navigator.onLine }) {
                             situacaoProdutivaOptions,
                             filtros.situacaoProdutiva
                           )}
-                          onChange={(option) =>
+                          onChange={(opt) =>
                             setFiltros((prev) => ({
                               ...prev,
-                              situacaoProdutiva: option?.value ?? allValue,
+                              situacaoProdutiva: opt?.value ?? allValue,
                             }))
                           }
                         />
@@ -1300,13 +1221,10 @@ export default function Plantel({ isOnline = navigator.onLine }) {
                     </div>
                   )}
                 </th>
+
                 <th
                   className="st-td-center col-sitreprod"
                   onMouseEnter={() => handleColEnter("sitreprod")}
-                  ref={(el) => {
-                    triggerRefs.current.sitreprod = el;
-                  }}
-                  style={{ position: "relative" }}
                 >
                   <button
                     type="button"
@@ -1324,18 +1242,17 @@ export default function Plantel({ isOnline = navigator.onLine }) {
                   >
                     <span className="st-th-label">Situação reprodutiva</span>
                   </button>
+
                   {openPopoverKey === "sitreprod" && (
                     <div
                       ref={popoverRef}
                       className="st-filter-popover"
                       style={popoverStyle}
-                      onClick={(event) => event.stopPropagation()}
+                      onClick={(e) => e.stopPropagation()}
                     >
                       <label className="st-filter__label">
                         Situação reprodutiva
                         <Select
-                          className="st-select--compact"
-                          classNamePrefix="st-select"
                           menuPortalTarget={portalTarget}
                           menuPosition="fixed"
                           menuShouldBlockScroll
@@ -1345,10 +1262,10 @@ export default function Plantel({ isOnline = navigator.onLine }) {
                             situacaoReprodutivaOptions,
                             filtros.situacaoReprodutiva
                           )}
-                          onChange={(option) =>
+                          onChange={(opt) =>
                             setFiltros((prev) => ({
                               ...prev,
-                              situacaoReprodutiva: option?.value ?? allValue,
+                              situacaoReprodutiva: opt?.value ?? allValue,
                             }))
                           }
                         />
@@ -1356,6 +1273,7 @@ export default function Plantel({ isOnline = navigator.onLine }) {
                     </div>
                   )}
                 </th>
+
                 <th
                   className="st-td-right col-producao"
                   onMouseEnter={() => handleColEnter("producao")}
@@ -1384,10 +1302,8 @@ export default function Plantel({ isOnline = navigator.onLine }) {
                     )}
                   </button>
                 </th>
-                <th
-                  className="st-td-right col-del"
-                  onMouseEnter={() => handleColEnter("del")}
-                >
+
+                <th className="st-td-right col-del" onMouseEnter={() => handleColEnter("del")}>
                   <button
                     type="button"
                     onClick={() => toggleSort("del")}
@@ -1412,63 +1328,12 @@ export default function Plantel({ isOnline = navigator.onLine }) {
                     )}
                   </button>
                 </th>
-                <th
-                  className="col-origem"
-                  onMouseEnter={() => handleColEnter("origem")}
-                  ref={(el) => {
-                    triggerRefs.current.origem = el;
-                  }}
-                  style={{ position: "relative" }}
-                >
-                  <button
-                    type="button"
-                    data-filter-trigger="true"
-                    onClick={() => handleTogglePopover("origem")}
-                    style={{
-                      background: "transparent",
-                      border: "none",
-                      padding: 0,
-                      margin: 0,
-                      font: "inherit",
-                      color: "inherit",
-                      cursor: "pointer",
-                    }}
-                  >
-                    <span className="st-th-label">Origem</span>
-                  </button>
-                  {openPopoverKey === "origem" && (
-                    <div
-                      ref={popoverRef}
-                      className="st-filter-popover"
-                      style={popoverStyle}
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      <label className="st-filter__label">
-                        Origem
-                        <Select
-                          className="st-select--compact"
-                          classNamePrefix="st-select"
-                          menuPortalTarget={portalTarget}
-                          menuPosition="fixed"
-                          menuShouldBlockScroll
-                          styles={selectStylesCompact}
-                          options={origemOptions}
-                          value={resolveOption(origemOptions, filtros.origem)}
-                          onChange={(option) =>
-                            setFiltros((prev) => ({
-                              ...prev,
-                              origem: option?.value ?? allValue,
-                            }))
-                          }
-                        />
-                      </label>
-                    </div>
-                  )}
+
+                <th className="col-origem" onMouseEnter={() => handleColEnter("origem")}>
+                  <span className="st-th-label">Origem</span>
                 </th>
-                <th
-                  className="st-td-center col-acoes"
-                  onMouseEnter={() => handleColEnter("acoes")}
-                >
+
+                <th className="st-td-center col-acoes" onMouseEnter={() => handleColEnter("acoes")}>
                   <span className="st-th-label">Ações</span>
                 </th>
               </tr>
@@ -1484,7 +1349,7 @@ export default function Plantel({ isOnline = navigator.onLine }) {
               )}
 
               {linhasOrdenadas.map((a, idx) => {
-                const idade = a.idade || idadeTexto(a.nascimento);
+                const idade = idadeTexto(a.nascimento);
                 const racaNome = racaMap[a.raca_id] || "—";
                 const sexoLabel =
                   a.sexo === "macho" ? "Macho" : a.sexo === "femea" ? "Fêmea" : a.sexo || "—";
@@ -1493,23 +1358,25 @@ export default function Plantel({ isOnline = navigator.onLine }) {
                 const sitReprod = resolveStatusReprodutivo(a);
                 const delValor = resolveDelValor(a);
                 const del = Number.isFinite(delValor) ? String(Math.round(delValor)) : "—";
+
                 const isLact = /lact|lac/i.test(String(sitProd || ""));
                 const litros = isLact ? ultProducao[a.id] : null;
                 const producaoTexto =
-                  isLact && Number.isFinite(litros) ? formatProducao(litros) : "—";
+                  isLact && Number.isFinite(Number(litros)) ? formatProducao(litros) : "—";
+
                 const loteSelecionado = resolveSelectedLote(a);
                 const isSemLote = !loteSelecionado || loteSelecionado.value == null;
                 const loteLabel = resolveLoteLabel(a);
 
-                const prodClass =
-                  String(sitProd).toLowerCase().includes("lact") ? "st-pill st-pill--ok" :
-                  String(sitProd).toLowerCase().includes("seca") ? "st-pill st-pill--mute" :
-                  "st-pill st-pill--info";
+                const prodClass = String(sitProd).toLowerCase().includes("lact")
+                  ? "st-pill st-pill--ok"
+                  : String(sitProd).toLowerCase().includes("seca")
+                    ? "st-pill st-pill--mute"
+                    : "st-pill st-pill--info";
 
-                const reprClass =
-                  String(sitReprod).toLowerCase().includes("pev")
-                    ? "st-pill st-pill--info"
-                    : String(sitReprod).toLowerCase().includes("vaz")
+                const reprClass = String(sitReprod).toLowerCase().includes("pev")
+                  ? "st-pill st-pill--info"
+                  : String(sitReprod).toLowerCase().includes("vaz")
                     ? "st-pill st-pill--mute"
                     : "st-pill st-pill--info";
 
@@ -1518,7 +1385,6 @@ export default function Plantel({ isOnline = navigator.onLine }) {
 
                 return (
                   <tr key={rowId} className={rowHover ? "st-row-hover" : ""}>
-                    {/* ANIMAL (duas linhas, mas com respiro) */}
                     <td
                       className={`col-animal st-col-animal ${
                         hoveredColKey === "animal" ? "st-col-hover" : ""
@@ -1528,10 +1394,7 @@ export default function Plantel({ isOnline = navigator.onLine }) {
                       onMouseEnter={() => handleCellEnter(rowId, "animal")}
                     >
                       <div className="st-animal">
-                        <span
-                          className="st-animal-num"
-                          title={`Nº do animal: ${a.numero ?? "—"}`}
-                        >
+                        <span className="st-animal-num" title={`Nº do animal: ${a.numero ?? "—"}`}>
                           {a.numero ?? "—"}
                         </span>
 
@@ -1548,23 +1411,15 @@ export default function Plantel({ isOnline = navigator.onLine }) {
                       </div>
                     </td>
 
-                    {/* LOTE */}
                     <td
-                      className={`col-lote ${
-                        hoveredColKey === "lote" ? "st-col-hover" : ""
-                      } ${rowHover ? "st-row-hover" : ""} ${
-                        rowHover && hoveredColKey === "lote" ? "st-cell-hover" : ""
-                      }`}
+                      className={`col-lote ${hoveredColKey === "lote" ? "st-col-hover" : ""} ${
+                        rowHover ? "st-row-hover" : ""
+                      } ${rowHover && hoveredColKey === "lote" ? "st-cell-hover" : ""}`}
                       style={{ overflow: "visible", paddingLeft: 12, paddingRight: 12 }}
                       onMouseEnter={() => handleCellEnter(rowId, "lote")}
                     >
                       {editingLoteId === a.id ? (
                         <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            width: "100%",
-                          }}
                           onKeyDown={(e) => {
                             if (e.key === "Escape") closeLoteEdit();
                           }}
@@ -1572,16 +1427,14 @@ export default function Plantel({ isOnline = navigator.onLine }) {
                           <Select
                             autoFocus
                             menuIsOpen
-                            menuPortalTarget={
-                              typeof document !== "undefined" ? document.body : null
-                            }
+                            menuPortalTarget={portalTarget}
                             menuPosition="fixed"
                             menuShouldBlockScroll
                             styles={selectStylesCompact}
                             options={loteOptions}
                             value={resolveSelectedLote(a)}
                             placeholder="Selecionar lote…"
-                            onChange={(option) => handleSetLote(a, option)}
+                            onChange={(opt) => handleSetLote(a, opt)}
                             onBlur={handleLoteBlur}
                             isClearable
                           />
@@ -1591,9 +1444,7 @@ export default function Plantel({ isOnline = navigator.onLine }) {
                           type="button"
                           onClick={() => setEditingLoteId(a.id)}
                           title="Clique para alterar o lote"
-                          className={`st-pill ${
-                            isSemLote ? "st-pill--mute" : "st-pill--info"
-                          }`}
+                          className={`st-pill ${isSemLote ? "st-pill--mute" : "st-pill--info"}`}
                           style={{
                             width: "100%",
                             display: "inline-flex",
@@ -1613,67 +1464,51 @@ export default function Plantel({ isOnline = navigator.onLine }) {
                       )}
                     </td>
 
-                    {/* PROD */}
                     <td
                       className={`st-td-center col-sitprod ${
                         hoveredColKey === "sitprod" ? "st-col-hover" : ""
                       } ${rowHover ? "st-row-hover" : ""} ${
                         rowHover && hoveredColKey === "sitprod" ? "st-cell-hover" : ""
                       }`}
-                      style={{ paddingLeft: 12, paddingRight: 12 }}
                       onMouseEnter={() => handleCellEnter(rowId, "sitprod")}
                     >
-                      {sitProd === "—" ? "—" : (
-                        <span className={prodClass}>
-                          {sitProd === "lactante" ? "LAC" : sitProd}
-                        </span>
-                      )}
+                      <span className={prodClass}>{sitProd === "lactante" ? "LAC" : sitProd}</span>
                     </td>
 
-                    {/* REPROD */}
                     <td
                       className={`st-td-center col-sitreprod ${
                         hoveredColKey === "sitreprod" ? "st-col-hover" : ""
                       } ${rowHover ? "st-row-hover" : ""} ${
                         rowHover && hoveredColKey === "sitreprod" ? "st-cell-hover" : ""
                       }`}
-                      style={{ paddingLeft: 12, paddingRight: 12 }}
                       onMouseEnter={() => handleCellEnter(rowId, "sitreprod")}
                     >
-                      {sitReprod === "—" ? "—" : (
-                        <span className={reprClass}>
-                          {String(sitReprod).toUpperCase().slice(0, 3)}
-                        </span>
-                      )}
+                      <span className={reprClass}>
+                        {String(sitReprod).toUpperCase().slice(0, 3)}
+                      </span>
                     </td>
 
-                    {/* PRODUÇÃO */}
                     <td
                       className={`st-td-right st-num col-producao ${
                         hoveredColKey === "producao" ? "st-col-hover" : ""
                       } ${rowHover ? "st-row-hover" : ""} ${
                         rowHover && hoveredColKey === "producao" ? "st-cell-hover" : ""
                       }`}
-                      style={{ textOverflow: "clip" }}
                       onMouseEnter={() => handleCellEnter(rowId, "producao")}
                     >
                       {producaoTexto}
                     </td>
 
-                    {/* DEL */}
                     <td
-                      className={`st-td-right col-del ${
-                        hoveredColKey === "del" ? "st-col-hover" : ""
-                      } ${rowHover ? "st-row-hover" : ""} ${
-                        rowHover && hoveredColKey === "del" ? "st-cell-hover" : ""
-                      }`}
+                      className={`st-td-right col-del ${hoveredColKey === "del" ? "st-col-hover" : ""} ${
+                        rowHover ? "st-row-hover" : ""
+                      } ${rowHover && hoveredColKey === "del" ? "st-cell-hover" : ""}`}
                       style={{ fontWeight: 900 }}
                       onMouseEnter={() => handleCellEnter(rowId, "del")}
                     >
                       {del}
                     </td>
 
-                    {/* ORIGEM */}
                     <td
                       className={`col-origem st-td-wrap ${
                         hoveredColKey === "origem" ? "st-col-hover" : ""
@@ -1686,13 +1521,10 @@ export default function Plantel({ isOnline = navigator.onLine }) {
                       {a.origem || "—"}
                     </td>
 
-                    {/* AÇÕES */}
                     <td
-                      className={`st-td-center col-acoes ${
-                        hoveredColKey === "acoes" ? "st-col-hover" : ""
-                      } ${rowHover ? "st-row-hover" : ""} ${
-                        rowHover && hoveredColKey === "acoes" ? "st-cell-hover" : ""
-                      }`}
+                      className={`st-td-center col-acoes ${hoveredColKey === "acoes" ? "st-col-hover" : ""} ${
+                        rowHover ? "st-row-hover" : ""
+                      } ${rowHover && hoveredColKey === "acoes" ? "st-cell-hover" : ""}`}
                       onMouseEnter={() => handleCellEnter(rowId, "acoes")}
                     >
                       <button onClick={() => abrirFichaAnimal(a)} className="st-btn">
@@ -1703,6 +1535,7 @@ export default function Plantel({ isOnline = navigator.onLine }) {
                 );
               })}
             </tbody>
+
             <tfoot>
               <tr className="st-summary-row">
                 <td colSpan={8}>
@@ -1714,9 +1547,7 @@ export default function Plantel({ isOnline = navigator.onLine }) {
                     </span>
                     <span>
                       Média DEL (LAC):{" "}
-                      {Number.isFinite(resumo.mediaDel)
-                        ? Math.round(resumo.mediaDel)
-                        : "—"}
+                      {Number.isFinite(resumo.mediaDel) ? Math.round(resumo.mediaDel) : "—"}
                     </span>
                   </div>
                 </td>
@@ -1728,9 +1559,7 @@ export default function Plantel({ isOnline = navigator.onLine }) {
 
       {carregando && !hasAnimais && <div className="st-loading">Carregando...</div>}
 
-      {animalSelecionado && (
-        <FichaAnimal animal={animalSelecionado} onClose={fecharFichaAnimal} />
-      )}
+      {animalSelecionado && <FichaAnimal animal={animalSelecionado} onClose={fecharFichaAnimal} />}
     </section>
   );
 }
